@@ -2,24 +2,6 @@
 
 Esta versão mantém o front-end e o back-end do RegulOS juntos em um único serviço Node.js no Railway.
 
-
-## Modo nuvem desta revisão
-
-O container foi ajustado para executar o `src/server.js` diretamente no Railway. O `src/supervisor.js` continua disponível para a execução local no Windows, mas não fica no caminho do processo principal da nuvem. Isso simplifica sinais de parada/reinício e deixa o Railway responsável pelo ciclo de vida do serviço.
-
-### Configuração obrigatória no Railway
-
-- Serviço com o Dockerfile deste pacote.
-- Volume persistente montado em `/app/storage`.
-- Domínio HTTPS público.
-- `REGULOS_SESSION_SECRET` definido com um valor forte (variável reservada para evolução de sessões; mantenha-a configurada desde já).
-- `REGULOS_TIMEZONE=America/Sao_Paulo`.
-- Uma única instância do serviço enquanto a sessão do WhatsApp estiver sendo mantida dentro deste processo.
-
-### O que permanece na nuvem
-
-Painel, login, grupos, sessão WhatsApp/Baileys, fila, agendamentos, histórico, falhas/reenvio e busca de título/imagem continuam no mesmo serviço. O PC pode ficar desligado; o navegador do celular ou computador acessa o domínio HTTPS do Railway.
-
 ## O que muda
 - O painel HTML é servido pelo próprio Node.js.
 - Baileys roda no servidor continuamente.

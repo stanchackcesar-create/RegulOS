@@ -4,7 +4,8 @@
   "description": "RegulOS - painel WhatsApp com sincronização automática de grupos, fila persistente, imagens e mensagens aleatórias",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/supervisor.js"
+    "start": "node src/server.js",
+    "start:local": "node src/supervisor.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",
