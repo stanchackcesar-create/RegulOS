@@ -18,7 +18,6 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
-          import re
 
           p=Path('public/index.html')
           s=p.read_text(encoding='utf-8')
@@ -27,37 +26,16 @@ jobs:
           s=s.replace('<div id="linkFailures" style="margin-top:10px">Carregando falhas...</div>','<div id="linkFailures" style="margin-top:10px"></div>')
           s=s.replace("box.innerHTML='<div class=\"muted\">🔄 Carregando histórico...</div>';",'',1)
 
-          if "let lastHistorySignature='';" not in s:
-              marker='async function loadLinkHistory(){'
-              if marker in s:
-                  s=s.replace(marker,"let lastHistorySignature='';\n"+marker,1)
-
-          start=s.find('async function loadLinkFailures(){')
-          if start!=-1:
-              end=s.find('\nasync function ',start+10)
-              if end==-1: end=len(s)
-              block=s[start:end]
-              block=re.sub(r"\s*box\.innerHTML\s*=\s*['\"](?:🔄\s*)?Carregando[^'\"]*['\"]\s*;",'',block,count=1)
-
-              target="const d=await jfetch('/api/link-falhas');"
-              marker="const signature=JSON.stringify(d.falhas||[]);"
-              guard="if(signature===lastFailureSignature)return;"
-              assign="lastFailureSignature=signature;"
-              if marker not in block:
-                  block=block.replace(target,target+'\n  '+marker+'\n  '+guard+'\n  '+assign,1)
-
-              # Collapse repeated signature guards, including when an older
-              # patch placed the second assignment on the same line as box.innerHTML.
-              first=block.find(marker)
-              if first!=-1:
-                  after=block[first+len(marker):]
-                  after=re.sub(r"\s*"+re.escape(guard)+r"\s*"+re.escape(assign),"",after)
-                  after=re.sub(r"\s*"+re.escape(marker),"",after)
-                  block=block[:first+len(marker)]+after
-                  # Restore exactly one guard and assignment immediately after the signature.
-                  block=block.replace(marker,marker+'\n  '+guard+'\n  '+assign,1)
-
-              s=s[:start]+block+s[end:]
+          duplicate="""  const signature=JSON.stringify(d.falhas||[]);
+  if(signature===lastFailureSignature)return;
+  lastFailureSignature=signature;
+  const signature=JSON.stringify(d.falhas||[]);
+  if(signature===lastFailureSignature)return;
+  lastFailureSignature=signature;box.innerHTML='';"""
+          single="""  const signature=JSON.stringify(d.falhas||[]);
+  if(signature===lastFailureSignature)return;
+  lastFailureSignature=signature;box.innerHTML='';"""
+          s=s.replace(duplicate,single,1)
 
           p.write_text(s,encoding='utf-8')
           PY
@@ -85,5 +63,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add public/index.html
           git diff --cached --quiet && exit 0
-          git commit -m "Normalizar histórico e falhas sem piscar [skip-history-stable]"
+          git commit -m "Remover duplicação do histórico de falhas [skip-history-stable]"
           git push
