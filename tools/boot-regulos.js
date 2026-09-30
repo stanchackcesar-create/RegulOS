@@ -100,15 +100,14 @@ replaceOnce(
 'reativação de agendamento pausado'
 );
 
-// 8) Correção definitiva do destino: o grupo escolhido no agendamento é o único alvo.
+// 8) O destino explícito do agendamento é preservado. O patch de grupo aplicado
+// antes deste arquivo já substitui o alvo genérico por grupoId quando disponível.
 patchSection(
   'async function sendScheduledLink(item) {',
   'async function processLinkSchedules() {',
   [
     [`if (runningLinkSchedules.has(item.id) || !online || !sock || !botWindowActive()) return;`, `if (runningLinkSchedules.has(item.id) || !online || !sock) return;`],
     [`if (runningLinkSchedules.has(item.id) || !online || !sock) return;`, `if (runningLinkSchedules.has(item.id) || !online || !sock) return;`],
-    [`targets = activeGroups();`, `targets = item.grupoId ? [String(item.grupoId)] : activeGroups();`],
-    [`if (getGroupConfig(id).ativo === false) continue;`, `if (!item.grupoId && getGroupConfig(id).ativo === false) continue;`],
     [`if (!botWindowActive()) {`, `if (!online || !sock) {`],
     [`item.status = botWindowActive() ? 'enviando' : 'pausado';`, `item.status = online && sock ? 'enviando' : 'pausado';`],
     [`item.status = item.repeticao === 'uma_vez' ? 'pausado' : 'agendado';`, `item.status = item.repeticao === 'uma_vez' ? 'concluido' : 'agendado';`]
@@ -128,11 +127,24 @@ replaceOnce(
 'edição do grupo do agendamento'
 );
 
+// 10) Fallback final de imagem usando Playwright para páginas dinâmicas.
+patchSection(
+  'async function findProductImage(url) {',
+  'let regulosBrowserPromise=null;',
+  [
+    [
+`  } catch (e) { addLog(\`Não foi possível ler a página para buscar imagem: \${e.message}\`); }\n  return null;\n}`,
+`  } catch (e) { addLog(\`Não foi possível ler a página para buscar imagem: \${e.message}\`); }\n  try {\n    const browserImage = await findProductImageWithBrowser(url);\n    if (browserImage) {\n      addLog('🖼️ Imagem encontrada pelo fallback do navegador.');\n      return browserImage;\n    }\n  } catch (e) {\n    addLog(\`Fallback de imagem pelo navegador falhou: \${e.message}\`);\n  }\n  return null;\n}`
+    ]
+  ],
+  'fallback final de imagem'
+);
+
 if (changed) {
   fs.writeFileSync(serverPath, source, 'utf8');
-  console.log('[boot] Correções de agendamento aplicadas ao runtime.');
+  console.log('[boot] Correções de agendamento e imagem aplicadas ao runtime.');
 } else {
-  console.log('[boot] Nenhuma correção de agendamento pendente.');
+  console.log('[boot] Nenhuma correção de runtime pendente.');
 }
 
 require(serverPath);
