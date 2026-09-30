@@ -98,6 +98,14 @@ patchSection(
   'fluxo completo do agendamento'
 );
 
+// Oferta automática: a imagem retornada pelo preview pode ser uma URL temporária.
+// Nesse modo, sempre refaça a busca/validação da imagem no momento do envio.
+replaceOnce(
+`    if(String(item.imagemUrl||'').trim()) image=await downloadBuffer(String(item.imagemUrl).trim(),String(item.url||'').trim());\n    else image=await findProductImage(String(item.url||'').trim());`,
+`    if(!item.autoOfertaAutomatica && String(item.imagemUrl||'').trim()) image=await downloadBuffer(String(item.imagemUrl).trim(),String(item.url||'').trim());\n    else image=await findProductImage(String(item.url||'').trim());`,
+'oferta automática: ignorar URL de preview'
+);
+
 replaceOnce(
 `  if(b.rearmar===true) item.lastRunKey='';\n  writeJson(FILES.schedules,linkSchedules); syncLinkQueue();`,
 `  const estavaPausado = item.status === 'pausado' || item.status === 'erro';\n  if(b.rearmar===true || (b.ativo===true && estavaPausado)){\n    item.lastRunKey=''; item.lastSkipKey=''; item.progressKey='';\n    item.progressTargets=[]; item.progressGroupIds=[]; item.progressStartedAt='';\n    item.enviados=0; item.sucessos=0; item.erros=0;\n    item.ultimoEnvio=null; item.lastSentAt=null; item.motivoFalha=null;\n    item.status='agendado';\n  }\n  writeJson(FILES.schedules,linkSchedules); syncLinkQueue();`,
