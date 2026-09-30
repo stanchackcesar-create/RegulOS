@@ -48,7 +48,7 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 <button class="primary" onclick="refreshAll()">🔄 Atualizar</button>
 <button onclick="apiAction('/api/reconectar')">🔌 Reconectar</button>
 <button onclick="apiAction('/api/desconectar')">⛔ Desconectar</button>
-<button onclick="openAllGroups()">👥 Gerenciar grupos</button>
+<button onclick="openAllGroups()">👥 Grupos</button>
 <button class="red" onclick="novoQR()">📱 Novo QR</button>
 </div>
 </div></header>
@@ -235,52 +235,8 @@ async function status(){
   if(d.qr){document.getElementById('qrImg').src=d.qr;document.getElementById('qrBox').classList.remove('hidden')}else document.getElementById('qrBox').classList.add('hidden');
  }catch(e){document.getElementById('connStatus').textContent=friendlyFetchError(e)}
 }
-let refreshBusy=false;
-function refreshTask(fn,ms=8000){
-  return Promise.race([
-    Promise.resolve().then(fn),
-    new Promise((_,reject)=>setTimeout(()=>reject(new Error('Tempo limite ao atualizar este item.')),ms))
-  ]);
-}
-async function refreshAll(){
-  if(refreshBusy)return;
-  refreshBusy=true;
-  const btn=document.querySelector('.actions button.primary');
-  const oldText=btn?.textContent;
-  if(btn){btn.disabled=true;btn.textContent='🔄 Atualizando...';}
-  try{
-    const results=await Promise.allSettled([
-      refreshTask(status),
-      refreshTask(loadGroups),
-      refreshTask(loadLinks),
-      refreshTask(loadSchedules),
-      refreshTask(loadLinkHistory),
-      refreshTask(loadLinkFailures),
-      refreshTask(loadLogs),
-      refreshTask(loadDashboard),
-      refreshTask(refreshAccountPresence)
-    ]);
-    const failed=results.filter(r=>r.status==='rejected').length;
-    toast(failed?`Atualização concluída com ${failed} item(ns) pendente(s).`:'Atualizado com sucesso.',failed>0);
-  }finally{
-    refreshBusy=false;
-    if(btn){btn.disabled=false;btn.textContent=oldText||'🔄 Atualizar';}
-  }
-}
-let poll=null;let lastLinksUiRefresh=0;let lastAccountPresenceRefresh=0;
-function startPolling(fast=false){
-  if(poll)clearInterval(poll);
-  poll=setInterval(async()=>{
-    await status();
-    const now=Date.now();
-    if(now-lastGroupUiRefresh>5000)await loadGroups();
-    if(now-lastAccountPresenceRefresh>5000){lastAccountPresenceRefresh=now;await refreshAccountPresence();}
-    if(now-lastLinksUiRefresh>3500 && document.getElementById('linkForm')?.classList.contains('hidden')){
-      lastLinksUiRefresh=now;await loadLinks();await loadSchedules();await loadLinkHistory();
-    }
-  },fast?1200:3000);
-  status();
-}
+async function refreshAll(){await status();await loadGroups();await loadLinks();await loadSchedules();await loadLinkHistory();await loadLinkFailures();await loadLogs();await loadDashboard()}
+let poll=null;let lastLinksUiRefresh=0;function startPolling(fast=false){if(poll)clearInterval(poll);poll=setInterval(async()=>{await status();const now=Date.now();if(now-lastGroupUiRefresh>5000)await loadGroups();if(now-lastLinksUiRefresh>3500 && document.getElementById('linkForm')?.classList.contains('hidden')){lastLinksUiRefresh=now;await loadLinks();await loadSchedules();await loadLinkHistory();}},fast?1200:3000);status()}
 async function loadGroups(){try{const d=await jfetch('/api/grupos');groups=d.grupos||[];lastGroupUiRefresh=Date.now();renderGroups();}catch(e){const box=document.getElementById('groups');if(!groups.length)box.innerHTML='<div class="muted errorText">'+esc(friendlyFetchError(e))+'</div>'}}
 function renderGroups(){
  const q=document.getElementById('search').value.toLowerCase();
@@ -519,7 +475,7 @@ async function loadAccount(){
     <div id="userList" style="margin-top:8px">`;
     (d.usuarios||[]).forEach(x=>{
       const online=Boolean(x.online);
-      html+=`<div class="group account-user-row" data-user-id="${esc(x.id)}">
+      html+=`<div class="group account-user-row">
         <div class="account-user-line">
           <div class="account-user-name">
             <span class="presence-dot ${online?'presence-online':'presence-offline'}" title="${online?'Online':'Offline'}"></span>
@@ -540,32 +496,6 @@ async function loadAccount(){
   }
   document.getElementById('accountPanel').innerHTML=html;
  }catch(e){document.getElementById('accountPanel').textContent=e.message}
-}
-async function refreshAccountPresence(){
-  const list=document.getElementById('userList');
-  if(!list)return;
-  try{
-    const d=await jfetch('/api/usuarios');
-    const users=Array.isArray(d.usuarios)?d.usuarios:[];
-    const rows=[...list.querySelectorAll('[data-user-id]')];
-    users.forEach(x=>{
-      const row=rows.find(r=>r.dataset.userId===String(x.id));
-      if(!row)return;
-      const online=Boolean(x.online);
-      const dot=row.querySelector('.presence-dot');
-      const status=row.querySelector('.account-user-status');
-      if(dot){
-        dot.classList.toggle('presence-online',online);
-        dot.classList.toggle('presence-offline',!online);
-        dot.title=online?'Online':'Offline';
-      }
-      if(status){
-        status.textContent=online?'Online':'Offline';
-        status.classList.toggle('status-online',online);
-        status.classList.toggle('status-offline',!online);
-      }
-    });
-  }catch{}
 }
 async function createUser(){
  const usuario=document.getElementById('newUserLogin')?.value||'',senha=document.getElementById('newUserPass')?.value||'';
