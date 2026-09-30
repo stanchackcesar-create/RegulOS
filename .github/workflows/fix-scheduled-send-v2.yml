@@ -1,0 +1,44 @@
+name: Corrigir bloqueio do envio agendado
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/server.js')
+          s=p.read_text(encoding='utf-8')
+          old="""    if (!productImage) {
+      const msg = 'Não foi possível encontrar ou baixar a imagem automaticamente.';
+      for (const id of targets) upsertLinkFailure(item, id, msg);
+      item.status = 'erro'; item.ativo = false; writeJson(FILES.schedules, linkSchedules);
+      addLog(`Falha agendamento ${item.nome}: ${msg}`);
+      return;
+    }
+    addLog(`Imagem encontrada para \"${item.nome}\".`);"""
+          new="""    if (!productImage) {
+      // Imagem automática não encontrada: não bloquear a entrega do link.
+      // Nenhum preço, desconto ou outro dado é inventado.
+      addLog(`Imagem automática não encontrada para \"${item.nome}\". Enviando somente texto/link.`);
+    } else {
+      addLog(`Imagem encontrada para \"${item.nome}\".`);
+    }"""
+          if old not in s:
+              raise SystemExit('Bloco do envio agendado não encontrado')
+          p.write_text(s.replace(old,new,1),encoding='utf-8')
+          PY
+      - name: Validate
+        run: node --check src/server.js
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/server.js
+          git diff --cached --quiet || (git commit -m 'Corrigir envio agendado sem imagem [skip ci]' && git push)
