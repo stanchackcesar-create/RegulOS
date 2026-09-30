@@ -1,54 +1,54 @@
-name: Corrigir envio agendado
+name: Corrigir envio agendado com imagem obrigatória
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
 
 permissions:
   contents: write
 
 jobs:
-  fix:
+  patch:
     runs-on: ubuntu-latest
     steps:
       - name: Baixar código
         uses: actions/checkout@v4
 
-      - name: Corrigir bloqueio por imagem automática
+      - name: Exigir imagem válida na oferta automática
         shell: python
         run: |
           from pathlib import Path
+          import re
+
           p = Path('src/server.js')
           s = p.read_text(encoding='utf-8')
 
-          old = """    if (!productImage) {
-      const msg = 'Não foi possível encontrar ou baixar a imagem automaticamente.';
+          start = s.find('    if (!productImage) {')
+          end = s.find('    const startedAt = Date.now();', start)
+          if start < 0 or end < 0:
+              raise SystemExit('Bloco do envio agendado não encontrado.')
+
+          block = s[start:end]
+          replacement = '''    if (!productImage) {
+      const msg = 'Não foi possível encontrar ou baixar uma imagem válida da oferta. O envio foi bloqueado para evitar uma oferta sem imagem.';
       for (const id of targets) upsertLinkFailure(item, id, msg);
-      item.status = 'erro'; item.ativo = false; writeJson(FILES.schedules, linkSchedules);
+      item.status = 'erro';
+      item.ativo = false;
+      writeJson(FILES.schedules, linkSchedules);
       addLog(`Falha agendamento ${item.nome}: ${msg}`);
       return;
     }
-    addLog(`Imagem encontrada para \"${item.nome}\`.`);"""
 
-          new = """    if (!productImage) {
-      // A imagem é opcional para a entrega. Não inventamos dados: se a fonte
-      // não fornecer uma imagem utilizável, o RegulOS envia o texto e o link.
-      addLog(`Imagem automática não encontrada para \"${item.nome}\". Enviando texto/link.`);
-    } else {
-      addLog(`Imagem encontrada para \"${item.nome}\".`);
-    }"""
+    addLog(`Imagem válida encontrada para "${item.nome}". Oferta liberada para envio.`);
+'''
 
-          # A string acima usa uma variante de escape; aceitar também a forma
-          # literal presente no servidor para manter o patch idempotente.
-          old2 = old.replace('`);"""', '`."""')
-          if old not in s and old2 not in s:
-              raise SystemExit('Bloco do bloqueio por imagem automática não encontrado.')
-          s = s.replace(old if old in s else old2, new, 1)
+          # Substitui qualquer versão anterior do bloco de imagem, inclusive
+          # as versões que permitiam enviar somente texto/link.
+          s = s[:start] + replacement + s[end:]
           p.write_text(s, encoding='utf-8')
-          print('Patch aplicado.')
+          print('Regra de imagem obrigatória aplicada.')
 
-      - name: Validar Node
+      - name: Validar JavaScript
         run: node --check src/server.js
 
       - name: Gravar correção
@@ -59,6 +59,6 @@ jobs:
           if git diff --cached --quiet; then
             echo "Nenhuma alteração necessária."
           else
-            git commit -m "Corrigir envio agendado sem imagem [skip ci]"
+            git commit -m "Exigir imagem válida na oferta automática agendada [skip scheduled patch]"
             git push
           fi
