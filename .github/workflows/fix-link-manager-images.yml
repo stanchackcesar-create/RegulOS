@@ -1,4 +1,5 @@
 name: Corrigir gerenciador e imagens
+# retry-v2
 on:
   push:
     branches: [main]
@@ -29,12 +30,10 @@ async function loadSchedules(){'''
           if n!=1: raise SystemExit('loadLinks não localizado')
           s=s.replace('Crie, programe e acompanhe cada envio. A fila continua do último link concluído.','Crie ou edite uma programação. Depois de salvar, ela fica somente em Agendamentos.')
           p.write_text(s,encoding='utf-8')
-
           q=Path('package.json'); d=json.loads(q.read_text(encoding='utf-8')); d.setdefault('dependencies',{})['playwright']='^1.55.0'; q.write_text(json.dumps(d,ensure_ascii=False,indent=2)+'\n',encoding='utf-8')
           p=Path('src/server.js'); s=p.read_text(encoding='utf-8')
           if "require('playwright')" not in s:
             s=s.replace("const crypto = require('crypto');","const crypto = require('crypto');\nlet chromium=null; try { chromium=require('playwright').chromium; } catch(e) { chromium=null; }",1)
-
           helper='''
 // REGULOS_BROWSER_IMAGE_FALLBACK_V3
 let regulosBrowserPromise=null;
@@ -44,60 +43,37 @@ async function getRegulosBrowser(){
  return regulosBrowserPromise;
 }
 async function findProductImageWithBrowser(url){
- const browser=await getRegulosBrowser();
- if(!browser)return null;
- let page=null;
+ const browser=await getRegulosBrowser(); if(!browser)return null; let page=null;
  try{
   page=await browser.newPage({userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36',viewport:{width:1365,height:900}});
-  await page.goto(String(url||''),{waitUntil:'domcontentloaded',timeout:30000});
-  await page.waitForTimeout(1800);
+  await page.goto(String(url||''),{waitUntil:'domcontentloaded',timeout:30000}); await page.waitForTimeout(1800);
   const finalUrl=page.url();
   const candidates=await page.evaluate(()=>{
-   const out=[];
-   const add=v=>{if(typeof v==='string'&&/^https?:\\/\\//i.test(v))out.push(v)};
+   const out=[]; const add=v=>{if(typeof v==='string'&&/^https?:\\/\\//i.test(v))out.push(v)};
    document.querySelectorAll('meta[property="og:image"],meta[name="og:image"],meta[name="twitter:image"],meta[property="twitter:image"]').forEach(x=>add(x.content));
    document.querySelectorAll('link[rel="image_src"]').forEach(x=>add(x.href));
-   document.querySelectorAll('script[type="application/ld+json"]').forEach(e=>{try{
-    const walk=v=>{if(!v)return;if(typeof v==='string')return add(v);if(Array.isArray(v))return v.forEach(walk);if(typeof v==='object'){if(v.image)walk(v.image);if(v.contentUrl)add(v.contentUrl);}};
-    walk(JSON.parse(e.textContent||''));
-   }catch{}});
+   document.querySelectorAll('script[type="application/ld+json"]').forEach(e=>{try{const walk=v=>{if(!v)return;if(typeof v==='string')return add(v);if(Array.isArray(v))return v.forEach(walk);if(typeof v==='object'){if(v.image)walk(v.image);if(v.contentUrl)add(v.contentUrl);}};walk(JSON.parse(e.textContent||''));}catch{}});
    document.querySelectorAll('img').forEach(x=>{add(x.currentSrc||x.src);add(x.getAttribute('data-src'));add(x.getAttribute('data-original'));});
    return [...new Set(out)].slice(0,25);
   });
   addLog(`🔎 Navegador encontrou ${candidates.length} candidatos de imagem; URL final: ${finalUrl}`);
   await page.close(); page=null;
-  for(const imageUrl of candidates){
-   try{
-    const image=await downloadBuffer(imageUrl,finalUrl||String(url||''));
-    addLog(`🖼️ Imagem obtida pelo navegador: ${imageUrl}`);
-    return image;
-   }catch(e){addLog(`Imagem dinâmica recusada: ${e.message}`)}
-  }
- }catch(e){addLog(`Fallback navegador não conseguiu abrir o link: ${e.message}`)}
- finally{try{if(page)await page.close()}catch{}}
+  for(const imageUrl of candidates){try{const image=await downloadBuffer(imageUrl,finalUrl||String(url||''));addLog(`🖼️ Imagem obtida pelo navegador: ${imageUrl}`);return image;}catch(e){}}
+ }catch(e){addLog(`Fallback navegador não conseguiu abrir o link: ${e.message}`)} finally{try{if(page)await page.close()}catch{}}
  return null;
 }
 '''
-          if 'REGULOS_BROWSER_IMAGE_FALLBACK_V3' not in s:
-            s=s.replace('async function findProductImage(url) {',helper+'\nasync function findProductImage(url) {',1)
+          if 'REGULOS_BROWSER_IMAGE_FALLBACK_V3' not in s: s=s.replace('async function findProductImage(url) {',helper+'\nasync function findProductImage(url) {',1)
           start=s.find('async function findProductImage(url) {'); end=s.find('const DEFAULT_RANDOM_MESSAGES = [',start)
           if start<0 or end<0: raise SystemExit('findProductImage não delimitada')
           fn='''async function findProductImage(url) {
- try {
-  const ml=await findMercadoLivreImageUrl(url);
-  if(ml){try{return await downloadBuffer(ml,url)}catch(e){addLog(`Imagem da API ML não pôde ser baixada: ${e.message}`)}}
- }catch(e){addLog(`Fallback ML ignorado: ${e.message}`)}
- try {
-  const page=await fetchText(url); const candidates=extractImageCandidates(page.data,page.finalUrl);
-  for(const imageUrl of candidates){try{return await downloadBuffer(imageUrl,page.finalUrl)}catch(e){}}
- }catch(e){addLog(`Não foi possível ler a página para buscar imagem: ${e.message}`)}
- const browserImage=await findProductImageWithBrowser(url);
- if(browserImage)return browserImage;
+ try { const ml=await findMercadoLivreImageUrl(url); if(ml){try{return await downloadBuffer(ml,url)}catch(e){}} }catch(e){}
+ try { const page=await fetchText(url); const candidates=extractImageCandidates(page.data,page.finalUrl); for(const imageUrl of candidates){try{return await downloadBuffer(imageUrl,page.finalUrl)}catch(e){}} }catch(e){}
+ const browserImage=await findProductImageWithBrowser(url); if(browserImage)return browserImage;
  return null;
 }
 '''
-          s=s[:start]+fn+s[end:]
-          p.write_text(s,encoding='utf-8')
+          s=s[:start]+fn+s[end:]; p.write_text(s,encoding='utf-8')
           PY
       - name: Instalar e validar
         run: |
