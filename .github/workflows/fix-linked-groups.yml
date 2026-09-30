@@ -15,11 +15,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Aplicar patch
+      - name: Aplicar patch do Gerenciador de Links
         run: python tools/patch_schedule.py
 
       - name: Aplicar patch de imagem do Mercado Livre
         run: python tools/patch_mercadolivre.py
+
+      - name: Aplicar patch de oferta automática
+        run: python tools/patch_auto_offer_ui.py
 
       - name: Validar servidor
         run: node --check src/server.js
@@ -41,7 +44,7 @@ jobs:
       - name: Commitar patch
         run: |
           MSG="$(git log -1 --pretty=%B)"
-          if [[ "$MSG" != *"[fix-schedule]"* ]]; then
+          if [[ "$MSG" != *"[fix-schedule]"* && "$MSG" != *"[auto-offer]"* ]]; then
             exit 0
           fi
           git config user.name "github-actions[bot]"
@@ -51,5 +54,5 @@ jobs:
             echo "Patch já aplicado ou nenhuma alteração necessária."
             exit 0
           fi
-          git commit -m "Corrigir salvamento e imagem automática de links [skip ci]"
+          git commit -m "Integrar montagem automática de ofertas [skip ci]"
           git push origin HEAD:main
