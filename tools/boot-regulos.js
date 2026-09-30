@@ -92,8 +92,7 @@ replaceOnce(
 'fila de agendamentos independente'
 );
 
-// 6) Reaplica as regras diretamente dentro das funções críticas, mesmo que o
-// server.js tenha recebido uma versão intermediária diferente.
+// 6) Reaplica as regras diretamente dentro das funções críticas.
 patchSection(
   'async function sendScheduledLink(item) {',
   'async function processLinkSchedules() {',
@@ -117,12 +116,19 @@ patchSection(
 );
 
 // 7) Reenvio de uma falha não pode depender do agendamento original.
-// O envio de uma vez é removido de Agendamentos quando falha, portanto o
-// endpoint de Reenviar precisa reconstruir o item a partir do registro de falha.
 replaceOnce(
 `  const item=linkSchedules.find(x=>String(x.id)===String(failure.agendamentoId));\n  if(!item) return res.status(404).json({ok:false,msg:'O link associado à falha não está mais no Gerenciador de Links.'});`,
 `  let item=linkSchedules.find(x=>String(x.id)===String(failure.agendamentoId));\n  if(!item){\n    const imagemFalhou=String(failure.erro||'').toLowerCase().startsWith('imagem:');\n    item={\n      id:String(failure.agendamentoId||('reenvio-'+failure.id)),\n      nome:failure.nome||'Reenvio de link',\n      url:String(failure.url||'').trim(),\n      mensagem:failure.mensagem||'',\n      data:failure.data||new Date().toISOString().slice(0,10),\n      horario:failure.horario||new Date().toTimeString().slice(0,5),\n      repeticao:'uma_vez',\n      intervaloMin:Number(failure.intervaloMin||1),\n      intervaloMax:Number(failure.intervaloMax||1),\n      imagemAutomatica:true,\n      imagemUrl:imagemFalhou?'':String(failure.imagemUrl||''),\n      imagemStatus:'',\n      tituloProduto:failure.tituloProduto||'',\n      grupoId:String(failure.grupoId||''),\n      reenvioGrupoId:String(failure.grupoId||''),\n      ativo:true,\n      status:'agendado'\n    };\n    addLog(\`Reenvio: reconstruindo "\${item.nome}" a partir da falha \${failure.id}.\`);\n  }`,
 'reenvio independente do agendamento original'
+);
+
+// 8) Reativar um agendamento pausado deve realmente rearmá-lo.
+// Sem isso, um agendamento de uma vez que já passou pelo horário pode continuar
+// preso no lastRunKey/status antigo mesmo depois de clicar em Ativar.
+replaceOnce(
+`  if(b.rearmar===true) item.lastRunKey='';\n  writeJson(FILES.schedules,linkSchedules); syncLinkQueue();`,
+`  const estavaPausado = item.status === 'pausado';\n  if(b.rearmar===true || (b.ativo===true && estavaPausado)){\n    item.lastRunKey='';\n    item.lastSkipKey='';\n    item.status='agendado';\n    item.progressGroupIds=[];\n    item.progressTargets=[];\n  }\n  if(b.ativo===true && item.repeticao==='uma_vez' && item.status==='pausado'){\n    item.status='agendado';\n  }\n  writeJson(FILES.schedules,linkSchedules); syncLinkQueue();`,
+'reativação de agendamento pausado'
 );
 
 if (changed) {
