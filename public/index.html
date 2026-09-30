@@ -441,9 +441,6 @@ let lastFailureSignature='';
 async function loadLinkFailures(){const box=document.getElementById('linkFailures');if(!box)return;try{const d=await jfetch('/api/link-falhas');
   const signature=JSON.stringify(d.falhas||[]);
   if(signature===lastFailureSignature)return;
-  lastFailureSignature=signature;
-  const signature=JSON.stringify(d.falhas||[]);
-  if(signature===lastFailureSignature)return;
   lastFailureSignature=signature;box.innerHTML='';if(!d.falhas.length){box.innerHTML='<div class="muted">Nenhum link com falha.</div>';return;}d.falhas.forEach(f=>{const el=document.createElement('div');el.className='link';el.innerHTML=`<h3>⚠️ ${esc(f.nome)} <span class="badge bad">falhou</span></h3><a>${esc(f.url)}</a><div class="stats">Grupo: ${esc(f.grupoId||'—')}</div><div class="stats">Motivo: ${esc(f.erro||'Falha não informada')}</div><div class="row"><button class="green" onclick="resendFailed('${esc(f.id)}')">↻ Reenviar</button><button onclick="editFailedLink('${esc(f.id)}')">✏️ Editar</button></div>`;box.appendChild(el)});}catch(e){box.innerHTML='<div class="muted errorText">Não foi possível carregar as falhas.</div>'}}
 async function toggleLink(id,ativo){try{await jfetch('/api/link-agendamentos/'+id+'/toggle',{method:'POST'});await loadLinks();await loadSchedules()}catch(e){toast(e.message,true)}}
 async function sendNow(id){try{const d=await jfetch('/api/link-agendamentos/'+id+'/enviar-agora',{method:'POST'});toast(d.msg);await loadLinks();await loadSchedules()}catch(e){toast(e.message,true)}}
