@@ -1,5 +1,7 @@
 name: Corrigir imagens do Mercado Livre
 
+# V1 - fallback de imagem para links meli.la / Mercado Livre.
+
 on:
   workflow_dispatch:
   push:
