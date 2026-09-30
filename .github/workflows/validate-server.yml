@@ -7,18 +7,40 @@ on:
     branches: [main]
 
 jobs:
-  syntax:
+  startup:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Check server syntax
-        run: node --check src/server.js
-      - name: Check startup helpers
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Check JavaScript syntax
         run: |
+          node --check src/server.js
           node --check tools/cloud-start.js
+          node --check tools/preboot-regulos.js
+          node --check tools/boot-regulos.js
+          node --check tools/patch_scheduled_group.js
+          node --check tools/apply-mobile-ui.js
           node --check tools/mobile-scroll-tabs.js
+
+      - name: Smoke test real cloud startup
+        shell: bash
+        run: |
+          set +e
+          timeout 30s node tools/cloud-start.js
+          status=$?
+          if [ "$status" -eq 124 ]; then
+            echo "RegulOS permaneceu executando por 30s: inicialização OK."
+            exit 0
+          fi
+          echo "RegulOS encerrou durante a inicialização com código $status."
+          exit "$status"
