@@ -234,7 +234,7 @@ app.get('/api/usuarios',(req,res)=>{
 });
 app.post('/api/usuarios',requireAdmin,(req,res)=>{
   const currentUsers=readUsers();
-  if(currentUsers.length >= 2) return res.status(409).json({ok:false,msg:'O RegulOS Cloud permite no máximo 2 usuários: administrador e operador.'});
+  if(currentUsers.length >= 20) return res.status(409).json({ok:false,msg:'O RegulOS permite no máximo 20 usuários.'});
   const usuario=String(req.body?.usuario||'').trim().toLowerCase();
   const senha=String(req.body?.senha||'');
   if(usuario.length<3||senha.length<6)return res.status(400).json({ok:false,msg:'Nome de usuário e senha são obrigatórios (senha mínima de 6 caracteres).'});
