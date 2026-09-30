@@ -1,0 +1,58 @@
+name: Install RegulOS Cloud source
+
+on:
+  push:
+    paths-ignore:
+      - '.github/workflows/install-regulos-cloud.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  install-source:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Extract the complete Cloud package
+        shell: bash
+        run: |
+          set -euo pipefail
+          ZIP="RegulOS_v12_11_0_CLOUD_RAILWAY_CORRIGIDO.zip"
+          test -f "$ZIP"
+          rm -rf /tmp/regulos-extract
+          mkdir -p /tmp/regulos-extract
+          unzip -q -o "$ZIP" -d /tmp/regulos-extract
+          test -f /tmp/regulos-extract/RegulOS/src/server.js
+          test -f /tmp/regulos-extract/RegulOS/src/supervisor.js
+          test -f /tmp/regulos-extract/RegulOS/public/index.html
+          test -f /tmp/regulos-extract/RegulOS/Dockerfile
+          cp -a /tmp/regulos-extract/RegulOS/. .
+      - name: Verify application structure
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f src/server.js
+          test -f src/supervisor.js
+          test -f public/index.html
+          test -f Dockerfile
+          test -f package.json
+          node --check src/server.js
+          node --check src/supervisor.js
+      - name: Commit complete source to main
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src public Dockerfile package.json railway.json .dockerignore .env.example README_CLOUD.md README.md
+          if git diff --cached --quiet; then
+            echo "No source changes to commit."
+            exit 0
+          fi
+          git commit -m "Restore complete RegulOS Cloud application source"
+          git push origin HEAD:main
