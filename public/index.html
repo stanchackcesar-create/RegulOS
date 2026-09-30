@@ -2,6 +2,7 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=yes"><meta name="theme-color" content="#111b2d">
 <title>RegulOS v12.11.0</title>
 <style>
@@ -235,7 +236,22 @@ async function status(){
   if(d.qr){document.getElementById('qrImg').src=d.qr;document.getElementById('qrBox').classList.remove('hidden')}else document.getElementById('qrBox').classList.add('hidden');
  }catch(e){document.getElementById('connStatus').textContent=friendlyFetchError(e)}
 }
-async function refreshAll(){await status();await loadGroups();await loadLinks();await loadSchedules();await loadLinkHistory();await loadLinkFailures();await loadLogs();await loadDashboard()}
+async function refreshAll(){
+  if(window.__regulosRefreshBusy)return;
+  window.__regulosRefreshBusy=true;
+  const btn=document.querySelector('.actions button.primary');
+  const oldText=btn?.textContent||'🔄 Atualizar';
+  if(btn){btn.disabled=true;btn.textContent='🔄 Atualizando...';}
+  const tasks=[status,loadGroups,loadLinks,loadSchedules,loadLinkHistory,loadLinkFailures,loadLogs,loadDashboard,refreshAccountPresence];
+  const results=await Promise.all(tasks.map(async fn=>{
+    try{await Promise.race([Promise.resolve().then(fn),new Promise((_,rej)=>setTimeout(()=>rej(new Error('timeout')),8000))]);return true;}
+    catch(e){console.debug('Atualização falhou:',e);return false;}
+  }));
+  const failed=results.filter(x=>!x).length;
+  if(btn){btn.disabled=false;btn.textContent=oldText;}
+  window.__regulosRefreshBusy=false;
+  try{toast(failed?`Atualização concluída; ${failed} item(ns) não responderam.`:'Atualizado com sucesso.',failed>0);}catch{}
+}
 let poll=null;let lastLinksUiRefresh=0;function startPolling(fast=false){if(poll)clearInterval(poll);poll=setInterval(async()=>{await status();const now=Date.now();if(now-lastGroupUiRefresh>5000)await loadGroups();if(now-lastLinksUiRefresh>3500 && document.getElementById('linkForm')?.classList.contains('hidden')){lastLinksUiRefresh=now;await loadLinks();await loadSchedules();await loadLinkHistory();}},fast?1200:3000);status()}
 async function loadGroups(){try{const d=await jfetch('/api/grupos');groups=d.grupos||[];lastGroupUiRefresh=Date.now();renderGroups();}catch(e){const box=document.getElementById('groups');if(!groups.length)box.innerHTML='<div class="muted errorText">'+esc(friendlyFetchError(e))+'</div>'}}
 function renderGroups(){
@@ -475,7 +491,7 @@ async function loadAccount(){
     <div id="userList" style="margin-top:8px">`;
     (d.usuarios||[]).forEach(x=>{
       const online=Boolean(x.online);
-      html+=`<div class="group account-user-row">
+      html+=`<div class="group account-user-row" data-user-id="${esc(x.id)}">
         <div class="account-user-line">
           <div class="account-user-name">
             <span class="presence-dot ${online?'presence-online':'presence-offline'}" title="${online?'Online':'Offline'}"></span>
@@ -512,7 +528,27 @@ async function accountHeartbeat(){
   try{ await fetch('/api/auth/heartbeat',{method:'POST',cache:'no-store',credentials:'same-origin'}); }
   catch{}
 }
+async function refreshAccountPresence(){
+  const list=document.getElementById('userList');
+  if(!list)return;
+  try{
+    const d=await jfetch('/api/usuarios');
+    const users=Array.isArray(d.usuarios)?d.usuarios:[];
+    const rows=[...list.querySelectorAll('[data-user-id]')];
+    users.forEach(x=>{
+      const row=rows.find(r=>r.dataset.userId===String(x.id));
+      if(!row)return;
+      const online=Boolean(x.online);
+      const dot=row.querySelector('.presence-dot');
+      const status=row.querySelector('.account-user-status');
+      if(dot){dot.classList.toggle('presence-online',online);dot.classList.toggle('presence-offline',!online);dot.title=online?'Online':'Offline';}
+      if(status){status.textContent=online?'Online':'Offline';status.classList.toggle('status-online',online);status.classList.toggle('status-offline',!online);}
+    });
+  }catch(e){console.debug('Falha ao atualizar presença:',e);}
+}
 setInterval(accountHeartbeat,15000);
+setInterval(()=>{refreshAccountPresence();},5000);
+setTimeout(()=>{refreshAccountPresence();},1500);
 function markPresenceOffline(){
   try{
     if(navigator.sendBeacon){

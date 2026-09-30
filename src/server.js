@@ -158,6 +158,13 @@ function getLanAddresses(){
   return [...new Set(out)];
 }
 app.get('/api/network',(req,res)=>res.json({ok:true,host:HOST,port:PORT,lan:getLanAddresses().map(ip=>`http://${ip}:${PORT}`)}));
+
+function regulosNoStore(res){
+  res.setHeader('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma','no-cache');
+  res.setHeader('Expires','0');
+}
+
 app.get('/api/health',(req,res)=>res.json({ok:true,version:'12.8.0-cloud',pid:process.pid,time:new Date().toISOString(),uptime:Math.floor(process.uptime()),lan:getLanAddresses().map(ip=>`http://${ip}:${PORT}`)}));
 app.get('/api/auth/status',(req,res)=>{
   const users=readUsers();
@@ -1535,8 +1542,8 @@ app.get('/api/dashboard',(req,res)=>{
 });
 
 app.get('/grupos',(req,res)=>res.sendFile(path.join(PUBLIC,'grupos.html')));
-app.get('/',(req,res)=>res.sendFile(path.join(PUBLIC,'index.html')));
-app.get('*',(req,res)=>res.sendFile(path.join(PUBLIC,'index.html')));
+app.get('/',(req,res)=>{regulosNoStore(res);res.sendFile(path.join(PUBLIC,'index.html'));});
+app.get('*',(req,res)=>{regulosNoStore(res);res.sendFile(path.join(PUBLIC,'index.html'));});
 
 const server=app.listen(PORT,HOST,()=>{
   console.log(`RegulOS online em http://${HOST}:${PORT}`);
