@@ -84,13 +84,13 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
  <button class="red" onclick="clearLinkHistory()">🗑️ Limpar histórico</button>
 </div>
 <div class="muted" style="margin-top:6px">⚠️ O histórico também é apagado quando você encerra a sessão, usa <b>Desconectar</b> ou gera um novo QR.</div>
-<div id="linkHistory" style="margin-top:10px">Carregando histórico...</div>
+<div id="linkHistory" style="margin-top:10px"></div>
 </div>
 
 <div class="panel" style="margin-top:14px">
 <div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:0">⚠️ Links com falha</h2><button class="red" onclick="clearLinkFailures()">🗑️ Limpar falhas</button></div>
 <div class="muted">Se o envio falhar ou a imagem não puder ser obtida, o link aparece aqui. <b>Reenviar</b> tenta novamente. <b>Editar</b> abre o Gerenciador de Links com os dados preenchidos.</div>
-<div id="linkFailures" style="margin-top:10px">Carregando falhas...</div>
+<div id="linkFailures" style="margin-top:10px"></div>
 </div>
 </section>
 
@@ -411,12 +411,13 @@ async function deleteLinkHistory(id){
  try{ const d=await jfetch('/api/link-historico/'+encodeURIComponent(id),{method:'DELETE'}); toast(d.msg); await loadLinkHistory(); }
  catch(e){ toast(e.message,true); }
 }
+let lastHistorySignature='';
 async function loadLinkHistory(){
  const box=document.getElementById('linkHistory');
  if(!box)return;
  try{
   box.innerHTML='<div class="muted">🔄 Carregando histórico...</div>';
-  const d=await jfetch('/api/link-historico'); box.innerHTML='';
+  const d=await jfetch('/api/link-historico'); const signature=JSON.stringify(d.historico||[]); if(signature===lastHistorySignature)return; lastHistorySignature=signature; box.innerHTML='';
   if(!d.historico.length){box.innerHTML='<div class="muted">Nenhum link enviado e arquivado ainda.</div>';return}
   d.historico.slice(0,30).forEach(x=>{
    const el=document.createElement('div'); el.className='link';
@@ -436,7 +437,11 @@ async function editLink(id){const d=await jfetch('/api/link-agendamentos');const
 async function editFailedLink(id){try{const d=await jfetch('/api/link-falhas');const f=d.falhas.find(x=>String(x.id)===String(id));if(!f)return;editingId=f.agendamentoId;editingFailedId=f.id;showForm();lnome.value=f.nome||'';lurl.value=f.url||'';limagemUrl.value=f.imagemUrl||'';lmensagem.value=f.mensagem||'';ldata.value=f.data||new Date().toISOString().slice(0,10);lhorario.value=f.horario||'';lrep.value=f.repeticao||'uma_vez';lmin.value=f.intervaloMin||2;lativo.checked=true;limagem.checked=f.imagemAutomatica!==false;document.getElementById('formResult').textContent='⚠️ Link recuperado das falhas. Corrija e salve para programar novamente.';toggleRandomBox();}catch(e){toast(e.message,true)}}
 async function resendFailed(id){try{const d=await jfetch('/api/link-falhas/'+encodeURIComponent(id)+'/reenviar',{method:'POST'});toast(d.msg,!d.ok);await loadLinkHistory();await loadLinkFailures();await loadLinks();await loadSchedules();}catch(e){toast(e.message,true)}}
 async function clearLinkFailures(){if(!confirm('Apagar todos os links com falha?'))return;try{const d=await jfetch('/api/link-falhas',{method:'DELETE'});toast(d.msg);await loadLinkFailures();}catch(e){toast(e.message,true)}}
-async function loadLinkFailures(){const box=document.getElementById('linkFailures');if(!box)return;try{const d=await jfetch('/api/link-falhas');box.innerHTML='';if(!d.falhas.length){box.innerHTML='<div class="muted">Nenhum link com falha.</div>';return;}d.falhas.forEach(f=>{const el=document.createElement('div');el.className='link';el.innerHTML=`<h3>⚠️ ${esc(f.nome)} <span class="badge bad">falhou</span></h3><a>${esc(f.url)}</a><div class="stats">Grupo: ${esc(f.grupoId||'—')}</div><div class="stats">Motivo: ${esc(f.erro||'Falha não informada')}</div><div class="row"><button class="green" onclick="resendFailed('${esc(f.id)}')">↻ Reenviar</button><button onclick="editFailedLink('${esc(f.id)}')">✏️ Editar</button></div>`;box.appendChild(el)});}catch(e){box.innerHTML='<div class="muted errorText">Não foi possível carregar as falhas.</div>'}}
+let lastFailureSignature='';
+async function loadLinkFailures(){const box=document.getElementById('linkFailures');if(!box)return;try{const d=await jfetch('/api/link-falhas');
+  const signature=JSON.stringify(d.falhas||[]);
+  if(signature===lastFailureSignature)return;
+  lastFailureSignature=signature;box.innerHTML='';if(!d.falhas.length){box.innerHTML='<div class="muted">Nenhum link com falha.</div>';return;}d.falhas.forEach(f=>{const el=document.createElement('div');el.className='link';el.innerHTML=`<h3>⚠️ ${esc(f.nome)} <span class="badge bad">falhou</span></h3><a>${esc(f.url)}</a><div class="stats">Grupo: ${esc(f.grupoId||'—')}</div><div class="stats">Motivo: ${esc(f.erro||'Falha não informada')}</div><div class="row"><button class="green" onclick="resendFailed('${esc(f.id)}')">↻ Reenviar</button><button onclick="editFailedLink('${esc(f.id)}')">✏️ Editar</button></div>`;box.appendChild(el)});}catch(e){box.innerHTML='<div class="muted errorText">Não foi possível carregar as falhas.</div>'}}
 async function toggleLink(id,ativo){try{await jfetch('/api/link-agendamentos/'+id+'/toggle',{method:'POST'});await loadLinks();await loadSchedules()}catch(e){toast(e.message,true)}}
 async function sendNow(id){try{const d=await jfetch('/api/link-agendamentos/'+id+'/enviar-agora',{method:'POST'});toast(d.msg);await loadLinks();await loadSchedules()}catch(e){toast(e.message,true)}}
 async function deleteLink(id){if(!confirm('Excluir este agendamento?'))return;try{await jfetch('/api/link-agendamentos/'+id,{method:'DELETE'});await loadLinks();await loadSchedules()}catch(e){toast(e.message,true)}}
