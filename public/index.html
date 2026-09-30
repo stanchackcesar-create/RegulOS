@@ -416,7 +416,7 @@ async function loadLinkHistory(){
  const box=document.getElementById('linkHistory');
  if(!box)return;
  try{
-  box.innerHTML='<div class="muted">🔄 Carregando histórico...</div>';
+  
   const d=await jfetch('/api/link-historico'); const signature=JSON.stringify(d.historico||[]); if(signature===lastHistorySignature)return; lastHistorySignature=signature; box.innerHTML='';
   if(!d.historico.length){box.innerHTML='<div class="muted">Nenhum link enviado e arquivado ainda.</div>';return}
   d.historico.slice(0,30).forEach(x=>{
@@ -439,6 +439,9 @@ async function resendFailed(id){try{const d=await jfetch('/api/link-falhas/'+enc
 async function clearLinkFailures(){if(!confirm('Apagar todos os links com falha?'))return;try{const d=await jfetch('/api/link-falhas',{method:'DELETE'});toast(d.msg);await loadLinkFailures();}catch(e){toast(e.message,true)}}
 let lastFailureSignature='';
 async function loadLinkFailures(){const box=document.getElementById('linkFailures');if(!box)return;try{const d=await jfetch('/api/link-falhas');
+  const signature=JSON.stringify(d.falhas||[]);
+  if(signature===lastFailureSignature)return;
+  lastFailureSignature=signature;
   const signature=JSON.stringify(d.falhas||[]);
   if(signature===lastFailureSignature)return;
   lastFailureSignature=signature;box.innerHTML='';if(!d.falhas.length){box.innerHTML='<div class="muted">Nenhum link com falha.</div>';return;}d.falhas.forEach(f=>{const el=document.createElement('div');el.className='link';el.innerHTML=`<h3>⚠️ ${esc(f.nome)} <span class="badge bad">falhou</span></h3><a>${esc(f.url)}</a><div class="stats">Grupo: ${esc(f.grupoId||'—')}</div><div class="stats">Motivo: ${esc(f.erro||'Falha não informada')}</div><div class="row"><button class="green" onclick="resendFailed('${esc(f.id)}')">↻ Reenviar</button><button onclick="editFailedLink('${esc(f.id)}')">✏️ Editar</button></div>`;box.appendChild(el)});}catch(e){box.innerHTML='<div class="muted errorText">Não foi possível carregar as falhas.</div>'}}
