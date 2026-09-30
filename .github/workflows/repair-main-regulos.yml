@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   repair:
-    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') && !contains(github.event.head_commit.message, '[fix-linked-groups]') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -23,19 +23,11 @@ jobs:
 
           index = Path('public/index.html')
           text = index.read_text(encoding='utf-8')
-
-          # Mantém loadAccount válido. Nunca adiciona async duas vezes.
           text = text.replace('async async function loadAccount(){', 'async function loadAccount(){', 1)
-
-          # Identifica cada usuário para que a presença possa ser atualizada
-          # sem reconstruir o formulário inteiro da conta.
           old_row = 'html+=`<div class="group account-user-row">'
           new_row = 'html+=`<div class="group account-user-row" data-user-id="${esc(x.id)}">'
           if old_row in text:
               text = text.replace(old_row, new_row, 1)
-
-          # Atualização de presença em tempo real, independente do carregamento
-          # inicial da conta.
           if 'async function refreshAccountPresence(){' not in text:
               marker = 'async function createUser(){'
               presence = r'''async function refreshAccountPresence(){
@@ -59,9 +51,6 @@ jobs:
               if marker not in text:
                   raise SystemExit('Marcador createUser não encontrado.')
               text = text.replace(marker, presence + marker, 1)
-
-          # Substitui somente a função refreshAll existente por uma versão que
-          # continua carregando os dados e também atualiza os usuários.
           start=text.find('async function refreshAll(){')
           if start < 0:
               raise SystemExit('Função refreshAll não encontrada.')
@@ -96,15 +85,12 @@ jobs:
             try{toast(failed?`Atualização concluída; ${failed} item(ns) não responderam.`:'Atualizado com sucesso.',failed>0);}catch{}
           }'''
           text=text[:start]+replacement+text[end:]
-
-          # Presença continua sendo atualizada mesmo sem clicar em Atualizar.
           if 'setInterval(()=>{refreshAccountPresence();},5000);' not in text:
               marker='setInterval(accountHeartbeat,15000);'
               if marker in text:
                   text=text.replace(marker,marker+'\nsetInterval(()=>{refreshAccountPresence();},5000);\nsetTimeout(()=>{refreshAccountPresence();},1500);',1)
               else:
                   text=text.replace('</script>','setInterval(()=>{refreshAccountPresence();},5000);\nsetTimeout(()=>{refreshAccountPresence();},1500);\n</script>',1)
-
           index.write_text(text,encoding='utf-8')
 
           server = Path('src/server.js')
