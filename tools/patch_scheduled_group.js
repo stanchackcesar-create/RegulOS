@@ -29,7 +29,7 @@ patchFile(SERVER, [
   ],
   [
 `  if(typeof b.imagemUrl==='string') item.imagemUrl=b.imagemUrl.trim();\n  if(Array.isArray(b.mensagensAleatorias))`,
-`  if(typeof b.imagemUrl==='string') item.imagemUrl=b.imagemUrl.trim();\n  if(typeof b.grupoId==='string') item.grupoId=b.grupoId.trim();\n  if(Array.isArray(b.mensagensAleatorias))`
+`  if(typeof b.imagemUrl==='string') item.imagemUrl=b.imagemUrl.trim();\n  if(Array.isArray(b.mensagensAleatorias))`
   ],
   [
 `  const b=req.body||{}, nome=String(b.nome||'').trim(), url=String(b.url||'').trim();\n  const data=String(b.data||''), horario=String(b.horario||'');\n  if(!nome||!url||!data||!horario) return res.status(400).json({ok:false,msg:'Nome, link, data e horário são obrigatórios.'});`,
@@ -37,7 +37,7 @@ patchFile(SERVER, [
   ],
   [
 `  } else {\n    targets = activeGroups();\n    if (!targets.length) {`,
-`  } else {\n    const scheduledGroupIds = [...new Set([\n      item.reenvioGrupoId,\n      item.grupoId,\n      ...(Array.isArray(item.grupoIds) ? item.grupoIds : [])\n    ].map(String).map(x=>x.trim()).filter(Boolean))];\n    // Se o agendamento tem grupo definido, envia somente para esse grupo.\n    // Caso contrário, preserva o comportamento antigo usando os grupos ligados.\n    targets = scheduledGroupIds.length\n      ? scheduledGroupIds.filter(id => groups.some(g => String(g.id) === id))\n      : activeGroups();\n    if (!targets.length) {`
+`  } else {\n    const scheduledGroupIds = [...new Set([\n      item.reenvioGrupoId,\n      item.grupoId,\n      ...(Array.isArray(item.grupoIds) ? item.grupoIds : [])\n    ].map(String).map(x=>x.trim()).filter(Boolean))];\n    // Se o agendamento tem grupo definido, usa exatamente o ID salvo.\n    // Não depende do cache/lista de grupos para decidir o destino.\n    // Isso é essencial no modo nuvem, onde o cache pode atualizar depois\n    // do horário do disparo.\n    targets = scheduledGroupIds.length ? scheduledGroupIds : activeGroups();\n    if (!targets.length) {`
   ],
   [
 `      // Se o grupo foi desligado desde o início da ocorrência, não enviamos.\n      if (getGroupConfig(id).ativo === false) continue;`,
