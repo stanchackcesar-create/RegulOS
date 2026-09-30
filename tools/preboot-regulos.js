@@ -6,6 +6,9 @@ const path = require('path');
 // dados permanecem persistidos no Volume do Railway.
 const ROOT = path.join(__dirname, '..');
 
+// Corrige a interface de contas antes de qualquer patch que possa reconstruir o painel.
+require(path.join(ROOT, 'tools', 'patch-account-user-form.js'));
+
 // Primeiro corrige o destino explícito dos agendamentos, o título da oferta automática
 // e a imagem temporária retornada pelo preview. Isso acontece antes do carregamento do servidor.
 require(path.join(ROOT, 'tools', 'fix-auto-offer-schedule.js'));
