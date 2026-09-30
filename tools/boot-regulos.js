@@ -64,9 +64,6 @@ replaceOnce(
 );
 
 // 4) Agendamentos de links são independentes da programação geral do bot.
-// O painel já informa que a programação geral é separada; um horário salvo em
-// Agendamentos deve disparar no horário escolhido, sem ser pausado por uma
-// janela geral do bot.
 replaceOnce(
 `  if (runningLinkSchedules.has(item.id) || !online || !sock || !botWindowActive()) return;`,
 `  if (runningLinkSchedules.has(item.id) || !online || !sock) return;`,
@@ -96,8 +93,7 @@ replaceOnce(
 );
 
 // 6) Reaplica as regras diretamente dentro das funções críticas, mesmo que o
-// server.js tenha recebido uma versão intermediária diferente. Isso evita que
-// um patch anterior deixe o agendador preso na programação geral.
+// server.js tenha recebido uma versão intermediária diferente.
 patchSection(
   'async function sendScheduledLink(item) {',
   'async function processLinkSchedules() {',
@@ -118,6 +114,15 @@ patchSection(
     [`    if (!scheduleDue(item, now)) return;`, `    if (!scheduleDue(item, now)) return;\n    addLog(\`Agendamento "\${item.nome}" chegou ao horário; iniciando tentativa de envio.\`);`]
   ],
   'diagnóstico do processador de agendamentos'
+);
+
+// 7) Reenvio de uma falha não pode depender do agendamento original.
+// O envio de uma vez é removido de Agendamentos quando falha, portanto o
+// endpoint de Reenviar precisa reconstruir o item a partir do registro de falha.
+replaceOnce(
+`  const item=linkSchedules.find(x=>String(x.id)===String(failure.agendamentoId));\n  if(!item) return res.status(404).json({ok:false,msg:'O link associado à falha não está mais no Gerenciador de Links.'});`,
+`  let item=linkSchedules.find(x=>String(x.id)===String(failure.agendamentoId));\n  if(!item){\n    const imagemFalhou=String(failure.erro||'').toLowerCase().startsWith('imagem:');\n    item={\n      id:String(failure.agendamentoId||('reenvio-'+failure.id)),\n      nome:failure.nome||'Reenvio de link',\n      url:String(failure.url||'').trim(),\n      mensagem:failure.mensagem||'',\n      data:failure.data||new Date().toISOString().slice(0,10),\n      horario:failure.horario||new Date().toTimeString().slice(0,5),\n      repeticao:'uma_vez',\n      intervaloMin:Number(failure.intervaloMin||1),\n      intervaloMax:Number(failure.intervaloMax||1),\n      imagemAutomatica:true,\n      imagemUrl:imagemFalhou?'':String(failure.imagemUrl||''),\n      imagemStatus:'',\n      tituloProduto:failure.tituloProduto||'',\n      grupoId:String(failure.grupoId||''),\n      reenvioGrupoId:String(failure.grupoId||''),\n      ativo:true,\n      status:'agendado'\n    };\n    addLog(\`Reenvio: reconstruindo "\${item.nome}" a partir da falha \${failure.id}.\`);\n  }`,
+'reenvio independente do agendamento original'
 );
 
 if (changed) {
