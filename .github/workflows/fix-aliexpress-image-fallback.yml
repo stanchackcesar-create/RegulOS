@@ -89,7 +89,7 @@ jobs:
                     const add=(v)=>{
                       if(!v || typeof v!=='string') return;
                       const s=v.trim();
-                      if(!/^https?:\\/\\//i.test(s)) return;
+                      if(!/^https?:\/\//i.test(s)) return;
                       if(!out.includes(s)) out.push(s);
                     };
                     for(const img of Array.from(document.images||[])){
@@ -130,6 +130,12 @@ jobs:
           path.write_text(text, encoding='utf-8')
           print('Fallback de navegador aplicado em findProductImage.')
 
+      - name: Verificar sintaxe antes de publicar
+        shell: bash
+        run: |
+          node --check src/server.js
+          echo "Sintaxe do server.js OK"
+
       - name: Commit da correção
         shell: bash
         run: |
@@ -140,5 +146,5 @@ jobs:
             echo "Nenhuma alteração para gravar."
             exit 0
           fi
-          git commit -m "fix: fallback de imagem via navegador no agendamento"
+          git commit -m "fix: corrigir regex do fallback de imagem"
           git push
