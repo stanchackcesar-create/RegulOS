@@ -37,11 +37,36 @@ replaceOnce(
 'conclusão por grupo'
 );
 
-// 4) Falha/progresso pendente não deve transformar o agendamento em pausa enquanto a janela está ativa.
+// 4) Agendamentos de links são independentes da programação geral do bot.
+// O painel já informa que a programação geral é separada; um horário salvo em
+// Agendamentos deve disparar no horário escolhido, sem ser pausado por uma
+// janela geral do bot.
 replaceOnce(
-`    } else {\n      item.status = botWindowActive() ? 'enviando' : 'pausado';\n      writeJson(FILES.schedules, linkSchedules);\n      addLog(\`Link "\${item.nome}": progresso preservado; continuará de onde parou.\`);\n    }`,
-`    } else {\n      item.status = botWindowActive() ? 'agendado' : 'pausado';\n      writeJson(FILES.schedules, linkSchedules);\n      addLog(\`Link "\${item.nome}": progresso preservado; continuará de onde parou.\`);\n    }`,
-'continuidade do agendamento'
+`  if (runningLinkSchedules.has(item.id) || !online || !sock || !botWindowActive()) return;`,
+`  if (runningLinkSchedules.has(item.id) || !online || !sock) return;`,
+'agendamento independente da programação geral'
+);
+replaceOnce(
+`      if (!botWindowActive()) {\n        item.status = 'pausado';\n        writeJson(FILES.schedules, linkSchedules);\n        addLog(\`Agendamento "\${item.nome}" pausado no fim do horário. Retomará do próximo grupo.\`);\n        break;\n      }`,
+`      if (!online || !sock) {\n        item.status = 'pausado';\n        writeJson(FILES.schedules, linkSchedules);\n        addLog(\`Agendamento "\${item.nome}" pausado porque o WhatsApp ficou desconectado. Retomará do próximo grupo.\`);\n        break;\n      }`,
+'agendamento não pausado pela janela geral'
+);
+replaceOnce(
+`      item.status = botWindowActive() ? 'enviando' : 'pausado';\n      writeJson(FILES.schedules, linkSchedules);`,
+`      item.status = online && sock ? 'enviando' : 'pausado';\n      writeJson(FILES.schedules, linkSchedules);`,
+'status do agendamento após pausa'
+);
+
+// 5) O processador dos agendamentos também não pode ser bloqueado pela janela geral.
+replaceOnce(
+`async function processLinkSchedules() {\n  if (!online || !botWindowActive()) return;`,
+`async function processLinkSchedules() {\n  if (!online) return;`,
+'processador de agendamentos independente'
+);
+replaceOnce(
+`  for (let guard = 0; guard < queue.length; guard++) {\n    if (!botWindowActive()) return;`,
+`  for (let guard = 0; guard < queue.length; guard++) {\n    if (!online || !sock) return;`,
+'fila de agendamentos independente'
 );
 
 if (changed) {
