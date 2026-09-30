@@ -1,0 +1,43 @@
+name: Fixar histórico sem piscar
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: "!contains(github.event.head_commit.message, '[skip-history-stability]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Corrigir atualização do histórico
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('public/index.html')
+          s = p.read_text(encoding='utf-8')
+          old = """try{\n  box.innerHTML='<div class=\\\"muted\\\">🔄 Carregando histórico...</div>';\n  const d=await jfetch('/api/link-historico'); box.innerHTML='';\n  if(!d.historico.length){box.innerHTML='<div class=\\\"muted\\\">Nenhum link enviado e arquivado ainda.</div>';return}"""
+          new = """try{\n  const d=await jfetch('/api/link-historico');\n  const history=Array.isArray(d.historico)?d.historico:[];\n  const signature=JSON.stringify(history);\n  if(window.__regulosHistorySignature===signature)return;\n  window.__regulosHistorySignature=signature;\n  box.innerHTML='';\n  if(!history.length){box.innerHTML='<div class=\\\"muted\\\">Nenhum link enviado e arquivado ainda.</div>';return}"""
+          if old not in s:
+              raise SystemExit('Trecho antigo do histórico não encontrado; nenhuma alteração feita.')
+          s = s.replace(old, new, 1)
+          s = s.replace("d.historico.slice(0,30).forEach(x=>{", "history.slice(0,30).forEach(x=>{", 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Validar
+        run: |
+          node --check src/server.js
+          grep -q "__regulosHistorySignature" public/index.html
+      - name: Commitar correção
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/index.html
+          git diff --cached --quiet && exit 0
+          git commit -m "Estabilizar histórico sem piscar [skip-history-stability]"
+          git push
