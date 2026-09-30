@@ -2,13 +2,12 @@ from pathlib import Path
 
 server = Path('src/server.js')
 text = server.read_text(encoding='utf-8')
-marker = 'REGULOS_ML_IMAGE_FALLBACK_V2'
+marker = 'REGULOS_ML_IMAGE_FALLBACK_V3'
 if marker in text:
     raise SystemExit(0)
 
 helper = r'''
-// REGULOS_ML_IMAGE_FALLBACK_V2
-// Resolve meli.la -> item Mercado Livre -> pictures[].secure_url.
+// REGULOS_ML_IMAGE_FALLBACK_V3
 async function findMercadoLivreImageUrl(url) {
   try {
     const page = await fetchText(url);
@@ -40,18 +39,39 @@ if needle not in text:
     raise SystemExit('findProductImage não encontrado')
 text=text.replace(needle,helper+'\n'+needle,1)
 
-old=needle+'\n  try {\n    const page=await fetchText(url);'
-new=needle+'''\n  try {\n    const mlImageUrl=await findMercadoLivreImageUrl(url);\n    if(mlImageUrl){\n      try{\n        const image=await downloadBuffer(mlImageUrl,url);\n        addLog(`🖼️ Imagem do Mercado Livre encontrada via API: ${mlImageUrl}`);\n        return image;\n      }catch(e){addLog(`Imagem do Mercado Livre não pôde ser baixada: ${e.message}`);}\n    }\n  }catch(e){addLog(`Fallback Mercado Livre ignorado: ${e.message}`);}\n  try {\n    const page=await fetchText(url);'''
-if old not in text:
-    raise SystemExit('Início de findProductImage não encontrado')
-text=text.replace(old,new,1)
+injection = r'''async function findProductImage(url) {
+  try {
+    const mlImageUrl=await findMercadoLivreImageUrl(url);
+    if(mlImageUrl){
+      try{
+        const image=await downloadBuffer(mlImageUrl,url);
+        addLog(`🖼️ Imagem do Mercado Livre encontrada via API: ${mlImageUrl}`);
+        return image;
+      }catch(e){addLog(`Imagem do Mercado Livre não pôde ser baixada: ${e.message}`);}
+    }
+  }catch(e){addLog(`Fallback Mercado Livre ignorado: ${e.message}`);}
+'''
+text=text.replace(needle+'\n',injection,1)
 
-route="""app.get('/api/link-imagem-preview', async (req,res)=>{\n  const url=String(req.query?.url||'').trim();\n  if(!url)return res.status(400).json({ok:false,msg:'Informe um link.'});\n  try{\n    const ml=await findMercadoLivreImageUrl(url);\n    if(ml)return res.json({ok:true,imagemUrl:ml,fonte:'mercado-livre'});\n    const page=await fetchText(url);\n    const candidates=extractImageCandidates(page.data,page.finalUrl);\n    if(candidates.length)return res.json({ok:true,imagemUrl:candidates[0],fonte:'metadados',finalUrl:page.finalUrl});\n    return res.status(404).json({ok:false,msg:'Nenhuma imagem foi encontrada automaticamente.',finalUrl:page.finalUrl});\n  }catch(e){return res.status(502).json({ok:false,msg:e.message||'Não foi possível obter a imagem.'});}\n});\n\n"""
+route_marker="app.post('/api/link-agendamentos',(req,res)=>{"
 if '/api/link-imagem-preview' not in text:
-    route_marker="app.post('/api/link-agendamentos',(req,res)=>{"
+    route=r'''app.get('/api/link-imagem-preview', async (req,res)=>{
+  const url=String(req.query?.url||'').trim();
+  if(!url)return res.status(400).json({ok:false,msg:'Informe um link.'});
+  try{
+    const ml=await findMercadoLivreImageUrl(url);
+    if(ml)return res.json({ok:true,imagemUrl:ml,fonte:'mercado-livre'});
+    const page=await fetchText(url);
+    const candidates=extractImageCandidates(page.data,page.finalUrl);
+    if(candidates.length)return res.json({ok:true,imagemUrl:candidates[0],fonte:'metadados',finalUrl:page.finalUrl});
+    return res.status(404).json({ok:false,msg:'Nenhuma imagem foi encontrada automaticamente.',finalUrl:page.finalUrl});
+  }catch(e){return res.status(502).json({ok:false,msg:e.message||'Não foi possível obter a imagem.'});}
+});
+
+'''
     if route_marker not in text:
         raise SystemExit('Rota de agendamentos não encontrada')
     text=text.replace(route_marker,route+route_marker,1)
 
 server.write_text(text,encoding='utf-8')
-print('Patch Mercado Livre aplicado.')
+print('Patch Mercado Livre V3 aplicado.')
