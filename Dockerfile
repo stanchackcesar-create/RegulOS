@@ -9,7 +9,7 @@ ENV REGULOS_DATA_DIR=/app/storage/data
 ENV REGULOS_AUTH_DIR=/app/storage/auth
 
 COPY package*.json ./
-RUN npm install --omit=dev && npx playwright install --with-deps chromium --no-audit --no-fund
+RUN npm install --omit=dev --no-audit --no-fund && npx playwright install --with-deps chromium
 
 COPY . .
 RUN mkdir -p /app/storage/data /app/storage/auth
