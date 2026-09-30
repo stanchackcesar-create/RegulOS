@@ -744,7 +744,45 @@ async function findMercadoLivreImageUrl(url) {
   return '';
 }
 
+
+// REGULOS_ML_IMAGE_FALLBACK_V3
+async function findMercadoLivreImageUrl(url) {
+  try {
+    const page = await fetchText(url);
+    const source = `${page.finalUrl || ''}\n${page.data || ''}`;
+    const ids=[]; const seen=new Set();
+    for (const m of source.matchAll(/\bMLB[-_]?\d{5,}\b/gi)) {
+      const id=String(m[0]).toUpperCase().replace(/[-_]/g,'');
+      if(!seen.has(id)){seen.add(id);ids.push(id);}
+    }
+    for(const id of ids.slice(0,3)){
+      try{
+        const api=await fetchText(`https://api.mercadolibre.com/items/${id}`);
+        const data=JSON.parse(api.data||'{}');
+        const pictures=Array.isArray(data.pictures)?data.pictures:[];
+        for(const picture of pictures){
+          const image=picture?.secure_url||picture?.url;
+          if(image&&/^https?:\/\//i.test(image))return image;
+        }
+        const thumb=data.secure_thumbnail||data.thumbnail;
+        if(thumb&&/^https?:\/\//i.test(thumb))return thumb;
+      }catch(e){addLog(`Mercado Livre API sem imagem para ${id}: ${e.message}`);}
+    }
+  }catch(e){addLog(`Fallback Mercado Livre: ${e.message}`);}
+  return '';
+}
+
 async function findProductImage(url) {
+  try {
+    const mlImageUrl=await findMercadoLivreImageUrl(url);
+    if(mlImageUrl){
+      try{
+        const image=await downloadBuffer(mlImageUrl,url);
+        addLog(`🖼️ Imagem do Mercado Livre encontrada via API: ${mlImageUrl}`);
+        return image;
+      }catch(e){addLog(`Imagem do Mercado Livre não pôde ser baixada: ${e.message}`);}
+    }
+  }catch(e){addLog(`Fallback Mercado Livre ignorado: ${e.message}`);}
   try {
     const mlImageUrl = await findMercadoLivreImageUrl(url);
     if (mlImageUrl) {
