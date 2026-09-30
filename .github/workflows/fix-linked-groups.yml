@@ -58,11 +58,23 @@ jobs:
               raise SystemExit('Atualização do card de grupos não encontrada')
           text = text.replace(old, new, 1)
           index.write_text(text, encoding='utf-8')
+      - name: Validar
+        run: |
+          node --check src/server.js
+          python - <<'PY'
+          from pathlib import Path
+          import re
+          text=Path('public/index.html').read_text(encoding='utf-8')
+          js=re.findall(r'<script>([\s\S]*?)</script>',text)
+          assert js, 'script principal não encontrado'
+          Path('/tmp/regulos.js').write_text(js[-1],encoding='utf-8')
+          PY
+          node --check /tmp/regulos.js
       - name: Commitar correção
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/server.js public/index.html
           git diff --cached --quiet && exit 0
-          git commit -m "Corrigir exibição dos grupos ligados"
-          git push
+          git commit -m "Corrigir exibição dos grupos ligados [skip ci]"
+          git push origin HEAD:main
