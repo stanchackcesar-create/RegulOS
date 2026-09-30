@@ -16,6 +16,7 @@ const dns = require('dns').promises;
 const net = require('net');
 const zlib = require('zlib');
 const crypto = require('crypto');
+const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..');
 const PUBLIC = path.join(ROOT, 'public');
@@ -814,6 +815,32 @@ async function findProductImage(url) {
     }
     addLog('⚠️ Nenhuma das imagens encontradas pôde ser baixada.');
   } catch (e) { addLog(`Não foi possível ler a página para buscar imagem: ${e.message}`); }
+  return null;
+}
+
+let regulosBrowserPromise=null;
+async function getRegulosBrowser(){
+  if(!regulosBrowserPromise)regulosBrowserPromise=chromium.launch({headless:true,args:['--no-sandbox','--disable-setuid-sandbox','--disable-dev-shm-usage']}).catch(e=>{regulosBrowserPromise=null;throw e;});
+  return regulosBrowserPromise;
+}
+async function findProductImageWithBrowser(url){
+  let context=null;
+  try{
+    await assertSafeExternalUrl(url);
+    const browser=await getRegulosBrowser();
+    context=await browser.newContext({userAgent:'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/154 Safari/537.36',locale:'pt-BR',viewport:{width:1365,height:900},javaScriptEnabled:true,ignoreHTTPSErrors:true});
+    const page=await context.newPage();
+    await page.goto(url,{waitUntil:'domcontentloaded',timeout:30000});
+    await page.waitForTimeout(1800);
+    const candidates=await page.evaluate(()=>{
+      const out=[],seen=new Set(),add=v=>{if(!v||/^data:|^blob:/i.test(v))return;try{const u=new URL(v,location.href).href;if(/^https?:/i.test(u)&&!seen.has(u)){seen.add(u);out.push(u)}}catch{}};
+      document.querySelectorAll('meta[property="og:image"],meta[name="twitter:image"],meta[property="og:image:url"]').forEach(x=>add(x.content));
+      document.querySelectorAll('img').forEach(img=>{add(img.currentSrc||img.src);['data-src','data-original','data-lazy-src','data-image','data-image-src','data-zoom-image','data-large_image'].forEach(k=>add(img.getAttribute(k)));});
+      return out.slice(0,80);
+    });
+    for(const candidate of candidates){try{const image=await downloadBuffer(candidate,url);await context.close();addLog('Fallback navegador encontrou imagem: '+candidate);return image}catch{}}
+    await context.close();
+  }catch(e){try{if(context)await context.close()}catch{}addLog('Fallback navegador indisponível: '+e.message)}
   return null;
 }
 const DEFAULT_RANDOM_MESSAGES = [
