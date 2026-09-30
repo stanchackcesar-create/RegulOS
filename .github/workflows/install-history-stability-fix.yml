@@ -1,0 +1,45 @@
+name: Aplicar estabilidade do histórico
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Inserir script de estabilidade no index
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('public/index.html')
+          text = p.read_text(encoding='utf-8')
+          tag = '<script src="/history-stability-fix.js"></script>'
+          if tag not in text:
+              marker = '</body>'
+              if marker not in text:
+                  raise SystemExit('Não foi encontrado </body> em public/index.html')
+              text = text.replace(marker, tag + '\n' + marker, 1)
+              p.write_text(text, encoding='utf-8')
+          else:
+              print('Script já está instalado.')
+
+      - name: Commitar alteração
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/index.html
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteração necessária."
+          else
+            git commit -m "Aplicar correção de histórico estável"
+            git push
+          fi
