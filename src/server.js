@@ -227,6 +227,79 @@ app.get('/login',(req,res)=>res.sendFile(path.join(PUBLIC,'login.html')));
 app.get('/configurar',(req,res)=>res.sendFile(path.join(PUBLIC,'configurar.html')));
 
 // A partir daqui, todo o painel e todas as APIs do RegulOS exigem login.
+// REGULOS_AUTO_OFFER_V1
+// Busca somente dados explicitamente publicados pela página/produto.
+// Nenhum preço, desconto ou preço anterior é inferido quando a fonte não o fornece.
+function autoOfferDecode(value){
+  return String(value||'').replace(/&amp;/gi,'&').replace(/&quot;/gi,'"').replace(/&#39;|&apos;/gi,"'").replace(/&nbsp;/gi,' ').replace(/<[^>]+>/g,' ').replace(/\s+/g,' ').trim();
+}
+function autoOfferMeta(html,name){
+  for(const m of String(html||'').matchAll(/<meta\b[^>]*>/gi)){
+    const tag=m[0];
+    const prop=(tag.match(/\b(?:property|name)\s*=\s*["']([^"']+)["']/i)||[])[1]||'';
+    if(prop.toLowerCase()!==String(name).toLowerCase())continue;
+    return autoOfferDecode((tag.match(/\bcontent\s*=\s*["']([^"']*)["']/i)||[])[1]||'');
+  }
+  return '';
+}
+function autoOfferPrice(value,currency){
+  const v=autoOfferDecode(value);
+  if(!v)return '';
+  if(/^R\$\s*\d/i.test(v))return v.replace(/\s+/g,' ').trim();
+  if(String(currency||'').toUpperCase()==='BRL' && /^\d+(?:[.,]\d{1,2})?$/.test(v))return 'R$ '+v.replace('.',',');
+  return '';
+}
+function autoOfferJsonLd(html){
+  const blocks=[];
+  for(const m of String(html||'').matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi))blocks.push(m[1]);
+  const visit=(v)=>{
+    if(!v||typeof v!=='object')return null;
+    if(Array.isArray(v)){for(const x of v){const r=visit(x);if(r)return r;}return null;}
+    const types=Array.isArray(v['@type'])?v['@type']:[v['@type']];
+    if(types.some(t=>/^(product|offer)$/i.test(String(t))))return v;
+    for(const x of Object.values(v)){const r=visit(x);if(r)return r;}
+    return null;
+  };
+  for(const raw of blocks){try{const value=JSON.parse(raw.trim());const found=visit(value);if(found)return found;}catch{}}
+  return null;
+}
+function autoOfferDiscount(html,product,offers){
+  for(const n of ['product:discount_percentage','discount_percentage','discount']){
+    const v=autoOfferMeta(html,n);
+    if(v && /%/.test(v))return v.trim();
+  }
+  const candidates=[product?.discount,offers?.discount,offers?.discountPercentage,product?.discountPercentage];
+  for(const v of candidates){if(v!==undefined && v!==null && /%/.test(String(v)))return String(v).trim();}
+  return '';
+}
+async function buildAutomaticOffer(url){
+  const page=await fetchText(url);
+  const html=String(page.data||'');
+  const product=autoOfferJsonLd(html);
+  const offers=product?.offers && (Array.isArray(product.offers)?product.offers[0]:product.offers) || {};
+  const titulo=autoOfferDecode(autoOfferMeta(html,'og:title') || autoOfferMeta(html,'twitter:title') || product?.name || '');
+  const currency=autoOfferMeta(html,'product:price:currency') || autoOfferMeta(html,'og:price:currency') || offers.priceCurrency || '';
+  const rawPrice=autoOfferMeta(html,'product:price:amount') || autoOfferMeta(html,'og:price:amount') || offers.price || '';
+  const preco=autoOfferPrice(rawPrice,currency);
+  const desconto=autoOfferDiscount(html,product,offers);
+  let imagem=autoOfferMeta(html,'og:image') || autoOfferMeta(html,'twitter:image') || product?.image || '';
+  if(Array.isArray(imagem))imagem=imagem[0]||'';
+  if(imagem && !/^https?:\/\//i.test(imagem))imagem='';
+  if(!imagem && typeof findMercadoLivreImageUrl==='function')imagem=await findMercadoLivreImageUrl(url).catch(()=> '');
+  return {titulo,preco,desconto,imagemUrl:imagem,finalUrl:page.finalUrl||url};
+}
+
+app.get('/api/oferta-preview', async (req,res)=>{
+  const url=String(req.query?.url||'').trim();
+  if(!url)return res.status(400).json({ok:false,msg:'Informe o link do produto.'});
+  if(!/^https?:\/\//i.test(url))return res.status(400).json({ok:false,msg:'O link deve começar com http:// ou https://.'});
+  try{
+    const oferta=await buildAutomaticOffer(url);
+    res.set('Cache-Control','no-store');
+    res.json({ok:true,...oferta});
+  }catch(e){res.status(502).json({ok:false,msg:e.message||'Não foi possível consultar o link.'});}
+});
+
 app.use(requireAuth);
 
 app.get('/api/usuarios',(req,res)=>{
