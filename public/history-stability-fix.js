@@ -1,13 +1,43 @@
 (() => {
-  // Mantém Histórico de links enviados e Links com falha estáveis durante o polling.
-  // O primeiro carregamento continua usando as funções originais; nas atualizações
-  // seguintes só redesenha a seção quando os dados realmente mudarem.
-  const wrapStable = (name, endpoint, key) => {
+  // Histórico e falhas ficam estáveis durante o polling.
+  // Não mostramos "Carregando..." e não apagamos a lista durante atualizações.
+  const boxes = {
+    linkHistory: '🔄 Carregando histórico...',
+    linkFailures: 'Carregando falhas...'
+  };
+
+  // O renderer original usa innerHTML='' antes de reconstruir os cartões.
+  // Ignoramos essas duas operações somente nos dois painéis, evitando o pisca.
+  const originalSetter = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML')?.set;
+  const originalGetter = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML')?.get;
+  if (originalSetter && originalGetter) {
+    Object.defineProperty(Element.prototype, 'innerHTML', {
+      configurable: true,
+      get: function(){ return originalGetter.call(this); },
+      set: function(value){
+        const id = this.id;
+        if (id === 'linkHistory' || id === 'linkFailures') {
+          const text = String(value ?? '').trim();
+          if (text === '' || text === boxes[id]) return;
+        }
+        originalSetter.call(this, value);
+      }
+    });
+  }
+
+  // Retira o placeholder inicial imediatamente. A primeira carga continua sendo
+  // feita pela rotina existente, mas sem exibir a mensagem de carregamento.
+  ['linkHistory','linkFailures'].forEach(id => {
+    const box = document.getElementById(id);
+    if (box) box.textContent = '';
+  });
+
+  const wrapStable = (name, endpoint, key, boxId) => {
     const original = window[name];
     if (typeof original !== 'function') return;
 
-    let initialized = false;
     let lastSignature = '';
+    let initialized = false;
     let checking = false;
 
     window[name] = async function stableLoader(...args) {
@@ -20,21 +50,23 @@
         const value = data && Array.isArray(data[key]) ? data[key] : [];
         const signature = JSON.stringify(value);
 
-        // Primeira carga: usa o renderer existente.
         if (!initialized) {
           initialized = true;
           lastSignature = signature;
-          return await original.apply(this, args);
+          // A primeira execução pode ter começado antes deste wrapper ser instalado.
+          // Não chamamos novamente: a rotina original já está carregando os dados.
+          return;
         }
 
-        // Nada mudou: não toca no DOM e não mostra "Carregando...".
         if (signature === lastSignature) return;
 
-        // Houve mudança: deixa o renderer existente atualizar os cartões uma única vez.
+        // Só houve mudança: limpa uma vez, sem mensagem de carregamento,
+        // e deixa o renderer existente criar os cartões atualizados.
         lastSignature = signature;
+        const box = document.getElementById(boxId);
+        if (box) box.replaceChildren();
         return await original.apply(this, args);
       } catch (error) {
-        // Em erro de polling, preserva o que já está visível.
         console.warn(`[RegulOS] ${name}:`, error);
       } finally {
         checking = false;
@@ -42,6 +74,6 @@
     };
   };
 
-  wrapStable('loadLinkHistory', '/api/link-historico', 'historico');
-  wrapStable('loadLinkFailures', '/api/link-falhas', 'falhas');
+  wrapStable('loadLinkHistory', '/api/link-historico', 'historico', 'linkHistory');
+  wrapStable('loadLinkFailures', '/api/link-falhas', 'falhas', 'linkFailures');
 })();
