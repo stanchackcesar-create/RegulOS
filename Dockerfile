@@ -19,6 +19,6 @@ RUN mkdir -p /app/storage/data /app/storage/auth
 
 EXPOSE 3000
 
-# Use o mesmo inicializador do npm start. Ele aplica primeiro as correções
-# de agendamento/grupo e só então inicia o servidor.
-CMD ["node", "tools/patch_scheduled_group.js"]
+# Usa o mesmo preboot do npm start: aplica o reset da programação ao desconectar,
+# depois as correções de agendamento/grupo/imagem e então inicia o servidor.
+CMD ["node", "tools/preboot-regulos.js"]
