@@ -45,5 +45,6 @@ O RegulOS precisa continuar rodando no computador. O celular é o painel de cont
 - Supervisor automático no comando de início.
 - `ABRIR_REGULOS.vbs` para inicialização sem terminal visível.
 
-## Correção pendente automatizada
-- Fallback de navegador para imagens de links encurtados e separação visual entre Gerenciador de links e Agendamentos.
+## Correção em teste
+- Separação do Gerenciador de links e Agendamentos.
+- Fallback de navegador para imagens de links encurtados/dinâmicos.
