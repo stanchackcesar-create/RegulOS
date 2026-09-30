@@ -11,25 +11,29 @@ jobs:
   patch:
     runs-on: ubuntu-latest
     steps:
-      - name: Ignorar commits sem marcador
-        if: ${{ !contains(github.event.head_commit.message, '[fix-linked-groups]') && !contains(github.event.head_commit.message, '[fix-schedule]') }}
-        run: echo "Nenhuma correção solicitada neste commit."
-
       - name: Checkout
-        if: ${{ contains(github.event.head_commit.message, '[fix-linked-groups]') || contains(github.event.head_commit.message, '[fix-schedule]') }}
         uses: actions/checkout@v4
 
-      - name: Aplicar correções
-        if: ${{ contains(github.event.head_commit.message, '[fix-linked-groups]') || contains(github.event.head_commit.message, '[fix-schedule]') }}
+      - name: Aplicar correções solicitadas
         shell: bash
         run: |
+          MSG="$(git log -1 --pretty=%B)"
+          if [[ "$MSG" != *"[fix-linked-groups]"* && "$MSG" != *"[fix-schedule]"* ]]; then
+            echo "Nenhuma correção solicitada neste commit."
+            exit 0
+          fi
+
           python - <<'PY'
           from pathlib import Path
+          import re
+          import subprocess
+
+          msg = subprocess.check_output(['git','log','-1','--pretty=%B'], text=True)
 
           server = Path('src/server.js')
           text = server.read_text(encoding='utf-8')
 
-          if '[fix-linked-groups]' in '${{ github.event.head_commit.message }}':
+          if '[fix-linked-groups]' in msg:
               old = "grupos:groups.length, permitidos:allowed.length,"
               new = """grupos:groups.length, permitidos:allowed.length,
           gruposLigados:activeGroups().map(id=>{const g=groups.find(x=>String(x.id)===String(id));const c=getGroupConfig(id);return {id,nome:g?.name||c.nome||c.apelido||id};}),"""
@@ -43,13 +47,12 @@ jobs:
           if(typeof req.body.ativo==='boolean') c.ativo=req.body.ativo;"""
               if old in text:
                   text = text.replace(old, new, 1)
-
           server.write_text(text, encoding='utf-8')
 
           index = Path('public/index.html')
           text = index.read_text(encoding='utf-8')
 
-          if '[fix-linked-groups]' in '${{ github.event.head_commit.message }}':
+          if '[fix-linked-groups]' in msg:
               old = '<span id="allowed" class="muted">0 permitidos</span>'
               new = '<span id="allowed" class="muted">0 permitidos</span><span id="linkedGroups" class="muted" style="display:block;margin-top:4px">Ligados: nenhum</span>'
               if old in text:
@@ -63,7 +66,7 @@ jobs:
               if old in text:
                   text = text.replace(old, new, 1)
 
-          if '[fix-schedule]' in '${{ github.event.head_commit.message }}':
+          if '[fix-schedule]' in msg:
               start = text.find('async function saveLink(){')
               if start < 0:
                   raise SystemExit('Função saveLink não encontrada.')
@@ -134,8 +137,8 @@ jobs:
           index.write_text(text, encoding='utf-8')
           PY
 
-      - name: Validar correção
-        if: ${{ contains(github.event.head_commit.message, '[fix-linked-groups]') || contains(github.event.head_commit.message, '[fix-schedule]') }}
+      - name: Validar arquivos
+        shell: bash
         run: |
           node --check src/server.js
           python - <<'PY'
@@ -143,17 +146,23 @@ jobs:
           import re
           text=Path('public/index.html').read_text(encoding='utf-8')
           js=re.findall(r'<script>([\s\S]*?)</script>',text)
-          assert js, 'script principal não encontrado'
+          if not js:
+              raise SystemExit('script principal não encontrado')
           Path('/tmp/regulos.js').write_text(js[-1],encoding='utf-8')
           PY
           node --check /tmp/regulos.js
 
       - name: Commitar correção
-        if: ${{ contains(github.event.head_commit.message, '[fix-linked-groups]') || contains(github.event.head_commit.message, '[fix-schedule]') }}
+        shell: bash
         run: |
+          MSG="$(git log -1 --pretty=%B)"
+          if [[ "$MSG" != *"[fix-linked-groups]"* && "$MSG" != *"[fix-schedule]"* ]]; then exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add src/server.js public/index.html
-          git diff --cached --quiet && exit 0
+          if git diff --cached --quiet; then
+            echo "Nenhuma alteração necessária."
+            exit 0
+          fi
           git commit -m "Corrigir grupos e salvamento de agendamentos [skip ci]"
           git push origin HEAD:main
