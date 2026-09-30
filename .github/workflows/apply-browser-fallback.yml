@@ -34,7 +34,6 @@ jobs:
             const marker = "const DEFAULT_RANDOM_MESSAGES = [";
             const idx = source.indexOf(marker);
             if (idx < 0) throw new Error('Marcador DEFAULT_RANDOM_MESSAGES não encontrado.');
-
             const browserHelpers = [
               'let regulosBrowserPromise = null;',
               'async function getRegulosBrowser() {',
@@ -85,12 +84,12 @@ jobs:
             source = source.slice(0, idx) + browserHelpers + source.slice(idx);
           }
 
-          const fnStart = source.indexOf('async function findProductImage(url) {');
-          const fnEnd = source.indexOf('\nconst DEFAULT_RANDOM_MESSAGES = [', fnStart);
-          if (fnStart < 0 || fnEnd < 0) throw new Error('Função findProductImage não encontrada.');
+          const fnStart = source.indexOf('async function findProductImage');
+          const fnEnd = source.indexOf('const DEFAULT_RANDOM_MESSAGES = [', fnStart);
+          if (fnStart < 0 || fnEnd < 0) throw new Error('Função de busca de imagem não encontrada.');
           let fn = source.slice(fnStart, fnEnd);
           if (!fn.includes('findProductImageWithBrowser(url)')) {
-            const lastReturn = fn.lastIndexOf('  return null;');
+            const lastReturn = fn.lastIndexOf('return null;');
             if (lastReturn < 0) throw new Error('return null da função de imagem não encontrado.');
             fn = fn.slice(0, lastReturn) + '  const browserImage = await findProductImageWithBrowser(url);\\n  if (browserImage) return browserImage;\\n' + fn.slice(lastReturn);
             source = source.slice(0, fnStart) + fn + source.slice(fnEnd);
