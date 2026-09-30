@@ -1,0 +1,51 @@
+name: Expandir limite de usuarios
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  expand-users:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Atualizar limite de usuarios
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          p = Path('src/server.js')
+          s = p.read_text(encoding='utf-8')
+          old = "const currentUsers=readUsers();\n  if(currentUsers.length >= 2) return res.status(409).json({ok:false,msg:'O RegulOS Cloud permite no máximo 2 usuários: administrador e operador.'});"
+          new = "const currentUsers=readUsers();\n  const MAX_PANEL_USERS = Math.max(2, Number(process.env.REGULOS_MAX_USERS || 10));\n  if(currentUsers.length >= MAX_PANEL_USERS) return res.status(409).json({ok:false,msg:`O limite atual é de ${MAX_PANEL_USERS} usuários. Altere REGULOS_MAX_USERS no ambiente para aumentar o limite.`});"
+          if old not in s:
+              raise SystemExit('Trecho esperado não encontrado em src/server.js')
+          p.write_text(s.replace(old, new, 1), encoding='utf-8')
+
+          p = Path('public/index.html')
+          s = p.read_text(encoding='utf-8')
+          marker = '<div style="margin-top:14px"><b>Usuários com acesso ao mesmo RegulOS</b></div>'
+          replacement = '<div style="margin-top:14px"><b>Usuários com acesso ao mesmo RegulOS</b><div class="muted" style="margin-top:4px">O administrador pode criar até 10 usuários. Cada conta possui seu próprio login e permissões.</div></div>'
+          if marker not in s:
+              raise SystemExit('Trecho esperado não encontrado em public/index.html')
+          p.write_text(s.replace(marker, replacement, 1), encoding='utf-8')
+          PY
+
+      - name: Verificar alteracoes
+        run: |
+          node --check src/server.js
+          grep -n "MAX_PANEL_USERS" src/server.js
+
+      - name: Commitar alteracoes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/server.js public/index.html
+          git diff --cached --quiet && exit 0
+          git commit -m "Permitir mais usuarios no painel [skip ci]"
+          git push
