@@ -18,6 +18,9 @@ jobs:
       - name: Aplicar patch
         run: python tools/patch_schedule.py
 
+      - name: Aplicar patch de imagem do Mercado Livre
+        run: python tools/patch_mercadolivre.py
+
       - name: Validar servidor
         run: node --check src/server.js
 
@@ -48,5 +51,5 @@ jobs:
             echo "Patch já aplicado ou nenhuma alteração necessária."
             exit 0
           fi
-          git commit -m "Corrigir salvamento de agendamentos [skip ci]"
+          git commit -m "Corrigir salvamento e imagem automática de links [skip ci]"
           git push origin HEAD:main
