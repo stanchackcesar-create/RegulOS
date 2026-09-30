@@ -60,12 +60,12 @@ patchFile(INDEX, [
 ` const random=document.getElementById('lrandom');if(random)random.checked=false;\n const grupo=document.getElementById('lgrupo');if(grupo)grupo.value='';`
   ],
   [
-`lnome.value=x.nome||'';lurl.value=x.url||'';limagemUrl.value=x.imagemUrl||'';`,
-`lnome.value=x.nome||'';lurl.value=x.url||'';showForm(x.grupoId||'');limagemUrl.value=x.imagemUrl||'';`
+`async function editLink(id){const d=await jfetch('/api/link-agendamentos');const x=d.agendamentos.find(a=>a.id===id);if(!x)return;editingId=id;showForm();lnome.value=x.nome||'';lurl.value=x.url||'';limagemUrl.value=x.imagemUrl||'';`,
+`async function editLink(id){const d=await jfetch('/api/link-agendamentos');const x=d.agendamentos.find(a=>a.id===id);if(!x)return;editingId=id;showForm(x.grupoId||'');lnome.value=x.nome||'';lurl.value=x.url||'';limagemUrl.value=x.imagemUrl||'';`
   ],
   [
-`editingId=id;showForm();lnome.value=f.nome||'';`,
-`editingId=id;showForm(f.grupoId||'');lnome.value=f.nome||'';`
+`async function editFailedLink(id){try{const d=await jfetch('/api/link-falhas');const f=d.falhas.find(x=>String(x.id)===String(id));if(!f)return;editingId=f.agendamentoId;editingFailedId=f.id;showForm();lnome.value=f.nome||'';lurl.value=f.url||'';limagemUrl.value=f.imagemUrl||'';`,
+`async function editFailedLink(id){try{const d=await jfetch('/api/link-falhas');const f=d.falhas.find(x=>String(x.id)===String(id));if(!f)return;editingId=f.agendamentoId;editingFailedId=f.id;showForm(f.grupoId||'');lnome.value=f.nome||'';lurl.value=f.url||'';limagemUrl.value=f.imagemUrl||'';`
   ]
 ], 'index');
 
