@@ -16,7 +16,7 @@
     <div class="row">
       <input id="search" placeholder="🔎 Pesquisar grupo..." oninput="render()">
       <button class="primary" onclick="load()">🔄 Atualizar grupos</button>
-      <button onclick="window.close()">✖ Fechar aba</button>
+      <button type="button" onclick="closeGroupsPanel()">✖ Fechar aba</button>
     </div>
     <div id="summary" class="muted" style="margin-top:10px">Carregando...</div>
   </div>
@@ -26,7 +26,7 @@
 <script>
 let groups=[];
 function friendlyFetchError(e){const m=String(e?.message||e||'');if(/Failed to fetch|NetworkError|Load failed|fetch failed|ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_NETWORK/i.test(m))return 'Servidor do RegulOS indisponível. Verifique se o programa está em execução e tente novamente.';return m||'Falha de comunicação com o servidor.';}
-async function api(url,opt={}){let e;for(let i=0;i<4;i++){try{const r=await fetch(url,{cache:'no-store',...opt});let d={};try{d=await r.json()}catch{};if(!r.ok)throw Error(d.msg||`HTTP ${r.status}`);return d}catch(x){e=new Error(friendlyFetchError(x));if(i<3)await new Promise(r=>setTimeout(r,600*(i+1)))}}throw e||new Error('Falha de comunicação com o servidor.')}
+async function api(url,opt={}){let e;for(let i=0;i<4;i++){try{const r=await fetch(url,{cache:'no-store',credentials:'same-origin',...opt});let d={};try{d=await r.json()}catch{};if(!r.ok)throw Error(d.msg||`HTTP ${r.status}`);return d}catch(x){e=new Error(friendlyFetchError(x));if(i<3)await new Promise(r=>setTimeout(r,600*(i+1)))}}throw e||new Error('Falha de comunicação com o servidor.')}
 async function load(){
  const box=document.getElementById('groups');box.textContent='Carregando grupos...';
  try{const d=await api('/api/grupos');groups=d.grupos||[];render();notice('');}
@@ -36,11 +36,15 @@ function notice(t,err=false){const n=document.getElementById('notice');n.classNa
 function render(){
  const q=(document.getElementById('search').value||'').toLowerCase().trim();
  const list=groups.filter(g=>String(g.name||'').toLowerCase().includes(q)||String(g.id||'').toLowerCase().includes(q));
- const on=list.filter(g=>g.config?.ativo!==false).length;
  document.getElementById('summary').textContent=`${groups.length} grupo(s) carregado(s) · ${groups.filter(g=>g.config?.ativo!==false).length} ligado(s) · ${groups.filter(g=>g.config?.ativo===false).length} desligado(s)`;
  const box=document.getElementById('groups');box.innerHTML='';
  if(!list.length){box.innerHTML='<div class="muted">Nenhum grupo encontrado.</div>';return}
  list.forEach(g=>{const active=g.config?.ativo!==false;const el=document.createElement('div');el.className='group';el.innerHTML=`<div><div class="name">${esc(g.name)}</div><span class="small">${g.members||0} membros · ${esc(g.id)}${g.allowed?' · permitido':''}</span></div><button class="toggle ${active?'on':'off'}">${active?'🟢 Ligado':'🔴 Desligado'}</button>`;el.querySelector('button').onclick=async()=>{try{await api('/api/grupos/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:g.id,ativo:!active})});g.config=g.config||{};g.config.ativo=!active;render()}catch(e){notice(friendlyFetchError(e),true)}};box.appendChild(el)})
+}
+function closeGroupsPanel(){
+  if(window.opener && !window.opener.closed){ window.close(); return; }
+  if(history.length>1){ history.back(); return; }
+  location.href='/';
 }
 function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
 load();
