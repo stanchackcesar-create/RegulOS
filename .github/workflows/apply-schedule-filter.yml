@@ -27,7 +27,7 @@ jobs:
               print('Correção de rolagem/filtro já aplicada.')
               raise SystemExit(0)
 
-          # 1) Rolagem interna do painel, sem alterar o restante da página.
+          # 1) Rolagem interna do painel, sem depender de uma versão exata do CSS.
           css_marker = '</style>'
           css = '''
           /* REGULOS_SCHEDULE_FILTER_V1 */
@@ -39,23 +39,28 @@ jobs:
           @media(max-width:560px){.schedule-scroll{max-height:60vh}.schedule-tools{align-items:stretch}.schedule-tools input{flex-basis:100%}.schedule-tools button{min-height:44px}}
           '''
           if css_marker not in text:
-              text = text.replace(css_marker, css + '\n' + css_marker, 1)
+              raise SystemExit('Bloco </style> não encontrado.')
+          text = text.replace(css_marker, css + '\n' + css_marker, 1)
 
-          # 2) Campo de pesquisa por nome do link ou horário/data exibidos nos cards.
-          schedule_needle = '<div id="schedules" style="margin-top:10px">Carregando agendamentos...</div>'
-          schedule_replacement = '''<div class="schedule-tools" id="scheduleTools">
+          # 2) Substitui o container atual de agendamentos, independentemente de pequenos
+          # espaços/estilos que tenham mudado nas versões anteriores.
+          if 'id="scheduleFilter"' not in text:
+              schedule_re = re.compile(r'<div\s+id=["\']schedules["\'][^>]*>.*?</div>', re.I | re.S)
+              replacement = '''<div class="schedule-tools" id="scheduleTools">
             <input id="scheduleFilter" type="search" placeholder="🔎 Pesquisar nome do link ou horário (ex.: Epson, 03:15)" oninput="filterSchedules()" autocomplete="off">
             <button type="button" onclick="clearScheduleFilter()">Limpar</button>
           </div>
           <div id="scheduleFilterResult" class="schedule-filter-result"></div>
           <div id="schedules" class="schedule-scroll" style="margin-top:10px">Carregando agendamentos...</div>'''
-          if schedule_needle not in text:
-              raise SystemExit('Bloco de Agendamentos não encontrado.')
-          text = text.replace(schedule_needle, schedule_replacement, 1)
+              text, count = schedule_re.subn(replacement, text, count=1)
+              if count != 1:
+                  raise SystemExit('Container de Agendamentos não encontrado.')
 
-          # 3) Funções do filtro ficam fora de loadSchedules para não depender do polling.
+          # 3) Filtro independente do polling. O MutationObserver reaplica o filtro quando
+          # a lista é redesenhada pelo carregamento automático.
           js_marker = '// REGULOS_SCHEDULE_FILTER_JS_V1'
-          js = r'''// REGULOS_SCHEDULE_FILTER_JS_V1
+          if js_marker not in text:
+              js = r'''// REGULOS_SCHEDULE_FILTER_JS_V1
           function filterSchedules(){
             const input=document.getElementById('scheduleFilter');
             const box=document.getElementById('schedules');
@@ -98,12 +103,10 @@ jobs:
             else start();
           })();
           '''
-          # Inject before the first function that follows loadSchedules. This does not replace
-          # the existing renderer, so all existing schedule buttons/fields remain intact.
-          anchor = 'async function saveBotSchedule(){'
-          if anchor not in text:
-              raise SystemExit('Ponto de inserção do filtro não encontrado.')
-          text = text.replace(anchor, js + '\n' + anchor, 1)
+              anchor = 'async function saveBotSchedule(){'
+              if anchor not in text:
+                  raise SystemExit('Ponto de inserção do filtro não encontrado.')
+              text = text.replace(anchor, js + '\n' + anchor, 1)
 
           p.write_text(text, encoding='utf-8')
           print('Filtro e rolagem de Agendamentos aplicados.')
