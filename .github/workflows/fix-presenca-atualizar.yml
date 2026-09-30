@@ -18,121 +18,67 @@ jobs:
           fetch-depth: 1
 
       - name: Aplicar correção
-        shell: python
+        shell: python {0}
         run: |
           from pathlib import Path
 
           path = Path('public/index.html')
           text = path.read_text(encoding='utf-8')
 
-          marker = "async function accountHeartbeat(){\n  try{ await fetch('/api/auth/heartbeat',{method:'POST',cache:'no-store',credentials:'same-origin'}); }\n  catch{}\n}\n"
-          addition = marker + r'''\
-async function refreshAccountPresence(){
-  const panel=document.getElementById('accountPanel');
-  if(!panel) return;
-  try{
-    const d=await jfetch('/api/usuarios');
-    const usuarios=Array.isArray(d.usuarios)?d.usuarios:[];
-    const rows=[...panel.querySelectorAll('.account-user-row[data-user-id]')];
-    rows.forEach(row=>{
-      const user=usuarios.find(x=>String(x.id)===String(row.dataset.userId));
-      if(!user) return;
-      const online=Boolean(user.online);
-      const dot=row.querySelector('.presence-dot');
-      const status=row.querySelector('.account-user-status');
-      if(dot){
-        dot.classList.toggle('presence-online',online);
-        dot.classList.toggle('presence-offline',!online);
-        dot.title=online?'Online':'Offline';
-      }
-      if(status){
-        status.textContent=online?'Online':'Offline';
-        status.classList.toggle('status-online',online);
-        status.classList.toggle('status-offline',!online);
-      }
-    });
-  }catch(e){ console.debug('Falha ao atualizar presença:',e); }
-}
-'''
+          marker = """async function accountHeartbeat(){
+            try{ await fetch('/api/auth/heartbeat',{method:'POST',cache:'no-store',credentials:'same-origin'}); }
+            catch{}
+          }
+          """
+
+          addition = marker + """async function refreshAccountPresence(){
+            const panel=document.getElementById('accountPanel');
+            if(!panel) return;
+            try{
+              const d=await jfetch('/api/usuarios');
+              const usuarios=Array.isArray(d.usuarios)?d.usuarios:[];
+              const rows=[...panel.querySelectorAll('.account-user-row[data-user-id]')];
+              rows.forEach(row=>{
+                const user=usuarios.find(x=>String(x.id)===String(row.dataset.userId));
+                if(!user) return;
+                const online=Boolean(user.online);
+                const dot=row.querySelector('.presence-dot');
+                const status=row.querySelector('.account-user-status');
+                if(dot){
+                  dot.classList.toggle('presence-online',online);
+                  dot.classList.toggle('presence-offline',!online);
+                  dot.title=online?'Online':'Offline';
+                }
+                if(status){
+                  status.textContent=online?'Online':'Offline';
+                  status.classList.toggle('status-online',online);
+                  status.classList.toggle('status-offline',!online);
+                }
+              });
+            }catch(e){ console.debug('Falha ao atualizar presença:',e); }
+          }
+          """
 
           if "async function refreshAccountPresence(){" not in text:
               if marker not in text:
                   raise SystemExit('Marcador accountHeartbeat não encontrado')
               text = text.replace(marker, addition, 1)
 
-          old_refresh = """async function refreshAll(){
-  if(refreshBusy)return;
-  refreshBusy=true;
-  const btn=document.querySelector('.actions button.primary');
-  const oldText=btn?.textContent;
-  if(btn){btn.disabled=true;btn.textContent='🔄 Atualizando...';}
-  try{
-    const results=await Promise.allSettled([
-      refreshTask(status),
-      refreshTask(loadGroups),
-      refreshTask(loadLinks),
-      refreshTask(loadSchedules),
-      refreshTask(loadLinkHistory),
-      refreshTask(loadLinkFailures),
-      refreshTask(loadLogs),
-      refreshTask(loadDashboard),
-      refreshTask(refreshAccountPresence)
-    ]);
-    const failed=results.filter(r=>r.status==='rejected').length;
-    toast(failed?`Atualização concluída com ${failed} item(ns) pendente(s).`:'Atualizado com sucesso.',failed>0);
-  }finally{
-    refreshBusy=false;
-    if(btn){btn.disabled=false;btn.textContent=oldText||'🔄 Atualizar';}
-  }
-}
-"""
-
-          new_refresh = """async function refreshAll(){
-  if(refreshBusy)return;
-  refreshBusy=true;
-  const btn=document.querySelector('.actions button.primary');
-  const oldText=btn?.textContent;
-  if(btn){btn.disabled=true;btn.textContent='🔄 Atualizando...';}
-  try{
-    const results=await Promise.allSettled([
-      refreshTask(status),
-      refreshTask(loadGroups),
-      refreshTask(loadLinks),
-      refreshTask(loadSchedules),
-      refreshTask(loadLinkHistory),
-      refreshTask(loadLinkFailures),
-      refreshTask(loadLogs),
-      refreshTask(loadDashboard),
-      refreshTask(refreshAccountPresence)
-    ]);
-    const failed=results.filter(r=>r.status==='rejected').length;
-    if(failed===0) toast('Atualizado com sucesso.');
-    else toast(`Atualização concluída com ${failed} item(ns) pendente(s).`,true);
-  }catch(e){
-    toast('Não foi possível concluir a atualização: '+e.message,true);
-  }finally{
-    refreshBusy=false;
-    if(btn){btn.disabled=false;btn.textContent=oldText||'🔄 Atualizar';}
-  }
-}
-"""
-
-          if old_refresh in text:
-              text = text.replace(old_refresh, new_refresh, 1)
-          elif "async function refreshAll(){" not in text:
-              raise SystemExit('Função refreshAll não encontrada')
+          if "refreshAccountPresence" not in text:
+              raise SystemExit('A função de presença não foi inserida')
 
           path.write_text(text, encoding='utf-8')
 
-      - name: Verificar sintaxe básica
+      - name: Verificar sintaxe JavaScript
+        shell: python {0}
         run: |
-          node --check /dev/stdin < <(python - <<'PY'
           from pathlib import Path
           text=Path('public/index.html').read_text(encoding='utf-8')
           js=text.split('<script>',1)[1].rsplit('</script>',1)[0]
-          print(js)
-          PY
-          )
+          Path('/tmp/regulos.js').write_text(js,encoding='utf-8')
+
+      - name: Validar JavaScript com Node
+        run: node --check /tmp/regulos.js
 
       - name: Commit da correção
         run: |
@@ -143,5 +89,5 @@ async function refreshAccountPresence(){
             echo "Nenhuma alteração necessária."
             exit 0
           fi
-          git commit -m "Corrigir presença em tempo real e botão Atualizar"
+          git commit -m "Corrigir presença em tempo real"
           git push
