@@ -48,3 +48,5 @@ O RegulOS precisa continuar rodando no computador. O celular é o painel de cont
 ## Correção em teste
 - Separação do Gerenciador de links e Agendamentos.
 - Fallback de navegador para imagens de links encurtados/dinâmicos.
+
+<!-- scheduler-fix-trigger -->
