@@ -1,0 +1,71 @@
+(() => {
+  const get = id => document.getElementById(id);
+  const status = () => get('autoOfferStatus');
+
+  function installUI() {
+    if (get('autoOfferWrap')) return true;
+    const message = get('lmensagem');
+    if (!message) return false;
+    const wrap = document.createElement('label');
+    wrap.id = 'autoOfferWrap';
+    wrap.style.cssText = 'display:flex;align-items:flex-start;gap:8px;margin:10px 0;padding:10px 12px;border:1px solid rgba(100,160,255,.35);border-radius:10px;background:rgba(40,70,120,.12);cursor:pointer;';
+    wrap.innerHTML = '<input id="lautoOferta" type="checkbox" style="margin-top:3px">' +
+      '<span><strong>☑️ Montar oferta automaticamente</strong><br><small>Coloque o link e o RegulOS busca somente dados realmente encontrados na página. Nenhum preço ou desconto será inventado.</small><div id="autoOfferStatus" class="muted" style="margin-top:5px"></div></span>';
+    message.parentNode.insertBefore(wrap, message);
+    return true;
+  }
+
+  async function prepareAutomaticOffer() {
+    const url = (get('lurl')?.value || '').trim();
+    if (!url) throw new Error('Digite o link do produto antes de usar o modo automático.');
+    const s = status();
+    if (s) s.textContent = '🔎 Buscando dados reais da oferta...';
+    const r = await fetch('/api/oferta-preview?url=' + encodeURIComponent(url), {cache:'no-store', credentials:'same-origin'});
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok || d.ok !== true) throw new Error(d.msg || 'Não foi possível obter os dados da oferta.');
+
+    const title = String(d.titulo || '').trim();
+    const price = String(d.preco || '').trim();
+    const discount = String(d.desconto || '').trim();
+    const image = String(d.imagemUrl || '').trim();
+    const originalMessage = String(get('lmensagem')?.value || '').trim();
+    const lines = [];
+    lines.push('🔥 OFERTA IMPERDÍVEL!');
+    if (title) lines.push('', '📦 ' + title);
+    if (price) lines.push('', '💰 Por: ' + price);
+    if (discount) lines.push('🟢 ' + discount);
+    lines.push('', '🛒 Confira a oferta:', url);
+    if (!title && originalMessage) lines.splice(1, 0, '', originalMessage);
+
+    get('lmensagem').value = lines.join('\n');
+    if (image && get('limagemUrl')) get('limagemUrl').value = image;
+    if (get('limagem')) get('limagem').checked = true;
+
+    if (s) s.textContent = [title ? 'título' : '', price ? 'preço' : '', discount ? 'desconto' : '', image ? 'imagem' : ''].filter(Boolean).join(', ') || 'Nenhum dado adicional foi encontrado; a mensagem não recebeu valores inventados.';
+  }
+
+  function wrapSaveLink() {
+    if (window.__autoOfferSaveWrapped) return true;
+    if (typeof window.saveLink !== 'function') return false;
+    const original = window.saveLink;
+    window.saveLink = async function(...args) {
+      if (get('lautoOferta')?.checked) {
+        try {
+          await prepareAutomaticOffer();
+        } catch (e) {
+          const s = status();
+          if (s) s.textContent = '❌ ' + (e.message || 'Falha ao buscar a oferta.');
+          try { toast(e.message || 'Falha ao buscar a oferta.', true); } catch {}
+          return;
+        }
+      }
+      return original.apply(this, args);
+    };
+    window.__autoOfferSaveWrapped = true;
+    return true;
+  }
+
+  const boot = () => { installUI(); wrapSaveLink(); };
+  boot();
+  const timer = setInterval(() => { if (installUI() && wrapSaveLink()) clearInterval(timer); }, 500);
+})();
