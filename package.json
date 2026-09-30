@@ -1,10 +1,10 @@
 {
   "name": "regulos",
   "version": "12.11.0",
-  "description": "RegulOS - versão Cloud para Railway, com até 2 usuários simultâneos e sessão WhatsApp persistente.",
+  "description": "RegulOS - versão Cloud para Railway, com sessão WhatsApp persistente.",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node tools/boot-regulos.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",
