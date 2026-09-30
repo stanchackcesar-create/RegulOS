@@ -46,7 +46,8 @@ if "REGULOS_AUTO_OFFER_BUILD_V1" not in t:
    if(desconto)partes.push('🟢 '+desconto);
    partes.push('🛒 Confira a oferta:\\n'+url);
    if(!mensagemFinal)mensagemFinal=partes.join('\\n\\n');
-   if(!imagemUrlFinal && preview.imagemUrl)imagemUrlFinal=String(preview.imagemUrl);
+   // A imagem do preview pode ser temporária/CDN. Não persistir essa URL como definitiva.
+   imagemUrlFinal='';
    imagemAutomaticaFinal=true;
    if(result)result.textContent='✅ Dados encontrados. Salvando agendamento...';
   }catch(e){
@@ -61,7 +62,7 @@ start = t.find('async function saveLink(){')
 end = t.find('\n}\nfunction toggleAllRandom', start)
 if start < 0 or end < 0: raise SystemExit('Limites da função saveLink não encontrados.')
 block = t[start:end]
-block = block.replace("imagemAutomatica,imagemUrl:(get('limagemUrl')?.value||'').trim(),", "imagemAutomatica:imagemAutomaticaFinal,imagemUrl:imagemUrlFinal,", 1)
+block = block.replace("imagemAutomatica,imagemUrl:(get('limagemUrl')?.value||'').trim(),", "imagemAutomatica:imagemAutomaticaFinal,imagemUrl:imagemUrlFinal,autoOfertaAutomatica:montarOfertaAutomatica,", 1)
 t = t[:start] + block + t[end:]
 
 if 'function toggleAutoOfferPreview()' not in t:
