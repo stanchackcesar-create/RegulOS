@@ -21,7 +21,6 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-          import re
 
           path = Path('src/server.js')
           text = path.read_text(encoding='utf-8')
@@ -82,7 +81,6 @@ jobs:
                 addLog(`Fallback Mercado Livre ignorado: ${e.message}`);
               }
 
-              // Primeiro tenta o método HTTP/metadata existente.
               try{
                 const fetched=await fetchText(target);
                 const candidates=extractImageCandidates(fetched.data,fetched.finalUrl||target);
@@ -99,7 +97,6 @@ jobs:
                 addLog(`Busca HTTP de imagem falhou: ${e.message}`);
               }
 
-              // Fallback para lojas que montam a página/imagem somente com JavaScript.
               try{
                 const browser=await getRegulosBrowser();
                 const context=await browser.newContext({
@@ -165,3 +162,5 @@ jobs:
           fi
           git commit -m "fix: fallback de imagem via navegador no agendamento"
           git push
+
+          # Disparo intencional para aplicar a correção no main.
