@@ -44,3 +44,5 @@ O RegulOS precisa continuar rodando no computador. O celular é o painel de cont
 - Operações críticas do WhatsApp restritas ao administrador.
 - Supervisor automático no comando de início.
 - `ABRIR_REGULOS.vbs` para inicialização sem terminal visível.
+
+<!-- cloud-source-restore-trigger -->
