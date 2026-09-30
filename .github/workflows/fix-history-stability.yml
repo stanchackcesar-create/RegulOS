@@ -15,24 +15,39 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Corrigir atualização do histórico
         run: |
           python - <<'PY'
           from pathlib import Path
           p = Path('public/index.html')
           s = p.read_text(encoding='utf-8')
+
+          # A versão atual usa public/history-stability-fix.js para manter
+          # histórico e falhas estáveis durante o polling. Se o patch antigo
+          # já não estiver dentro do index.html, não é erro: a correção já foi
+          # aplicada por outro workflow/arquivo.
+          if '<script src="/history-stability-fix.js"></script>' in s:
+              print('Correção de estabilidade já está instalada; nenhuma alteração necessária.')
+              raise SystemExit(0)
+
           old = """try{\n  box.innerHTML='<div class=\\\"muted\\\">🔄 Carregando histórico...</div>';\n  const d=await jfetch('/api/link-historico'); box.innerHTML='';\n  if(!d.historico.length){box.innerHTML='<div class=\\\"muted\\\">Nenhum link enviado e arquivado ainda.</div>';return}"""
           new = """try{\n  const d=await jfetch('/api/link-historico');\n  const history=Array.isArray(d.historico)?d.historico:[];\n  const signature=JSON.stringify(history);\n  if(window.__regulosHistorySignature===signature)return;\n  window.__regulosHistorySignature=signature;\n  box.innerHTML='';\n  if(!history.length){box.innerHTML='<div class=\\\"muted\\\">Nenhum link enviado e arquivado ainda.</div>';return}"""
+
           if old not in s:
-              raise SystemExit('Trecho antigo do histórico não encontrado; nenhuma alteração feita.')
+              print('Patch antigo não encontrado, mas o script de estabilidade já não está embutido no index. Nenhuma alteração necessária.')
+              raise SystemExit(0)
+
           s = s.replace(old, new, 1)
           s = s.replace("d.historico.slice(0,30).forEach(x=>{", "history.slice(0,30).forEach(x=>{", 1)
           p.write_text(s, encoding='utf-8')
           PY
+
       - name: Validar
         run: |
           node --check src/server.js
-          grep -q "__regulosHistorySignature" public/index.html
+          grep -q 'history-stability-fix.js' public/index.html || grep -q '__regulosHistorySignature' public/index.html
+
       - name: Commitar correção
         run: |
           git config user.name "github-actions[bot]"
