@@ -2,104 +2,79 @@ const fs = require('fs');
 const path = require('path');
 
 const file = path.join(__dirname, '..', 'public', 'index.html');
-const marker = 'REGULOS_MOBILE_SCROLL_V3';
+const marker = 'REGULOS_MOBILE_CONTROLS_V4';
 
 try {
   let html = fs.readFileSync(file, 'utf8');
 
-  // Remove patches anteriores para evitar controles duplicados após novos deploys.
-  html = html.replace(/\n\/\* REGULOS_MOBILE_SCROLL_V1 \*\/\n@media\(max-width:560px\)\{[\s\S]*?@media\(min-width:561px\)\{\.mobile-scroll-down\{display:none!important\}\}\n?/m, '\n');
-  html = html.replace(/\n\/\* REGULOS_MOBILE_SCROLL_V2 \*\/\n@media\(max-width:560px\)\{[\s\S]*?@media\(min-width:561px\)\{\.mobile-scroll-tab\{display:none!important\}\}\n?/m, '\n');
-  html = html.replace(/\n<div class="mobile-scroll-tab"[\s\S]*?<\/div>\n?/m, '\n');
-  html = html.replace(/\n<div class="mobile-scroll-toggle"[\s\S]*?<\/div>\n?/m, '\n');
+  // Remove as versões anteriores da navegação flutuante para celular.
+  html = html.replace(/\n?\/\* REGULOS_MOBILE_SCROLL_V[0-9]+ \*\/[\s\S]*?(?=<\/style>)/g, '\n');
+  html = html.replace(/\n?<div class="mobile-scroll-tab"[\s\S]*?<\/div>\s*/g, '\n');
+  html = html.replace(/\n?<button[^>]*class="mobile-scroll-toggle"[\s\S]*?<\/button>\s*/g, '\n');
+  html = html.replace(/\n?<div class="mobile-scroll-toggle"[\s\S]*?<\/div>\s*/g, '\n');
 
-  if (html.includes(marker)) process.exit(0);
-  if (!html.includes('</body>')) throw new Error('Final do documento não encontrado.');
+  // Remove versões antigas do botão "Descer para o painel".
+  html = html.replace(/<button[^>]*class="mobile-scroll-down"[\s\S]*?<\/button>/g, '');
+
+  if (html.includes(marker)) {
+    fs.writeFileSync(file, html, 'utf8');
+    process.exit(0);
+  }
+
+  if (!html.includes('<div class="actions">')) throw new Error('Bloco de ações não encontrado.');
 
   const css = `
 /* ${marker} */
 @media(max-width:560px){
-  .mobile-scroll-tab{
-    position:fixed!important;
-    right:10px!important;
-    bottom:calc(14px + env(safe-area-inset-bottom))!important;
-    z-index:9999!important;
+  .mobile-controls-toggle{
     display:flex!important;
-    flex-direction:column!important;
-    gap:7px!important;
-    padding:7px!important;
-    border:1px solid #415579!important;
-    border-radius:16px!important;
-    background:rgba(17,27,45,.96)!important;
-    box-shadow:0 8px 24px rgba(0,0,0,.45)!important;
-    backdrop-filter:blur(8px)!important;
-  }
-  .mobile-scroll-tab.is-hidden{display:none!important}
-  .mobile-scroll-tab button{
-    width:50px!important;
-    height:50px!important;
-    min-height:50px!important;
-    padding:0!important;
-    border-radius:12px!important;
-    background:#34445c!important;
-    color:#eef3ff!important;
+    width:100%!important;
+    min-height:40px!important;
+    margin-top:8px!important;
+    padding:9px 12px!important;
+    align-items:center!important;
+    justify-content:center!important;
     border:1px solid #536987!important;
-    font-size:24px!important;
-    line-height:1!important;
-    font-weight:800!important;
-  }
-  .mobile-scroll-tab .mobile-scroll-close{
-    background:#27354b!important;
-    font-size:22px!important;
-  }
-  .mobile-scroll-tab button:active{transform:scale(.96)!important}
-  .mobile-scroll-toggle{
-    position:fixed!important;
-    right:10px!important;
-    bottom:calc(14px + env(safe-area-inset-bottom))!important;
-    z-index:10000!important;
-    width:50px!important;
-    height:50px!important;
-    min-height:50px!important;
-    padding:0!important;
-    border-radius:15px!important;
-    background:#34445c!important;
+    border-radius:10px!important;
+    background:#243653!important;
     color:#eef3ff!important;
-    border:1px solid #536987!important;
-    box-shadow:0 8px 24px rgba(0,0,0,.45)!important;
-    font-size:23px!important;
+    font-size:14px!important;
     font-weight:800!important;
+    touch-action:manipulation!important;
   }
-  .mobile-scroll-toggle.is-open{display:none!important}
+  .mobile-controls-toggle:active{transform:translateY(1px)!important}
+  .actions.mobile-controls-collapsed{display:none!important}
+  .actions.mobile-controls-expanded{display:flex!important}
+  .mobile-controls-toggle.is-collapsed{background:#1b2a43!important}
 }
-@media(min-width:561px){
-  .mobile-scroll-tab,.mobile-scroll-toggle{display:none!important}
-}
+@media(min-width:561px){.mobile-controls-toggle{display:none!important}}
 `;
 
-  const controls = `
-<div class="mobile-scroll-tab" id="regulos-mobile-scroll-tab" aria-label="Navegação rápida">
-  <button type="button" aria-label="Subir para o topo" title="Subir" onclick="window.scrollTo({top:0,behavior:'smooth'})">↑</button>
-  <button type="button" aria-label="Descer para o final" title="Descer" onclick="window.scrollTo({top:document.documentElement.scrollHeight,behavior:'smooth'})">↓</button>
-  <button type="button" class="mobile-scroll-close" aria-label="Esconder navegação" title="Esconder" onclick="regulosToggleScrollNav(false)">×</button>
-</div>
-<button type="button" class="mobile-scroll-toggle is-open" id="regulos-mobile-scroll-toggle" aria-label="Mostrar navegação Subir e Descer" title="Mostrar Subir/Descer" onclick="regulosToggleScrollNav(true)">↕</button>
-<script>
-function regulosToggleScrollNav(show){
-  const panel=document.getElementById('regulos-mobile-scroll-tab');
-  const toggle=document.getElementById('regulos-mobile-scroll-toggle');
-  if(!panel || !toggle) return;
-  panel.classList.toggle('is-hidden', !show);
-  toggle.classList.toggle('is-open', show);
-}
-</script>`;
+  const toggle = `<button type="button" id="mobileControlsToggle" class="mobile-controls-toggle" aria-expanded="true" aria-controls="regulosActions" onclick="toggleMobileControls()">✕ Ocultar controles</button>`;
 
+  html = html.replace('<div class="actions">', '<div id="regulosActions" class="actions mobile-controls-expanded">');
+  html = html.replace('</div>\n</div></header>', '</div>\n' + toggle + '\n</div></header>');
   html = html.replace('</style>', `${css}\n</style>`);
-  html = html.replace('</body>', `${controls}\n</body>`);
+
+  const js = `
+<script id="regulos-mobile-controls-script">
+function toggleMobileControls(){
+  const actions = document.getElementById('regulosActions');
+  const button = document.getElementById('mobileControlsToggle');
+  if(!actions || !button) return;
+  const collapsed = actions.classList.toggle('mobile-controls-collapsed');
+  actions.classList.toggle('mobile-controls-expanded', !collapsed);
+  button.classList.toggle('is-collapsed', collapsed);
+  button.setAttribute('aria-expanded', String(!collapsed));
+  button.textContent = collapsed ? '☰ Mostrar controles' : '✕ Ocultar controles';
+}
+</script>
+`;
+  html = html.replace('</body>', js + '</body>');
 
   fs.writeFileSync(file, html, 'utf8');
-  console.log('[RegulOS] Navegação mobile V3 aplicada: aba pode ser escondida e reaberta.');
+  console.log('[RegulOS] Mobile: controles Atualizar/Reconectar/Desconectar/Grupos/Novo QR agora podem ser recolhidos.');
 } catch (err) {
-  console.error('[RegulOS] Falha ao aplicar navegação mobile:', err.message);
+  console.error('[RegulOS] Falha ao aplicar ajuste mobile:', err.message);
   process.exit(1);
 }
