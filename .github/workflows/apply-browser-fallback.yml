@@ -112,14 +112,14 @@ jobs:
                 try {
                   const image = await downloadBuffer(candidate, url);
                   await context.close();
-                  addLog(`🖼️ Fallback navegador encontrou imagem: ${candidate}`);
+                  addLog('🖼️ Fallback navegador encontrou imagem: ' + candidate);
                   return image;
                 } catch {}
               }
               await context.close();
             } catch (e) {
               try { if (context) await context.close(); } catch {}
-              addLog(`⚠️ Fallback navegador indisponível: ${e.message}`);
+              addLog('⚠️ Fallback navegador indisponível: ' + e.message);
             }
             return null;
           }
