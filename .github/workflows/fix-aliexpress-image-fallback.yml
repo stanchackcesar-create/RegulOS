@@ -21,27 +21,20 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
-          import re
 
           path = Path('src/server.js')
           text = path.read_text(encoding='utf-8')
+
+          # O arquivo atual possui duas barras invertidas em cada trecho.
+          # Normalizamos para uma barra invertida, que é a regex JavaScript correta.
+          bad = 'if(!/^https?:\\\\/\\\\//i.test(s)) return;'
+          good = 'if(!/^https?:\\/\\//i.test(s)) return;'
           changed = False
 
-          # Corrige a regex que foi gravada com barras extras e quebrava o Node.
-          bad = r'if(!/^https?:\\\\/\\\\//i.test(s)) return;'
-          good = r'if(!/^https?:\\/\\//i.test(s)) return;'
           if bad in text:
               text = text.replace(bad, good)
               changed = True
               print('Regex do fallback corrigida.')
-
-          # Também corrige a variante equivalente caso exista mais de uma vez.
-          bad2 = r'^https?:\\\\/\\\\//i.test(s)'
-          good2 = r'^https?:\\/\\//i.test(s)'
-          if bad2 in text:
-              text = text.replace(bad2, good2)
-              changed = True
-              print('Variante da regex do fallback corrigida.')
 
           path.write_text(text, encoding='utf-8')
           print('Alterações:', changed)
