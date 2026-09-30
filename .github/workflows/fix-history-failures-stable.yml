@@ -22,56 +22,63 @@ jobs:
 
           p = Path('public/index.html')
           s = p.read_text(encoding='utf-8')
-          original = s
 
-          # Nunca mostrar placeholders de carregamento nos painéis.
           s = s.replace('<div id="linkHistory" style="margin-top:10px">Carregando histórico...</div>', '<div id="linkHistory" style="margin-top:10px"></div>')
           s = s.replace('<div id="linkFailures" style="margin-top:10px">Carregando falhas...</div>', '<div id="linkFailures" style="margin-top:10px"></div>')
-
-          # A função antiga ainda podia escrever "Carregando histórico..."
-          # a cada polling. Remover essa escrita é obrigatório mesmo quando
-          # a assinatura já existe.
           s = s.replace("box.innerHTML='<div class=\"muted\">🔄 Carregando histórico...</div>';", '', 1)
 
-          # O histórico já usa assinatura em versões recentes. Se a assinatura
-          # não existir, aplica a correção diretamente no carregador.
           if "let lastHistorySignature='';" not in s:
-              marker = 'async function loadLinkHistory(){'
+              marker='async function loadLinkHistory(){'
               if marker in s:
-                  s = s.replace(marker, "let lastHistorySignature='';\n" + marker, 1)
-                  s = s.replace("const d=await jfetch('/api/link-historico'); box.innerHTML='';", "const d=await jfetch('/api/link-historico'); const signature=JSON.stringify(d.historico||[]); if(signature===lastHistorySignature)return; lastHistorySignature=signature; box.innerHTML='';", 1)
+                  s=s.replace(marker,"let lastHistorySignature='';\n"+marker,1)
 
-          # Corrige o painel de falhas com a mesma lógica: só redesenha quando
-          # a resposta realmente mudou.
-          if "let lastFailureSignature='';" not in s:
-              marker = 'async function loadLinkFailures(){'
-              if marker in s:
-                  s = s.replace(marker, "let lastFailureSignature='';\n" + marker, 1)
+          start=s.find('async function loadLinkFailures(){')
+          if start!=-1:
+              end=s.find('\nasync function ',start+10)
+              if end==-1: end=len(s)
+              block=s[start:end]
+              block=re.sub(r"\s*box\.innerHTML\s*=\s*['\"](?:🔄\s*)?Carregando[^'\"]*['\"]\s*;",'',block,count=1)
 
-          start = s.find('async function loadLinkFailures(){')
-          if start != -1:
-              end = s.find('\nasync function ', start + 10)
-              if end == -1:
-                  end = len(s)
-              block = s[start:end]
-              block = re.sub(r"\s*box\.innerHTML\s*=\s*['\"](?:🔄\s*)?Carregando[^'\"]*['\"]\s*;", '', block, count=1)
-              target = "const d=await jfetch('/api/link-falhas');"
-              if target in block and 'lastFailureSignature' in s:
-                  replacement = target + "\n  const signature=JSON.stringify(d.falhas||[]);\n  if(signature===lastFailureSignature)return;\n  lastFailureSignature=signature;"
-                  block = block.replace(target, replacement, 1)
-              s = s[:start] + block + s[end:]
+              target="const d=await jfetch('/api/link-falhas');"
+              marker="const signature=JSON.stringify(d.falhas||[]);"
+              guard="if(signature===lastFailureSignature)return;"
+              assign="lastFailureSignature=signature;"
+              if marker not in block:
+                  block=block.replace(target,target+'\n  '+marker+'\n  '+guard+'\n  '+assign,1)
 
-          if s == original:
-              print('Nenhuma alteração necessária.')
-          else:
-              p.write_text(s, encoding='utf-8')
-              print('Correção aplicada.')
+              # Remove duplicate signature guard lines left by older patches.
+              lines=block.splitlines(); seen_sig=False; seen_guard=False; seen_assign=False; out=[]
+              for line in lines:
+                  t=line.strip()
+                  if t==marker:
+                      if seen_sig: continue
+                      seen_sig=True
+                  elif t==guard:
+                      if seen_guard: continue
+                      seen_guard=True
+                  elif t==assign:
+                      if seen_assign: continue
+                      seen_assign=True
+                  out.append(line)
+              block='\n'.join(out)
+              s=s[:start]+block+s[end:]
+
+          p.write_text(s,encoding='utf-8')
           PY
 
-      - name: Validar
+      - name: Validar painel
         run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('public/index.html').read_text(encoding='utf-8')
+          assert 'Carregando histórico...' not in s
+          assert 'Carregando falhas...' not in s
+          assert s.count("const signature=JSON.stringify(d.falhas||[]);") == 1
+          assert s.count("if(signature===lastFailureSignature)return;") == 1
+          assert s.count("lastFailureSignature=signature;") == 1
+          print('Painel OK')
+          PY
           node --check src/server.js
-          grep -n "lastHistorySignature\|lastFailureSignature" public/index.html
 
       - name: Commitar correção
         run: |
@@ -79,5 +86,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add public/index.html
           git diff --cached --quiet && exit 0
-          git commit -m "Estabilizar histórico e falhas sem carregamento [skip-history-stable]"
+          git commit -m "Normalizar histórico e falhas sem piscar [skip-history-stable]"
           git push
