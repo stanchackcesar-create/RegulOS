@@ -9,15 +9,21 @@ permissions:
 
 jobs:
   patch:
-    if: contains(github.event.head_commit.message, '[fix-linked-groups]')
     runs-on: ubuntu-latest
     steps:
+      - name: Ignorar commits sem marcador
+        if: ${{ !contains(github.event.head_commit.message, '[fix-linked-groups]') }}
+        run: echo "Nenhuma correção de grupos solicitada neste commit."
+
       - name: Checkout
+        if: ${{ contains(github.event.head_commit.message, '[fix-linked-groups]') }}
         uses: actions/checkout@v4
 
       - name: Aplicar correção
-        shell: python
+        if: ${{ contains(github.event.head_commit.message, '[fix-linked-groups]') }}
+        shell: bash
         run: |
+          python - <<'PY'
           from pathlib import Path
 
           server = Path('src/server.js')
@@ -32,9 +38,9 @@ jobs:
 
           old = "const c=getGroupConfig(id);\n  if(typeof req.body.ativo==='boolean') c.ativo=req.body.ativo;"
           new = """const c=getGroupConfig(id);
-  const grupoAtual=groups.find(g=>String(g.id)===id);
-  if(grupoAtual?.name) c.nome=grupoAtual.name;
-  if(typeof req.body.ativo==='boolean') c.ativo=req.body.ativo;"""
+          const grupoAtual=groups.find(g=>String(g.id)===id);
+          if(grupoAtual?.name) c.nome=grupoAtual.name;
+          if(typeof req.body.ativo==='boolean') c.ativo=req.body.ativo;"""
           if old not in text:
               raise SystemExit('Trecho /api/grupos/config não encontrado')
           text = text.replace(old, new, 1)
@@ -51,14 +57,17 @@ jobs:
 
           old = "document.getElementById('allowed').textContent=(d.permitidos||0)+' permitidos';"
           new = """document.getElementById('allowed').textContent=(d.permitidos||0)+' permitidos';
-  const linked=Array.isArray(d.gruposLigados)?d.gruposLigados:[];
-  const linkedBox=document.getElementById('linkedGroups');
-  if(linkedBox) linkedBox.textContent=linked.length?'Ligados: '+linked.map(g=>g.nome||g.id).join(', '):'Ligados: nenhum';"""
+          const linked=Array.isArray(d.gruposLigados)?d.gruposLigados:[];
+          const linkedBox=document.getElementById('linkedGroups');
+          if(linkedBox) linkedBox.textContent=linked.length?'Ligados: '+linked.map(g=>g.nome||g.id).join(', '):'Ligados: nenhum';"""
           if old not in text:
               raise SystemExit('Atualização do card de grupos não encontrada')
           text = text.replace(old, new, 1)
           index.write_text(text, encoding='utf-8')
-      - name: Validar
+          PY
+
+      - name: Validar correção
+        if: ${{ contains(github.event.head_commit.message, '[fix-linked-groups]') }}
         run: |
           node --check src/server.js
           python - <<'PY'
@@ -70,7 +79,9 @@ jobs:
           Path('/tmp/regulos.js').write_text(js[-1],encoding='utf-8')
           PY
           node --check /tmp/regulos.js
+
       - name: Commitar correção
+        if: ${{ contains(github.event.head_commit.message, '[fix-linked-groups]') }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
