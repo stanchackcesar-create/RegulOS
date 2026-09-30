@@ -17,7 +17,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Aplicar fallback de imagem
+      - name: Corrigir fallback de imagem
         shell: python
         run: |
           from pathlib import Path
@@ -25,110 +25,26 @@ jobs:
 
           path = Path('src/server.js')
           text = path.read_text(encoding='utf-8')
-          marker = '// REGULOS_BROWSER_IMAGE_FALLBACK_V2'
-          if marker in text:
-              print('Fallback já aplicado.')
-              raise SystemExit(0)
+          changed = False
 
-          pattern = r'async function findProductImage\(url\) \{[\s\S]*?(?=\n\}\n\n(?:async )?function )'
-          match = re.search(pattern, text)
-          if not match:
-              raise SystemExit('findProductImage não encontrada ou limite da função não identificado')
+          # Corrige a regex que foi gravada com barras extras e quebrava o Node.
+          bad = r'if(!/^https?:\\\\/\\\\//i.test(s)) return;'
+          good = r'if(!/^https?:\\/\\//i.test(s)) return;'
+          if bad in text:
+              text = text.replace(bad, good)
+              changed = True
+              print('Regex do fallback corrigida.')
 
-          replacement = r'''async function findProductImage(url) {
-            // REGULOS_BROWSER_IMAGE_FALLBACK_V2
-            // Mercado Livre continua tendo prioridade pelo método específico da API.
-            const target=String(url||'').trim();
-            if(!target) return null;
-            try{
-              try{
-                const mlImageUrl=await findMercadoLivreImageUrl(target);
-                if(mlImageUrl){
-                  try{
-                    const image=await downloadBuffer(mlImageUrl,target);
-                    addLog(`🖼️ Imagem do Mercado Livre encontrada via API: ${mlImageUrl}`);
-                    return image;
-                  }catch(e){
-                    addLog(`Imagem do Mercado Livre não pôde ser baixada: ${e.message}`);
-                  }
-                }
-              }catch(e){
-                addLog(`Fallback Mercado Livre ignorado: ${e.message}`);
-              }
+          # Também corrige a variante equivalente caso exista mais de uma vez.
+          bad2 = r'^https?:\\\\/\\\\//i.test(s)'
+          good2 = r'^https?:\\/\\//i.test(s)'
+          if bad2 in text:
+              text = text.replace(bad2, good2)
+              changed = True
+              print('Variante da regex do fallback corrigida.')
 
-              // Método HTTP/metadata existente.
-              try{
-                const fetched=await fetchText(target);
-                const candidates=extractImageCandidates(fetched.data,fetched.finalUrl||target);
-                for(const candidate of candidates.slice(0,12)){
-                  try{
-                    const image=await downloadBuffer(candidate,fetched.finalUrl||target);
-                    addLog(`🖼️ Imagem encontrada por metadados: ${candidate}`);
-                    return image;
-                  }catch(e){
-                    addLog(`Imagem candidata não pôde ser baixada: ${e.message}`);
-                  }
-                }
-              }catch(e){
-                addLog(`Busca HTTP de imagem falhou: ${e.message}`);
-              }
-
-              // Fallback para lojas que montam a imagem somente via JavaScript.
-              try{
-                const browser=await getRegulosBrowser();
-                const context=await browser.newContext({
-                  userAgent:'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128 Safari/537.36',
-                  viewport:{width:1365,height:900}
-                });
-                const page=await context.newPage();
-                try{
-                  await page.goto(target,{waitUntil:'domcontentloaded',timeout:35000});
-                  await page.waitForTimeout(5000);
-                  const browserImages=await page.evaluate(()=>{
-                    const out=[];
-                    const add=(v)=>{
-                      if(!v || typeof v!=='string') return;
-                      const s=v.trim();
-                      if(!/^https?:\/\//i.test(s)) return;
-                      if(!out.includes(s)) out.push(s);
-                    };
-                    for(const img of Array.from(document.images||[])){
-                      add(img.currentSrc); add(img.src);
-                      add(img.getAttribute('data-src'));
-                      add(img.getAttribute('data-lazy-src'));
-                      add(img.getAttribute('data-original'));
-                    }
-                    for(const el of Array.from(document.querySelectorAll('meta[property="og:image"],meta[name="twitter:image"]'))){
-                      add(el.getAttribute('content'));
-                    }
-                    return out.slice(0,30);
-                  });
-                  for(const candidate of browserImages){
-                    try{
-                      const image=await downloadBuffer(candidate,target);
-                      addLog(`🖼️ Imagem encontrada pelo navegador: ${candidate}`);
-                      return image;
-                    }catch(e){
-                      addLog(`Imagem do navegador não pôde ser baixada: ${e.message}`);
-                    }
-                  }
-                }finally{
-                  await context.close().catch(()=>{});
-                }
-              }catch(e){
-                addLog(`Fallback de navegador para imagem falhou: ${e.message}`);
-              }
-            }catch(e){
-              addLog(`Busca automática de imagem falhou: ${e.message}`);
-            }
-            return null;
-          }
-
-          '''
-
-          text = text[:match.start()] + replacement + text[match.end():]
           path.write_text(text, encoding='utf-8')
-          print('Fallback de navegador aplicado em findProductImage.')
+          print('Alterações:', changed)
 
       - name: Verificar sintaxe antes de publicar
         shell: bash
