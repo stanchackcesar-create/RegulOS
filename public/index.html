@@ -487,7 +487,7 @@ async function loadAccount(){
   let html=`<div style="margin-top:2px"><b>Usuário atual:</b> ${esc(u.usuario||'')} ${u.admin?'<span class="badge good">Administrador</span>':''}</div>`;
   if(u.admin){
     const d=await jfetch('/api/usuarios');
-    html+=`<div style="margin-top:14px"><b>Usuários com acesso ao mesmo RegulOS</b></div>
+    html+=`<div style="margin-top:14px"><b>Usuários com acesso ao mesmo RegulOS</b><div class="muted" style="margin-top:4px">O administrador pode criar até 10 usuários. Cada conta possui seu próprio login e permissões.</div></div>
     <div id="userList" style="margin-top:8px">`;
     (d.usuarios||[]).forEach(x=>{
       const online=Boolean(x.online);
