@@ -38,10 +38,21 @@
     if (!title && originalMessage) lines.splice(1, 0, '', originalMessage);
 
     get('lmensagem').value = lines.join('\n');
-    if (image && get('limagemUrl')) get('limagemUrl').value = image;
+
+    // O preview pode encontrar uma URL de imagem que funciona na página,
+    // mas não aceita download pelo servidor do Railway (hotlink, CDN ou
+    // redirecionamento). Não gravamos essa URL como imagem definitiva.
+    // O agendador fará a busca/validação da imagem no momento do envio,
+    // usando o mesmo mecanismo que já funciona para o modo manual.
+    if (get('limagemUrl')) get('limagemUrl').value = '';
     if (get('limagem')) get('limagem').checked = true;
 
-    if (s) s.textContent = [title ? 'título' : '', price ? 'preço' : '', discount ? 'desconto' : '', image ? 'imagem' : ''].filter(Boolean).join(', ') || 'Nenhum dado adicional foi encontrado; a mensagem não recebeu valores inventados.';
+    if (s) {
+      const found = [title ? 'título' : '', price ? 'preço' : '', discount ? 'desconto' : ''].filter(Boolean);
+      if (image) found.push('imagem encontrada para referência');
+      found.push('imagem será validada/buscada no envio');
+      s.textContent = found.join(', ') || 'Nenhum dado adicional foi encontrado; a mensagem não recebeu valores inventados.';
+    }
   }
 
   function wrapSaveLink() {
