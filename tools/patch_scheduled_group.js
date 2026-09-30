@@ -21,7 +21,7 @@ function patchFile(file, replacements, label) {
   return changed;
 }
 
-// Backend: cada agendamento pode guardar seu próprio grupo de destino.
+// Backend: cada agendamento novo precisa de um grupo de destino próprio.
 patchFile(SERVER, [
   [
 `    imagemAutomatica:b.imagemAutomatica!==false, imagemUrl:String(b.imagemUrl||'').trim(),\n    mensagensAleatorias:Array.isArray(b.mensagensAleatorias)?b.mensagensAleatorias.map(String).filter(Boolean):[],`,
@@ -30,6 +30,10 @@ patchFile(SERVER, [
   [
 `  if(typeof b.imagemUrl==='string') item.imagemUrl=b.imagemUrl.trim();\n  if(Array.isArray(b.mensagensAleatorias))`,
 `  if(typeof b.imagemUrl==='string') item.imagemUrl=b.imagemUrl.trim();\n  if(typeof b.grupoId==='string') item.grupoId=b.grupoId.trim();\n  if(Array.isArray(b.mensagensAleatorias))`
+  ],
+  [
+`  const b=req.body||{}, nome=String(b.nome||'').trim(), url=String(b.url||'').trim();\n  const data=String(b.data||''), horario=String(b.horario||'');\n  if(!nome||!url||!data||!horario) return res.status(400).json({ok:false,msg:'Nome, link, data e horário são obrigatórios.'});`,
+`  const b=req.body||{}, nome=String(b.nome||'').trim(), url=String(b.url||'').trim();\n  const data=String(b.data||''), horario=String(b.horario||''), grupoId=String(b.grupoId||'').trim();\n  if(!nome||!url||!data||!horario) return res.status(400).json({ok:false,msg:'Nome, link, data e horário são obrigatórios.'});\n  if(!grupoId) return res.status(400).json({ok:false,msg:'Escolha o grupo de destino do agendamento.'});`
   ],
   [
 `  } else {\n    targets = activeGroups();\n    if (!targets.length) {`,
@@ -50,6 +54,10 @@ patchFile(INDEX, [
   [
 `  mensagensAleatorias:randomEnabled?randomSelected:[],\n  mensagemAleatoriaAtiva:randomEnabled,\n  rearmar:Boolean(window.editingFailedId)`,
 `  mensagensAleatorias:randomEnabled?randomSelected:[],\n  mensagemAleatoriaAtiva:randomEnabled,\n  grupoId:(get('lgrupo')?.value||'').trim(),\n  rearmar:Boolean(window.editingFailedId)`
+  ],
+  [
+` if(randomEnabled&&!randomSelected.length)return fail('Selecione pelo menos uma mensagem aleatória.');`,
+` if(randomEnabled&&!randomSelected.length)return fail('Selecione pelo menos uma mensagem aleatória.');\n const grupoId=(get('lgrupo')?.value||'').trim();\n if(!grupoId)return fail('Escolha o grupo de destino do agendamento.');`
   ],
   [
 `function showForm(){\n const form=document.getElementById('linkForm');\n form.classList.remove('hidden');`,
