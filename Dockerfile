@@ -20,5 +20,5 @@ RUN mkdir -p /app/storage/data /app/storage/auth
 EXPOSE 3000
 
 # Inicializador único: mantém dados/agendamentos quando o WhatsApp cai
-# e aplica as correções de grupos, agendamento e imagem antes do servidor.
-CMD ["node", "tools/preboot-regulos.js"]
+# e aplica as correções de grupos, agendamento, imagem e interface mobile antes do servidor.
+CMD ["node", "tools/cloud-start.js"]
