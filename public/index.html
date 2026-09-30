@@ -96,7 +96,7 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 
 <aside>
 <div class="panel">
-<div class="row" style="justify-content:space-between"><div><h2>🔗 Gerenciador de links</h2><div class="muted">Crie, programe e acompanhe cada envio. A fila continua do último link concluído.</div></div><button class="green" onclick="showForm()">+ Adicionar link</button></div>
+<div class="row" style="justify-content:space-between"><div><h2>🔗 Gerenciador de links</h2><div class="muted">Crie ou edite uma programação. Depois de salvar, ela fica somente em Agendamentos.</div></div><button class="green" onclick="showForm()">+ Adicionar link</button></div>
 <div id="linkForm" class="hidden">
 <label>Nome do link <span class="muted">(somente para registro no painel)</span></label><input id="lnome" placeholder="Ex.: Impressora Epson L3250">
 <label>Link do produto</label><input id="lurl" placeholder="https://...">
@@ -351,30 +351,9 @@ function toggleRandomBox(){document.getElementById('randomMessages').classList.t
 document.addEventListener('change',e=>{if(e.target.classList?.contains('rmsg'))syncRandomAll();});
 document.getElementById('lrandom').addEventListener('change',toggleRandomBox);
 async function loadLinks(){
- try{
-  let d;
-  try {
-    d=await jfetch('/api/link-agendamentos');
-  } catch(firstError) {
-    // Compatibilidade com versões antigas que ainda expõem /api/links.
-    const fallback=await jfetch('/api/links');
-    d={ok:true,agendamentos:Array.isArray(fallback.agendamentos)?fallback.agendamentos:(Array.isArray(fallback.links)?fallback.links:[])};
-  }
-  const items=Array.isArray(d.agendamentos)?d.agendamentos:[];
-  const box=document.getElementById('links'); box.innerHTML='';
-  if(!items.length){box.innerHTML='<div class="muted">Nenhum link programado.</div>';}
-  items.forEach(x=>{
-   const status=x.ativo?(x.status||'agendado'):'pausado'; const el=document.createElement('div'); el.className='link';
-   const last=x.lastRunAt?new Date(x.lastRunAt).toLocaleString('pt-BR'):'Nunca';
-   el.innerHTML=`<h3>${esc(x.nome)} <span class="badge ${x.ativo?'good':'bad'}">${x.ativo?'ativo':(x.status==='concluido'?'concluído':'pausado')}</span></h3>
-   <a>${esc(x.url)}</a><div class="stats">🏷️ Título: ${esc(x.tituloProduto||'será buscado no envio')}</div><div class="stats">📅 ${x.data} às ${x.horario} · ${x.repeticao} · ${status}</div>
-   <div class="stats">📨 Enviados: <b>${x.enviados||0}</b> · 🟢 Sucessos: <b>${x.sucessos||0}</b> · ❌ Erros: <b>${x.erros||0}</b> · ⏱️ Último: ${last}</div><div class="stats">🖼️ Imagem: ${x.imagemAutomatica===false?'desligada':(x.imagemStatus==='encontrada'?'encontrada':x.imagemStatus==='não encontrada'?'não encontrada — envio continua':'automática')}</div><div class="stats">${x.progressKey?'🔄 Em andamento — progresso salvo; continuará deste link.':(x.lastRunKey?'✅ Última execução concluída':'⏳ Aguardando execução')}</div>
-   <div class="row"><button onclick="editLink('${x.id}')">✏️ Editar</button><button onclick="toggleLink('${x.id}',${x.ativo})">${x.ativo?'⏸️ Pausar':'▶️ Ativar'}</button><button class="green" onclick="sendNow('${x.id}')">🚀 Enviar agora</button><button class="red" onclick="deleteLink('${x.id}')">🗑️ Excluir</button></div>`;
-   box.appendChild(el);
-  });
- }catch(e){
-   document.getElementById('links').innerHTML='<div class="muted">⚠️ Não foi possível consultar os links. Verifique se existe apenas uma instância do RegulOS aberta e clique em Atualizar.</div><button onclick="loadLinks()">🔄 Tentar novamente</button>';
- }
+  const box=document.getElementById('links');
+  if(!box)return;
+  box.innerHTML='<div class="muted">Os links salvos aparecem somente em <b>Agendamentos</b>. O Gerenciador de links serve para criar ou editar uma programação.</div>';
 }
 async function loadSchedules(){
  try{
