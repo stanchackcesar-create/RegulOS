@@ -850,47 +850,91 @@ async function findMercadoLivreImageUrl(url) {
 }
 
 async function findProductImage(url) {
-  try {
-    const mlImageUrl=await findMercadoLivreImageUrl(url);
-    if(mlImageUrl){
+  // REGULOS_BROWSER_IMAGE_FALLBACK_V2
+  // Mercado Livre continua tendo prioridade pelo método específico da API.
+  const target=String(url||'').trim();
+  if(!target) return null;
+  try{
+    try{
+      const mlImageUrl=await findMercadoLivreImageUrl(target);
+      if(mlImageUrl){
+        try{
+          const image=await downloadBuffer(mlImageUrl,target);
+          addLog(`🖼️ Imagem do Mercado Livre encontrada via API: ${mlImageUrl}`);
+          return image;
+        }catch(e){
+          addLog(`Imagem do Mercado Livre não pôde ser baixada: ${e.message}`);
+        }
+      }
+    }catch(e){
+      addLog(`Fallback Mercado Livre ignorado: ${e.message}`);
+    }
+
+    // Primeiro tenta o método HTTP/metadata existente.
+    try{
+      const fetched=await fetchText(target);
+      const candidates=extractImageCandidates(fetched.data,fetched.finalUrl||target);
+      for(const candidate of candidates.slice(0,12)){
+        try{
+          const image=await downloadBuffer(candidate,fetched.finalUrl||target);
+          addLog(`🖼️ Imagem encontrada por metadados: ${candidate}`);
+          return image;
+        }catch(e){
+          addLog(`Imagem candidata não pôde ser baixada: ${e.message}`);
+        }
+      }
+    }catch(e){
+      addLog(`Busca HTTP de imagem falhou: ${e.message}`);
+    }
+
+    // Fallback para lojas que montam a página/imagem somente com JavaScript.
+    try{
+      const browser=await getRegulosBrowser();
+      const context=await browser.newContext({
+        userAgent:'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128 Safari/537.36',
+        viewport:{width:1365,height:900}
+      });
+      const page=await context.newPage();
       try{
-        const image=await downloadBuffer(mlImageUrl,url);
-        addLog(`🖼️ Imagem do Mercado Livre encontrada via API: ${mlImageUrl}`);
-        return image;
-      }catch(e){addLog(`Imagem do Mercado Livre não pôde ser baixada: ${e.message}`);}
-    }
-  }catch(e){addLog(`Fallback Mercado Livre ignorado: ${e.message}`);}
-  try {
-    const mlImageUrl = await findMercadoLivreImageUrl(url);
-    if (mlImageUrl) {
-      try {
-        const image = await downloadBuffer(mlImageUrl, url);
-        addLog(`🖼️ Imagem do Mercado Livre encontrada via API: ${mlImageUrl}`);
-        return image;
-      } catch (e) {
-        addLog(`Imagem do Mercado Livre não pôde ser baixada: ${e.message}`);
+        await page.goto(target,{waitUntil:'domcontentloaded',timeout:35000});
+        await page.waitForTimeout(5000);
+        const browserImages=await page.evaluate(()=>{
+          const out=[];
+          const add=(v)=>{
+            if(!v || typeof v!=='string') return;
+            const s=v.trim();
+            if(!/^https?:\\/\\//i.test(s)) return;
+            if(!out.includes(s)) out.push(s);
+          };
+          for(const img of Array.from(document.images||[])){
+            add(img.currentSrc); add(img.src);
+            add(img.getAttribute('data-src'));
+            add(img.getAttribute('data-lazy-src'));
+            add(img.getAttribute('data-original'));
+          }
+          for(const el of Array.from(document.querySelectorAll('meta[property="og:image"],meta[name="twitter:image"]'))){
+            add(el.getAttribute('content'));
+          }
+          return out.slice(0,30);
+        });
+        for(const candidate of browserImages){
+          try{
+            const image=await downloadBuffer(candidate,target);
+            addLog(`🖼️ Imagem encontrada pelo navegador: ${candidate}`);
+            return image;
+          }catch(e){
+            addLog(`Imagem do navegador não pôde ser baixada: ${e.message}`);
+          }
+        }
+      }finally{
+        await context.close().catch(()=>{});
       }
+    }catch(e){
+      addLog(`Fallback de navegador para imagem falhou: ${e.message}`);
     }
-  } catch (e) {
-    addLog(`Fallback Mercado Livre ignorado: ${e.message}`);
+  }catch(e){
+    addLog(`Busca automática de imagem falhou: ${e.message}`);
   }
-  try {
-    const page=await fetchText(url);
-    const candidates=extractImageCandidates(page.data,page.finalUrl);
-    addLog(`🔎 ${candidates.length} candidatos de imagem encontrados para o link.`);
-    let tentativa=0;
-    for(const imageUrl of candidates) {
-      tentativa++;
-      try {
-        const image=await downloadBuffer(imageUrl,page.finalUrl);
-        addLog(`🖼️ Imagem encontrada na tentativa ${tentativa}: ${imageUrl}`);
-        return image;
-      } catch(e) {
-        if(tentativa<=5) addLog(`Imagem ${tentativa} recusada; tentando a próxima.`);
-      }
-    }
-    addLog('⚠️ Nenhuma das imagens encontradas pôde ser baixada.');
-  } catch (e) { addLog(`Não foi possível ler a página para buscar imagem: ${e.message}`); }
   return null;
 }
 
