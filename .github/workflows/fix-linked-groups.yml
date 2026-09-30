@@ -15,6 +15,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Corrigir envio agendado sem bloquear por imagem
+        shell: python
+        run: |
+          from pathlib import Path
+
+          p = Path('src/server.js')
+          s = p.read_text(encoding='utf-8')
+          marker = '// REGULOS_SCHEDULE_IMAGE_FALLBACK_OPTIONAL_V3'
+
+          if marker in s:
+              print('Correção do envio agendado já aplicada.')
+          else:
+              start = s.find('    if (!productImage) {')
+              end = s.find('    const startedAt = Date.now();', start)
+              if start < 0 or end < 0:
+                  raise SystemExit('Bloco do envio agendado não encontrado; nenhuma alteração feita.')
+
+              replacement = '''    if (!productImage) {
+      // A imagem é opcional. Se não for encontrada/baixada, o envio continua.
+      // Nunca inventamos preço, desconto ou qualquer dado da oferta.
+      addLog(`Imagem automática não encontrada para "${item.nome}". Enviando somente texto/link.`);
+    } else {
+      addLog(`Imagem encontrada para "${item.nome}".`);
+    }
+
+    // REGULOS_SCHEDULE_IMAGE_FALLBACK_OPTIONAL_V3
+'''
+              p.write_text(s[:start] + replacement + s[end:], encoding='utf-8')
+              print('Correção aplicada ao src/server.js.')
+
       - name: Aplicar patch do Gerenciador de Links
         run: python tools/patch_schedule.py
 
@@ -54,5 +84,5 @@ jobs:
             echo "Patch já aplicado ou nenhuma alteração necessária."
             exit 0
           fi
-          git commit -m "Integrar montagem automática de ofertas [skip ci]"
+          git commit -m "Corrigir envio agendado sem bloquear por imagem [skip ci]"
           git push origin HEAD:main
