@@ -903,7 +903,7 @@ async function findProductImage(url) {
           const add=(v)=>{
             if(!v || typeof v!=='string') return;
             const s=v.trim();
-            if(!/^https?:\\/\\//i.test(s)) return;
+            if(!/^https?:\/\//i.test(s)) return;
             if(!out.includes(s)) out.push(s);
           };
           for(const img of Array.from(document.images||[])){
