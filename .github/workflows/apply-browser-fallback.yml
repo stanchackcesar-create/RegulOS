@@ -1,8 +1,8 @@
-name: Aplicar fallback de navegador
+name: Aplicar fallback de navegador e organizar agendamentos
 
 on:
   push:
-    branches: [fix/fallback-browser-links]
+    branches: [main]
 
 permissions:
   contents: write
@@ -15,14 +15,33 @@ jobs:
       - name: Baixar código
         uses: actions/checkout@v4
 
-      - name: Aplicar fallback Playwright
+      - name: Instalar Playwright
+        run: npm install playwright@^1.55.0 --no-audit --no-fund
+
+      - name: Aplicar correções
         shell: bash
         run: |
           node <<'NODE'
           const fs = require('fs');
           const path = require('path');
-          const file = path.join(process.cwd(), 'src', 'server.js');
-          let source = fs.readFileSync(file, 'utf8');
+
+          // Gerenciador de links: não repetir cartões salvos.
+          const indexFile = path.join(process.cwd(), 'public', 'index.html');
+          let index = fs.readFileSync(indexFile, 'utf8');
+          const linksStart = index.indexOf('async function loadLinks(){');
+          const schedulesStart = index.indexOf('async function loadSchedules(){', linksStart);
+          if (linksStart < 0 || schedulesStart < 0) throw new Error('Funções loadLinks/loadSchedules não encontradas.');
+          index = index.slice(0, linksStart) + `async function loadLinks(){
+            const box=document.getElementById('links');
+            if(!box)return;
+            box.innerHTML='<div class="muted">Os links salvos aparecem somente em <b>Agendamentos</b>. O Gerenciador de links serve para criar ou editar uma programação.</div>';
+          }
+          ` + index.slice(schedulesStart);
+          index = index.replace('Crie, programe e acompanhe cada envio. A fila continua do último link concluído.','Crie ou edite uma programação. Depois de salvar, ela fica somente em Agendamentos.');
+          fs.writeFileSync(indexFile, index, 'utf8');
+
+          const serverFile = path.join(process.cwd(), 'src', 'server.js');
+          let source = fs.readFileSync(serverFile, 'utf8');
 
           if (!source.includes("require('playwright')")) {
             const importMarker = "const crypto = require('crypto');";
@@ -61,45 +80,34 @@ jobs:
                 javaScriptEnabled: true,
                 ignoreHTTPSErrors: true
               });
-
               const page = await context.newPage();
               await page.route('**/*', async route => {
                 const target = route.request().url();
                 if (/^(data:|blob:|about:|chrome:)/i.test(target)) return route.continue();
-                try {
-                  await assertSafeExternalUrl(target);
-                  return route.continue();
-                } catch {
-                  return route.abort();
-                }
+                try { await assertSafeExternalUrl(target); return route.continue(); }
+                catch { return route.abort(); }
               });
-
               await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
               await page.waitForTimeout(1800);
-
               const candidates = await page.evaluate(() => {
                 const out = []; const seen = new Set();
                 const add = value => {
                   if (!value || /^data:|^blob:/i.test(value)) return;
-                  try {
-                    const u = new URL(value, location.href).href;
-                    if (/^https?:/i.test(u) && !seen.has(u)) { seen.add(u); out.push(u); }
-                  } catch {}
+                  try { const u = new URL(value, location.href).href; if (/^https?:/i.test(u) && !seen.has(u)) { seen.add(u); out.push(u); } } catch {}
                 };
                 document.querySelectorAll('meta[property="og:image"],meta[name="twitter:image"],meta[property="og:image:url"]').forEach(x => add(x.content));
                 document.querySelectorAll('img').forEach(img => {
                   add(img.currentSrc || img.src);
                   ['data-src','data-original','data-lazy-src','data-image','data-image-src','data-zoom-image','data-large_image'].forEach(a => add(img.getAttribute(a)));
                   const srcset = img.getAttribute('srcset') || img.getAttribute('data-srcset') || '';
-                  srcset.split(',').forEach(x => add(x.trim().split(/\\s+/)[0]));
+                  srcset.split(',').forEach(x => add(x.trim().split(/\s+/)[0]));
                 });
                 document.querySelectorAll('[style*="background-image"]').forEach(el => {
-                  const m = String(el.getAttribute('style') || '').match(/url\\((?:["']?)([^)"']+)/i);
+                  const m = String(el.getAttribute('style') || '').match(/url\((?:["']?)([^)"']+)/i);
                   if (m) add(m[1]);
                 });
                 return out.slice(0, 80);
               });
-
               for (const candidate of candidates) {
                 try {
                   const image = await downloadBuffer(candidate, url);
@@ -131,8 +139,7 @@ jobs:
             source = source.slice(0, fnStart) + fn + source.slice(fnEnd);
           }
 
-          fs.writeFileSync(file, source, 'utf8');
-          console.log('Fallback Playwright aplicado com sucesso.');
+          fs.writeFileSync(serverFile, source, 'utf8');
           NODE
 
       - name: Validar sintaxe
@@ -143,10 +150,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/server.js
+          git add public/index.html src/server.js package.json package-lock.json 2>/dev/null || true
           if git diff --cached --quiet; then
             echo "Nenhuma alteração necessária."
           else
-            git commit -m "[auto-browser-fallback] Adicionar fallback de navegador para imagens"
+            git commit -m "[auto-browser-fallback] Corrigir imagens e separar agendamentos"
             git push
           fi
