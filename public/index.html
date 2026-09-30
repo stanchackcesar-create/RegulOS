@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=yes"><meta name="theme-color" content="#111b2d">
+<title>RegulOS v12.11.0</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#080e1a;color:#eef3ff;font-family:Segoe UI,Arial,sans-serif}
+header{padding:18px 24px;border-bottom:1px solid #26344d;background:#111b2d;position:sticky;top:0;z-index:5}
+.wrap{max-width:1240px;margin:auto}.title{font-size:28px;font-weight:800}.sub{color:#9eb0ca;font-size:13px}
+button{border:0;border-radius:9px;padding:10px 15px;font-weight:700;cursor:pointer;background:#34445c;color:white}
+button:hover{filter:brightness(1.08)}button.primary{background:#3d83f6}button.green{background:#20c55a;color:#06100a}button.red{background:#ef4444}
+.actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.grid{display:grid;grid-template-columns:1.25fr .75fr;gap:14px;margin-top:14px}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.card,.panel{background:#111b2d;border:1px solid #263653;border-radius:15px;padding:16px}.metric small{color:#9eb0ca}.metric b{display:block;font-size:28px;margin-top:8px}
+h2{font-size:20px;margin:0 0 8px}.muted{color:#9eb0ca}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+input,textarea,select{width:100%;background:#07101f;color:#eef3ff;border:1px solid #34445c;border-radius:9px;padding:10px;font:inherit}textarea{min-height:120px;resize:vertical}
+label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.groups{max-height:500px;overflow:auto;margin-top:10px}.group{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px;border:1px solid #263653;border-radius:10px;margin:7px 0;background:#0b1423}
+.group .name{font-weight:700}.group small{display:block;color:#9eb0ca}.toggle{min-width:125px}.on{background:#116b38}.off{background:#652326}.badge{display:inline-block;padding:5px 9px;border-radius:999px;font-size:12px;font-weight:800}.good{background:#125d34}.bad{background:#64252a}.neutral{background:#34445c}
+.qr{text-align:center}.qr img{width:260px;max-width:100%;background:white;padding:8px;border-radius:12px}.hidden{display:none!important}
+.link{border:1px solid #2c3c59;border-radius:12px;padding:12px;margin:9px 0;background:#0b1423}.link h3{margin:0 0 4px}.link a{color:#7eb2ff;word-break:break-all}.stats{font-size:13px;color:#b9c8df;margin:8px 0}.statusline{font-weight:700}
+.notice{padding:9px 11px;border-radius:9px;background:#19273e;margin:8px 0}.error{background:#481c27;color:#ffd3d8}.success{background:#123e29;color:#c9ffe0}
+.logs{height:260px;overflow:auto;background:#030811;border-radius:9px;padding:10px;font:12px Consolas,monospace;white-space:pre-wrap}
+@media(max-width:900px){.grid{grid-template-columns:1fr}.cards{grid-template-columns:repeat(2,1fr)}header{padding:14px 16px}.wrap{width:100%}.modal-card{width:100%}}
+@media(max-width:560px){body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:sticky;top:0;padding:12px 12px}.title{font-size:22px}.sub{font-size:12px}.wrap{padding-left:10px;padding-right:10px}.cards{grid-template-columns:1fr 1fr;gap:8px}.card,.panel{padding:12px;border-radius:12px}.metric b{font-size:22px}.actions{gap:6px}.actions button{flex:1 1 calc(50% - 6px);min-height:44px;padding:11px 9px}.row>button{min-height:44px}.two{grid-template-columns:1fr}.group{align-items:stretch;flex-direction:column}.group .toggle{width:100%;min-height:44px}.groups{max-height:55vh;overflow:auto}.qr img{width:min(78vw,280px)}input,textarea,select{font-size:16px;min-height:44px}.link .row{display:grid;grid-template-columns:1fr 1fr}.link .row button{width:100%;min-height:44px}.checks{grid-template-columns:1fr}.modal{padding:8px}.modal-card{max-height:94vh}.modal-head{padding:12px}.modal-body{padding:10px;max-height:82vh}.all-groups{grid-template-columns:1fr}.all-group{flex-direction:column;align-items:stretch}.all-group button{width:100%;min-height:44px}.logs{height:220px}.notice{position:relative;z-index:1000}.accountPanel,.panel{overflow-wrap:anywhere}}
+.presence-dot{display:inline-block;width:11px;height:11px;border-radius:50%;flex:0 0 11px;box-shadow:0 0 0 2px rgba(255,255,255,.05)}
+.presence-online{background:#22c55e;box-shadow:0 0 8px rgba(34,197,94,.45)}
+.presence-offline{background:#ef4444;box-shadow:0 0 8px rgba(239,68,68,.25)}
+.account-user-row{flex-direction:row!important;align-items:center!important}
+@media(max-width:560px){.account-user-row{flex-direction:column!important;align-items:stretch!important}.account-user-row>button{width:100%}}
+.random-box{margin:10px 0;padding:12px;border:1px solid #26344d;border-radius:10px;background:#0d1524}.modal{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:50;display:flex;align-items:center;justify-content:center;padding:20px}.modal-card{width:min(1000px,96vw);max-height:90vh;overflow:hidden;background:#111b2d;border:1px solid #34445c;border-radius:15px;box-shadow:0 20px 60px rgba(0,0,0,.5)}.modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:15px 18px;border-bottom:1px solid #263653}.modal-body{padding:12px 18px;max-height:75vh;overflow:auto}.all-groups{display:grid;grid-template-columns:1fr 1fr;gap:8px}.all-group{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px;border:1px solid #263653;border-radius:10px;background:#0b1423}.all-group small{display:block;color:#9eb0ca}.all-group .name{font-weight:700}@media(max-width:700px){.all-groups{grid-template-columns:1fr}}.checks{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}.checks label{font-size:13px}.hidden{display:none!important} .presence-dot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:0 0 10px;box-shadow:0 0 0 2px rgba(255,255,255,.05)}
+.presence-online{background:#22c55e;box-shadow:0 0 8px rgba(34,197,94,.45)}
+.presence-offline{background:#ef4444;box-shadow:0 0 8px rgba(239,68,68,.25)}
+.account-user-row{display:block!important}
+.account-user-line{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%}
+.account-user-name{display:flex;align-items:center;gap:7px;min-width:0;font-weight:800}
+.account-user-status{font-weight:800;white-space:nowrap}
+.status-online{color:#22c55e}
+.status-offline{color:#ef4444}
+@media(max-width:560px){.account-user-line{gap:8px}.account-user-status{font-size:14px}.account-user-row>button{width:100%;margin-top:8px}}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+<div class="row" style="justify-content:space-between"><div><div class="title">⚙️ RegulOS <span class="sub">v12.11.0</span></div><div class="sub">Links, programação, histórico e grupos</div></div><div class="row"><span id="accountInfo" class="badge neutral">...</span><button onclick="logoutRegulos()">🚪 Sair</button></div></div>
+<div class="actions">
+<button class="primary" onclick="refreshAll()">🔄 Atualizar</button>
+<button onclick="apiAction('/api/reconectar')">🔌 Reconectar</button>
+<button onclick="apiAction('/api/desconectar')">⛔ Desconectar</button>
+<button onclick="openAllGroups()">👥 Grupos</button>
+<button class="red" onclick="novoQR()">📱 Novo QR</button>
+</div>
+</div></header>
+
+<main class="wrap">
+<div class="cards">
+<div class="card metric"><small>WhatsApp</small><b id="conn">...</b><span id="number" class="muted">Número: —</span></div>
+<div class="card metric"><small>Mensagens hoje</small><b id="today">0</b></div>
+<div class="card metric"><small>Grupos</small><b id="groupCount">0</b><span id="allowed" class="muted">0 permitidos</span></div>
+<div class="card metric"><small>Links</small><b id="linkCount">0</b></div>
+</div>
+
+<div class="grid">
+<section>
+<div class="panel qr">
+<h2>📷 Conexão</h2>
+<div id="connStatus" class="statusline">Aguardando...</div>
+<div id="qrBox" class="qr hidden"><p>Escaneie com o WhatsApp:</p><img id="qrImg" alt="QR Code"></div>
+<div id="numberBig" class="statusline" style="margin-top:8px">Número conectado: —</div>
+</div>
+
+<div class="panel" style="margin-top:14px">
+<h2>💬 Enviar mensagem</h2>
+<div class="muted">A mensagem é enviada somente aos grupos que estiverem <b>Ligados</b>.</div>
+<textarea id="message" placeholder="Digite sua mensagem..."></textarea>
+<div class="row" style="margin-top:8px"><button class="green" onclick="sendMessage()">📤 Enviar mensagem</button><span id="sendResult" class="muted"></span></div>
+</div>
+
+<div class="panel" style="margin-top:14px">
+<h2>📚 Histórico de links enviados</h2>
+<div class="row" style="justify-content:space-between;align-items:center">
+ <div class="muted">Aqui ficam somente os links que já foram concluídos e arquivados. Este painel é apenas para controle interno.</div>
+ <button class="red" onclick="clearLinkHistory()">🗑️ Limpar histórico</button>
+</div>
+<div class="muted" style="margin-top:6px">⚠️ O histórico também é apagado quando você encerra a sessão, usa <b>Desconectar</b> ou gera um novo QR.</div>
+<div id="linkHistory" style="margin-top:10px">Carregando histórico...</div>
+</div>
+
+<div class="panel" style="margin-top:14px">
+<div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:0">⚠️ Links com falha</h2><button class="red" onclick="clearLinkFailures()">🗑️ Limpar falhas</button></div>
+<div class="muted">Se o envio falhar ou a imagem não puder ser obtida, o link aparece aqui. <b>Reenviar</b> tenta novamente. <b>Editar</b> abre o Gerenciador de Links com os dados preenchidos.</div>
+<div id="linkFailures" style="margin-top:10px">Carregando falhas...</div>
+</div>
+</section>
+
+<aside>
+<div class="panel">
+<div class="row" style="justify-content:space-between"><div><h2>🔗 Gerenciador de links</h2><div class="muted">Crie, programe e acompanhe cada envio. A fila continua do último link concluído.</div></div><button class="green" onclick="showForm()">+ Adicionar link</button></div>
+<div id="linkForm" class="hidden">
+<label>Nome do link <span class="muted">(somente para registro no painel)</span></label><input id="lnome" placeholder="Ex.: Impressora Epson L3250">
+<label>Link do produto</label><input id="lurl" placeholder="https://...">
+<label>URL da imagem <span class="muted">(opcional)</span></label><input id="limagemUrl" placeholder="https://site.com/imagem.jpg">
+<div class="muted" style="margin:6px 0 10px">🖼️ Escolha: imagem automática ou informe uma URL manual. Se a imagem obrigatória não puder ser obtida, o envio irá para <b>Links com falha</b>.</div>
+<label>Mensagem personalizada <span class="muted">(opcional)</span></label><textarea id="lmensagem" placeholder="Texto que acompanhará a oferta"></textarea>
+<div class="muted" style="margin:6px 0 10px">🤖 O RegulOS vai puxar automaticamente o <b>título do produto</b> do link e juntar com a mensagem aleatória escolhida.</div>
+<div class="two"><div><label>Data</label><input id="ldata" type="date"></div><div><label>Horário</label><input id="lhorario" type="time"></div></div>
+<div class="two"><div><label>Repetição</label><select id="lrep"><option value="uma_vez">Uma vez</option><option value="diariamente">Diariamente</option><option value="semanalmente">Semanalmente</option></select></div><div><label>Intervalo mínimo entre grupos (s)</label><input id="lmin" type="number" min="1" value="2"></div></div>
+<label><input id="lativo" type="checkbox" checked style="width:auto"> Ativar este link</label>
+<div class="two"><div><label><input id="limagem" type="checkbox" checked style="width:auto"> 🖼️ Buscar imagem automaticamente</label></div><div><label><input id="lrandom" type="checkbox" onchange="toggleRandomBox()" style="width:auto"> ✍️ Usar mensagem aleatória</label></div></div>
+<div id="randomMessages" class="random-box hidden">
+  <div class="row" style="justify-content:space-between">
+    <div class="muted">Selecione as mensagens que o bot poderá sortear:</div>
+    <label style="margin:0"><input id="randomAll" type="checkbox" onchange="toggleAllRandom(this.checked)" style="width:auto"> ☑️ Selecionar todas</label>
+  </div>
+  <div class="checks">
+    <label><input class="rmsg" type="checkbox" value="🔥 Oferta do dia!" style="width:auto"> 🔥 Oferta do dia!</label>
+    <label><input class="rmsg" type="checkbox" value="🛍️ Achadinho do dia!" style="width:auto"> 🛍️ Achadinho do dia!</label>
+    <label><input class="rmsg" type="checkbox" value="💰 Preço especial!" style="width:auto"> 💰 Preço especial!</label>
+    <label><input class="rmsg" type="checkbox" value="👀 Olha esse achado!" style="width:auto"> 👀 Olha esse achado!</label>
+    <label><input class="rmsg" type="checkbox" value="⭐ Destaque do dia!" style="width:auto"> ⭐ Destaque do dia!</label>
+    <label><input class="rmsg" type="checkbox" value="🚨 Oferta imperdível!" style="width:auto"> 🚨 Oferta imperdível!</label>
+    <label><input class="rmsg" type="checkbox" value="😍 Vale a pena conferir!" style="width:auto"> 😍 Vale a pena conferir!</label>
+    <label><input class="rmsg" type="checkbox" value="💥 Aproveite essa oferta!" style="width:auto"> 💥 Aproveite essa oferta!</label>
+  </div>
+</div>
+<div class="row"><button class="green" onclick="saveLink()">💾 Salvar</button><button onclick="hideForm()">Fechar</button></div>
+<div id="formResult"></div>
+</div>
+<div id="links">Carregando links...</div>
+</div>
+
+<div class="panel" style="margin-top:14px">
+<h2>📅 Agendamentos</h2>
+<div class="muted">Aqui ficam somente os links que possuem envio agendado. A programação geral do bot fica em um painel separado.</div>
+<div id="schedules" style="margin-top:10px">Carregando agendamentos...</div>
+</div>
+
+<div class="panel" style="margin-top:14px">
+<h2>🤖 Programação do bot <span id="windowBadge" class="badge neutral">...</span></h2>
+<div class="muted">Controla somente a janela geral em que o bot pode enviar. Escolha manualmente o início e a parada; nenhum horário é definido automaticamente.</div>
+<div class="two"><div><label>Horário liga</label><input id="botInicio" type="time"></div><div><label>Horário desliga</label><input id="botFim" type="time"></div></div>
+<label><input id="botAtivo" type="checkbox" style="width:auto"> Ativar programação do bot</label>
+<button class="primary" onclick="saveBotSchedule()">💾 Salvar programação</button>
+<div id="botResult" class="muted">Nenhum horário definido.</div>
+</div>
+
+<div class="panel" style="margin-top:14px">
+<div class="row" style="justify-content:space-between;align-items:center">
+  <div><h2 style="margin:0">👥 Gerenciador de grupos</h2><div class="muted">Os grupos ficam ocultos até você clicar no botão.</div></div>
+  <button class="primary" id="toggleGroupsBtn" onclick="toggleGroupsPanel()">👥 Mostrar todos os grupos</button>
+</div>
+<div id="groupsPanel" class="hidden" style="margin-top:12px">
+  <div class="row" style="align-items:center">
+    <input id="search" placeholder="🔎 Pesquisar grupo..." oninput="renderGroups()" style="flex:1">
+    <button onclick="updateGroups()">🔄 Atualizar grupos</button>
+  </div>
+  <div id="groups" class="groups" style="max-height:420px;overflow:auto;margin-top:10px">Carregando grupos...</div>
+</div>
+</div>
+
+<div class="panel" style="margin-top:14px">
+<h2>👤 Contas do RegulOS</h2>
+<div id="accountPanel" class="muted">Carregando conta...</div>
+</div>
+
+<div class="panel" style="margin-top:14px">
+<h2>📜 Logs</h2><div id="logs" class="logs"></div>
+</div>
+</aside>
+</div>
+</main>
+
+
+<script>
+let groups=[], editingId=null, lastGroupUiRefresh=0;
+function friendlyFetchError(e){
+ const m=String(e?.message||e||'');
+ if(/Failed to fetch|NetworkError|Load failed|fetch failed|ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_NETWORK/i.test(m)) return 'Servidor do RegulOS indisponível. Verifique se o npm.cmd start está em execução e tente novamente.';
+ return m || 'Falha de comunicação com o servidor.';
+}
+async function jfetch(url,opt={}){
+ let lastErr=null;
+ for(let tentativa=1;tentativa<=4;tentativa++){
+  try{
+   const r=await fetch(url,{cache:'no-store',...opt});
+   let d={};
+   try{d=await r.json()}catch{}
+   if(!r.ok) throw new Error(d.msg||`HTTP ${r.status}`);
+   return d;
+  }catch(e){
+   lastErr=new Error(friendlyFetchError(e));
+   if(tentativa<4) await new Promise(r=>setTimeout(r,600*tentativa));
+  }
+ }
+ throw lastErr||new Error('Falha de comunicação com o servidor.');
+}
+window.addEventListener('offline',()=>toast('📡 Celular/computador ficou sem conexão com a rede. O RegulOS tentará reconectar automaticamente.',true));
+window.addEventListener('online',()=>{toast('📡 Conexão restaurada. Atualizando o RegulOS...');refreshAll()});
+window.addEventListener('unhandledrejection',ev=>{
+ const msg=friendlyFetchError(ev.reason);
+ if(msg!==String(ev.reason?.message||ev.reason||'')) toast(msg,true);
+});
+async function apiAction(url){
+ try{const d=await jfetch(url,{method:url.includes('novo')?'POST':'POST'});toast(d.msg);setTimeout(refreshAll,400)}catch(e){toast(e.message,true)}
+}
+function toast(msg,err=false){console.log(msg);const el=document.createElement('div');el.className='notice '+(err?'error':'success');el.textContent=msg;document.body.prepend(el);setTimeout(()=>el.remove(),3500)}
+async function novoQR(){
+ if(!confirm('Isso remove a sessão atual e gera um QR Code para outro número. Continuar?'))return;
+ try{await jfetch('/api/novo-qr',{method:'POST'});toast('Sessão limpa. Aguardando novo QR...');startPolling(true)}catch(e){toast(e.message,true)}
+}
+let botScheduleDirty=false;
+let botScheduleInitialized=false;
+async function status(){
+ try{
+  const d=await jfetch('/api/status');
+  document.getElementById('conn').textContent=d.conectado?'🟢 Conectado':(d.temQR?'🟡 QR':'🔴 '+(d.status||'Desconectado'));
+  document.getElementById('connStatus').textContent=d.temQR?'📱 Escaneie o QR Code':d.status;
+  document.getElementById('number').textContent='Número: '+(d.numero||'—');
+  document.getElementById('numberBig').textContent='Número conectado: '+(d.numero||'—');
+  document.getElementById('groupCount').textContent=d.grupos||0;
+  document.getElementById('allowed').textContent=(d.permitidos||0)+' permitidos';
+  document.getElementById('linkCount').textContent=d.links||0;
+  document.getElementById('windowBadge').textContent=d.janela||'...';
+  document.getElementById('windowBadge').className='badge '+(d.janela==='dentro do horário'?'good':d.janela==='fora do horário'?'bad':'neutral');
+  // Não sobrescrever o que o usuário está digitando: status() roda em polling.
+  // Os campos só são sincronizados automaticamente antes da primeira edição ou
+  // depois que a programação foi salva.
+  if(!botScheduleDirty && !document.getElementById('botInicio').matches(':focus') && !document.getElementById('botFim').matches(':focus') && !document.getElementById('botAtivo').matches(':focus')){
+    document.getElementById('botInicio').value=d.programacao?.inicio||'';
+    document.getElementById('botFim').value=d.programacao?.fim||'';
+    document.getElementById('botAtivo').checked=d.programacao?.ativo===true;
+    botScheduleInitialized=true;
+  }
+  if(d.qr){document.getElementById('qrImg').src=d.qr;document.getElementById('qrBox').classList.remove('hidden')}else document.getElementById('qrBox').classList.add('hidden');
+ }catch(e){document.getElementById('connStatus').textContent=friendlyFetchError(e)}
+}
+async function refreshAll(){await status();await loadGroups();await loadLinks();await loadSchedules();await loadLinkHistory();await loadLinkFailures();await loadLogs();await loadDashboard()}
+let poll=null;let lastLinksUiRefresh=0;function startPolling(fast=false){if(poll)clearInterval(poll);poll=setInterval(async()=>{await status();const now=Date.now();if(now-lastGroupUiRefresh>5000)await loadGroups();if(now-lastLinksUiRefresh>3500 && document.getElementById('linkForm')?.classList.contains('hidden')){lastLinksUiRefresh=now;await loadLinks();await loadSchedules();await loadLinkHistory();}},fast?1200:3000);status()}
+async function loadGroups(){try{const d=await jfetch('/api/grupos');groups=d.grupos||[];lastGroupUiRefresh=Date.now();renderGroups();}catch(e){const box=document.getElementById('groups');if(!groups.length)box.innerHTML='<div class="muted errorText">'+esc(friendlyFetchError(e))+'</div>'}}
+function renderGroups(){
+ const q=document.getElementById('search').value.toLowerCase();
+ const box=document.getElementById('groups');box.innerHTML='';
+ groups.filter(g=>String(g.name).toLowerCase().includes(q)).forEach(g=>{
+  const on=g.config?.ativo!==false;
+  const el=document.createElement('div');el.className='group';
+  el.innerHTML=`<div><div class="name">${esc(g.name)}</div><small>${g.members||0} membros · ${g.id} ${g.allowed?'· permitido':''}</small></div>
+  <button class="toggle ${on?'on':'off'}">${on?'🟢 Ligado':'🔴 Desligado'}</button>`;
+  el.querySelector('button').onclick=()=>toggleGroup(g.id,!on);
+  box.appendChild(el);
+ });
+ if(!box.children.length)box.innerHTML='<div class="muted">Nenhum grupo carregado ainda. Clique em <b>🔄 Atualizar grupos</b> ou aguarde a sincronização automática.</div>';
+}
+async function toggleGroup(id,ativo){
+ try{await jfetch('/api/grupos/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,ativo})});const g=groups.find(x=>x.id===id);if(g)g.config.ativo=ativo;renderGroups()}catch(e){toast(e.message,true)}
+}
+async function updateGroups(){try{const d=await jfetch('/api/grupos/atualizar',{method:'POST'});groups=d.grupos||[];renderGroups();toast(d.msg)}catch(e){toast(e.message,true)}}
+
+function toggleGroupsPanel(){
+ const panel=document.getElementById('groupsPanel');
+ const btn=document.getElementById('toggleGroupsBtn');
+ const hidden=panel.classList.toggle('hidden');
+ if(hidden){btn.textContent='👥 Mostrar todos os grupos';}
+ else{btn.textContent='🙈 Ocultar grupos'; if(!groups.length)loadGroups();}
+}
+
+function openAllGroups(){
+  // Abre uma aba separada, nunca um painel abaixo do Gerenciador de grupos.
+  const url=new URL('/grupos',window.location.origin).href;
+  const tab=window.open(url,'_blank','noopener,noreferrer');
+  if(!tab) toast('O navegador bloqueou a nova aba. Permita pop-ups para o RegulOS.',true);
+}
+
+async function sendMessage(){
+ const message=document.getElementById('message').value.trim();if(!message)return toast('Digite uma mensagem.',true);
+ try{const d=await jfetch('/api/mensagem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message})});document.getElementById('sendResult').textContent=d.msg;document.getElementById('message').value='';await loadDashboard()}catch(e){const msg=friendlyFetchError(e);document.getElementById('sendResult').textContent=msg;toast(msg,true)}
+}
+function clearLinkForm(){
+ const ids=['lnome','lurl','limagemUrl','lmensagem','ldata','lhorario','lmin'];
+ ids.forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+ const rep=document.getElementById('lrep');if(rep)rep.value='uma_vez';
+ const ativo=document.getElementById('lativo');if(ativo)ativo.checked=true;
+ const imagem=document.getElementById('limagem');if(imagem)imagem.checked=true;
+ const random=document.getElementById('lrandom');if(random)random.checked=false;
+ document.querySelectorAll('.rmsg').forEach(c=>c.checked=false);
+ const randomAll=document.getElementById('randomAll');if(randomAll)randomAll.checked=false;
+ const result=document.getElementById('formResult');if(result)result.textContent='';
+ toggleRandomBox();
+}
+function showForm(){
+ const form=document.getElementById('linkForm');
+ form.classList.remove('hidden');
+ if(!editingId){
+   clearLinkForm();
+   document.getElementById('ldata').value=new Date().toISOString().slice(0,10);
+   document.getElementById('lmin').value='2';
+ }
+ toggleRandomBox();
+}
+function hideForm(){
+ document.getElementById('linkForm').classList.add('hidden');
+ editingId=null;
+ clearLinkForm();
+}
+async function saveLink(){
+ const get = id => document.getElementById(id);
+ const nome = get('lnome').value.trim();
+ const url = get('lurl').value.trim();
+ const data = get('ldata').value;
+ const horario = get('lhorario').value;
+ const repeticao = get('lrep').value;
+ const intervalo = Math.max(1, Number(get('lmin').value || 2));
+ const ativo = get('lativo').checked;
+ const imagemAutomatica = get('limagem').checked;
+ const randomEnabled = get('lrandom').checked;
+ const randomSelected = [...document.querySelectorAll('.rmsg:checked')].map(x=>x.value).filter(Boolean);
+ const result = get('formResult');
+ if(!nome) return toast('Digite o nome de registro do link.',true);
+ if(!url) return toast('Digite o link do produto.',true);
+ try{ new URL(url); }catch{ return toast('O link do produto não é uma URL válida.',true); }
+ if(!data) return toast('Escolha a data do envio.',true);
+ if(!horario) return toast('Escolha o horário do envio.',true);
+ if(randomEnabled && !randomSelected.length) return toast('Selecione pelo menos uma mensagem aleatória.',true);
+ const body={
+  nome,url,mensagem:'',data,horario,repeticao,
+  intervaloMin:intervalo,intervaloMax:intervalo,
+  ativo,imagemAutomatica,imagemUrl:get('limagemUrl').value.trim(),mensagem:get('lmensagem').value.trim(),rearmar:!!editingFailedId,
+  mensagensAleatorias:randomEnabled?randomSelected:[],
+  mensagemAleatoriaAtiva:randomEnabled
+ };
+ try{
+  const d=await jfetch(editingId?'/api/link-agendamentos/'+editingId:'/api/link-agendamentos',{
+   method:editingId?'PUT':'POST',
+   headers:{'Content-Type':'application/json'},
+   body:JSON.stringify(body)
+  });
+  if(!d.ok) throw new Error(d.msg||'Não foi possível salvar o link.');
+  if(result) result.textContent='✅ Link salvo com sucesso.';
+  toast(editingId?'Link atualizado.':'Link salvo com sucesso.');
+  hideForm();
+  await loadLinks();
+  await loadSchedules();
+ }catch(e){
+  if(result) result.textContent='❌ '+e.message;
+  toast(e.message,true);
+ }
+}
+function toggleAllRandom(checked){document.querySelectorAll('.rmsg').forEach(c=>c.checked=checked);}
+function syncRandomAll(){const all=[...document.querySelectorAll('.rmsg')];const box=document.getElementById('randomAll');if(box)box.checked=all.length>0&&all.every(c=>c.checked);}
+function toggleRandomBox(){document.getElementById('randomMessages').classList.toggle('hidden',!document.getElementById('lrandom').checked);if(!document.getElementById('lrandom').checked){document.querySelectorAll('.rmsg').forEach(c=>c.checked=false);const box=document.getElementById('randomAll');if(box)box.checked=false;}}
+document.addEventListener('change',e=>{if(e.target.classList?.contains('rmsg'))syncRandomAll();});
+document.getElementById('lrandom').addEventListener('change',toggleRandomBox);
+async function loadLinks(){
+ try{
+  let d;
+  try {
+    d=await jfetch('/api/link-agendamentos');
+  } catch(firstError) {
+    // Compatibilidade com versões antigas que ainda expõem /api/links.
+    const fallback=await jfetch('/api/links');
+    d={ok:true,agendamentos:Array.isArray(fallback.agendamentos)?fallback.agendamentos:(Array.isArray(fallback.links)?fallback.links:[])};
+  }
+  const items=Array.isArray(d.agendamentos)?d.agendamentos:[];
+  const box=document.getElementById('links'); box.innerHTML='';
+  if(!items.length){box.innerHTML='<div class="muted">Nenhum link programado.</div>';}
+  items.forEach(x=>{
+   const status=x.ativo?(x.status||'agendado'):'pausado'; const el=document.createElement('div'); el.className='link';
+   const last=x.lastRunAt?new Date(x.lastRunAt).toLocaleString('pt-BR'):'Nunca';
+   el.innerHTML=`<h3>${esc(x.nome)} <span class="badge ${x.ativo?'good':'bad'}">${x.ativo?'ativo':(x.status==='concluido'?'concluído':'pausado')}</span></h3>
+   <a>${esc(x.url)}</a><div class="stats">🏷️ Título: ${esc(x.tituloProduto||'será buscado no envio')}</div><div class="stats">📅 ${x.data} às ${x.horario} · ${x.repeticao} · ${status}</div>
+   <div class="stats">📨 Enviados: <b>${x.enviados||0}</b> · 🟢 Sucessos: <b>${x.sucessos||0}</b> · ❌ Erros: <b>${x.erros||0}</b> · ⏱️ Último: ${last}</div><div class="stats">🖼️ Imagem: ${x.imagemAutomatica===false?'desligada':(x.imagemStatus==='encontrada'?'encontrada':x.imagemStatus==='não encontrada'?'não encontrada — envio continua':'automática')}</div><div class="stats">${x.progressKey?'🔄 Em andamento — progresso salvo; continuará deste link.':(x.lastRunKey?'✅ Última execução concluída':'⏳ Aguardando execução')}</div>
+   <div class="row"><button onclick="editLink('${x.id}')">✏️ Editar</button><button onclick="toggleLink('${x.id}',${x.ativo})">${x.ativo?'⏸️ Pausar':'▶️ Ativar'}</button><button class="green" onclick="sendNow('${x.id}')">🚀 Enviar agora</button><button class="red" onclick="deleteLink('${x.id}')">🗑️ Excluir</button></div>`;
+   box.appendChild(el);
+  });
+ }catch(e){
+   document.getElementById('links').innerHTML='<div class="muted">⚠️ Não foi possível consultar os links. Verifique se existe apenas uma instância do RegulOS aberta e clique em Atualizar.</div><button onclick="loadLinks()">🔄 Tentar novamente</button>';
+ }
+}
+async function loadSchedules(){
+ try{
+  const d=await jfetch('/api/link-agendamentos');
+  const box=document.getElementById('schedules');
+  if(!box)return;
+  box.innerHTML='';
+  if(!d.agendamentos.length){box.innerHTML='<div class="muted">Nenhum link agendado.</div>';return;}
+  d.agendamentos.forEach(x=>{
+   const ativo=x.ativo===true;
+   const status=x.status==='concluido'?'concluído':(ativo?'ativo':'pausado');
+   const el=document.createElement('div');
+   el.className='link';
+   el.innerHTML=`<h3>📅 ${esc(x.nome)} <span class="badge ${ativo?'good':'bad'}">${status}</span></h3>
+   <div class="stats">🗓️ ${esc(x.data||'—')} às ${esc(x.horario||'—')} · ${esc(x.repeticao||'uma_vez')}</div>
+   <div class="stats">📨 ${x.enviados||0} enviados · 🟢 ${x.sucessos||0} sucesso(s) · ❌ ${x.erros||0} erro(s)</div>
+   <div class="row"><button onclick="editLink('${x.id}')">✏️ Editar</button><button onclick="toggleLink('${x.id}',${ativo})">${ativo?'⏸️ Pausar':'▶️ Ativar'}</button><button class="red" onclick="deleteLink('${x.id}')">🗑️ Excluir</button></div>`;
+   box.appendChild(el);
+  });
+ }catch(e){const box=document.getElementById('schedules');if(box)box.textContent='Erro ao carregar agendamentos: '+e.message;}
+}
+
+async function clearLinkHistory(){
+ if(!confirm('Apagar todo o histórico de links enviados? Esta ação não pode ser desfeita.')) return;
+ try{ const d=await jfetch('/api/link-historico',{method:'DELETE'}); toast(d.msg); await loadLinkHistory(); }
+ catch(e){ toast(e.message,true); }
+}
+async function deleteLinkHistory(id){
+ if(!confirm('Excluir este registro do histórico?')) return;
+ try{ const d=await jfetch('/api/link-historico/'+encodeURIComponent(id),{method:'DELETE'}); toast(d.msg); await loadLinkHistory(); }
+ catch(e){ toast(e.message,true); }
+}
+async function loadLinkHistory(){
+ const box=document.getElementById('linkHistory');
+ if(!box)return;
+ try{
+  box.innerHTML='<div class="muted">🔄 Carregando histórico...</div>';
+  const d=await jfetch('/api/link-historico'); box.innerHTML='';
+  if(!d.historico.length){box.innerHTML='<div class="muted">Nenhum link enviado e arquivado ainda.</div>';return}
+  d.historico.slice(0,30).forEach(x=>{
+   const el=document.createElement('div'); el.className='link';
+   const done=x.concluidoAt?new Date(x.concluidoAt).toLocaleString('pt-BR'):'—';
+   const dur=x.lastDurationMs?`${Math.round(x.lastDurationMs/1000)}s`:'—';
+   el.innerHTML=`<h3>📦 ${esc(x.nome)} <span class="badge good">enviado</span></h3>
+   <a>${esc(x.url)}</a><div class="stats">🏷️ ${esc(x.tituloProduto||'Título não registrado')}</div>
+   <div class="stats">📅 Programado: ${esc(x.data)} às ${esc(x.horario)} · ${esc(x.repeticao||'uma_vez')}</div>
+   <div class="stats">📨 ${x.enviados||0} enviados · 🟢 ${x.sucessos||0} sucesso(s) · ❌ ${x.erros||0} erro(s) · ⏱️ duração: ${dur}</div>
+   <div class="stats">✅ Concluído em: ${done}</div>
+   <div class="row"><button class="red" onclick="deleteLinkHistory('${esc(x.id)}')">🗑️ Excluir registro</button></div>`;
+   box.appendChild(el);
+  });
+ }catch(e){box.innerHTML='<div class="muted">⚠️ Não foi possível carregar o histórico agora. Tentando novamente...</div>';setTimeout(loadLinkHistory,3000)}
+}
+async function editLink(id){const d=await jfetch('/api/link-agendamentos');const x=d.agendamentos.find(a=>a.id===id);if(!x)return;editingId=id;showForm();lnome.value=x.nome||'';lurl.value=x.url||'';limagemUrl.value=x.imagemUrl||'';lmensagem.value=x.mensagem||'';ldata.value=x.data||'';lhorario.value=x.horario||'';lrep.value=x.repeticao||'uma_vez';lmin.value=x.intervaloMin||2;lativo.checked=x.ativo===true;limagem.checked=x.imagemAutomatica!==false;lrandom.checked=x.mensagemAleatoriaAtiva===true || (Array.isArray(x.mensagensAleatorias)&&x.mensagensAleatorias.length>0);document.querySelectorAll('.rmsg').forEach(c=>c.checked=Array.isArray(x.mensagensAleatorias)&&x.mensagensAleatorias.includes(c.value));toggleRandomBox();syncRandomAll()}
+async function editFailedLink(id){try{const d=await jfetch('/api/link-falhas');const f=d.falhas.find(x=>String(x.id)===String(id));if(!f)return;editingId=f.agendamentoId;editingFailedId=f.id;showForm();lnome.value=f.nome||'';lurl.value=f.url||'';limagemUrl.value=f.imagemUrl||'';lmensagem.value=f.mensagem||'';ldata.value=f.data||new Date().toISOString().slice(0,10);lhorario.value=f.horario||'';lrep.value=f.repeticao||'uma_vez';lmin.value=f.intervaloMin||2;lativo.checked=true;limagem.checked=f.imagemAutomatica!==false;document.getElementById('formResult').textContent='⚠️ Link recuperado das falhas. Corrija e salve para programar novamente.';toggleRandomBox();}catch(e){toast(e.message,true)}}
+async function resendFailed(id){try{const d=await jfetch('/api/link-falhas/'+encodeURIComponent(id)+'/reenviar',{method:'POST'});toast(d.msg,!d.ok);await loadLinkHistory();await loadLinkFailures();await loadLinks();await loadSchedules();}catch(e){toast(e.message,true)}}
+async function clearLinkFailures(){if(!confirm('Apagar todos os links com falha?'))return;try{const d=await jfetch('/api/link-falhas',{method:'DELETE'});toast(d.msg);await loadLinkFailures();}catch(e){toast(e.message,true)}}
+async function loadLinkFailures(){const box=document.getElementById('linkFailures');if(!box)return;try{const d=await jfetch('/api/link-falhas');box.innerHTML='';if(!d.falhas.length){box.innerHTML='<div class="muted">Nenhum link com falha.</div>';return;}d.falhas.forEach(f=>{const el=document.createElement('div');el.className='link';el.innerHTML=`<h3>⚠️ ${esc(f.nome)} <span class="badge bad">falhou</span></h3><a>${esc(f.url)}</a><div class="stats">Grupo: ${esc(f.grupoId||'—')}</div><div class="stats">Motivo: ${esc(f.erro||'Falha não informada')}</div><div class="row"><button class="green" onclick="resendFailed('${esc(f.id)}')">↻ Reenviar</button><button onclick="editFailedLink('${esc(f.id)}')">✏️ Editar</button></div>`;box.appendChild(el)});}catch(e){box.innerHTML='<div class="muted errorText">Não foi possível carregar as falhas.</div>'}}
+async function toggleLink(id,ativo){try{await jfetch('/api/link-agendamentos/'+id+'/toggle',{method:'POST'});await loadLinks();await loadSchedules()}catch(e){toast(e.message,true)}}
+async function sendNow(id){try{const d=await jfetch('/api/link-agendamentos/'+id+'/enviar-agora',{method:'POST'});toast(d.msg);await loadLinks();await loadSchedules()}catch(e){toast(e.message,true)}}
+async function deleteLink(id){if(!confirm('Excluir este agendamento?'))return;try{await jfetch('/api/link-agendamentos/'+id,{method:'DELETE'});await loadLinks();await loadSchedules()}catch(e){toast(e.message,true)}}
+async function saveBotSchedule(){
+ try{
+  const inicio=botInicio.value.trim();
+  const fim=botFim.value.trim();
+  const ativo=botAtivo.checked;
+  if(ativo && (!inicio||!fim)){toast('Escolha o horário de início e o horário de parada.',true);return;}
+  const d=await jfetch('/api/programacao',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({inicio,fim,ativo})});
+  botScheduleDirty=false;
+  botScheduleInitialized=true;
+  document.getElementById('botInicio').value=d.programacao?.inicio||'';
+  document.getElementById('botFim').value=d.programacao?.fim||'';
+  document.getElementById('botAtivo').checked=d.programacao?.ativo===true;
+  document.getElementById('botResult').textContent=d.janela;
+  toast(ativo?'Programação salva.':'Programação desativada.');
+  await status();
+ }catch(e){toast(e.message,true)}
+}
+['botInicio','botFim','botAtivo'].forEach(id=>{
+ const el=document.getElementById(id);
+ el.addEventListener('input',()=>{botScheduleDirty=true});
+ el.addEventListener('change',()=>{botScheduleDirty=true});
+});
+async function loadLogs(){try{const d=await jfetch('/api/logs');document.getElementById('logs').textContent=(d.logs||[]).join('\\n')}catch{}}
+async function loadDashboard(){try{const d=await jfetch('/api/dashboard');document.getElementById('today').textContent=d.hoje||0}catch{}}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
+refreshAll();startPolling(false);
+
+async function loadAccount(){
+ try{
+  const me=await jfetch('/api/auth/me');
+  const u=me.usuario||{};
+  document.getElementById('accountInfo').textContent=(u.admin?'👑 ':'👤 ')+(u.usuario||'Conta');
+  let html=`<div style="margin-top:2px"><b>Usuário atual:</b> ${esc(u.usuario||'')} ${u.admin?'<span class="badge good">Administrador</span>':''}</div>`;
+  if(u.admin){
+    const d=await jfetch('/api/usuarios');
+    html+=`<div style="margin-top:14px"><b>Usuários com acesso ao mesmo RegulOS</b></div>
+    <div id="userList" style="margin-top:8px">`;
+    (d.usuarios||[]).forEach(x=>{
+      const online=Boolean(x.online);
+      html+=`<div class="group account-user-row">
+        <div class="account-user-line">
+          <div class="account-user-name">
+            <span class="presence-dot ${online?'presence-online':'presence-offline'}" title="${online?'Online':'Offline'}"></span>
+            <span>${esc(x.usuario)}</span>
+            ${x.admin?'<span class="badge good">Administrador</span>':''}
+          </div>
+          <span class="account-user-status ${online?'status-online':'status-offline'}">${online?'Online':'Offline'}</span>
+        </div>
+        ${x.id!==u.id?`<button class="red" onclick="deleteUser('${x.id}')">Excluir</button>`:''}
+      </div>`;
+    });
+    html+=`</div>
+      <div class="two" style="margin-top:12px">
+        <input id="newUserLogin" autocomplete="off" placeholder="Nome de usuário">
+        <input id="newUserPass" type="password" autocomplete="new-password" placeholder="Senha (mín. 6)">
+        <button class="green" onclick="createUser()">➕ Criar usuário</button>
+      </div>`;
+  }
+  document.getElementById('accountPanel').innerHTML=html;
+ }catch(e){document.getElementById('accountPanel').textContent=e.message}
+}
+async function createUser(){
+ const usuario=document.getElementById('newUserLogin')?.value||'',senha=document.getElementById('newUserPass')?.value||'';
+ try{
+  await jfetch('/api/usuarios',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario,senha})});
+  toast('Usuário criado. Ele poderá entrar e usar o mesmo WhatsApp.');
+  loadAccount();
+ }catch(e){toast(e.message,true)}
+}
+async function deleteUser(id){if(!confirm('Excluir este usuário?'))return;try{await jfetch('/api/usuarios/'+id,{method:'DELETE'});loadAccount()}catch(e){toast(e.message,true)}}
+async function logoutRegulos(){if(!confirm('Sair da conta atual?'))return;try{await jfetch('/api/auth/logout',{method:'POST'});location.href='/login'}catch(e){toast(e.message,true)}}
+
+async function accountHeartbeat(){
+  try{ await fetch('/api/auth/heartbeat',{method:'POST',cache:'no-store',credentials:'same-origin'}); }
+  catch{}
+}
+setInterval(accountHeartbeat,15000);
+function markPresenceOffline(){
+  try{
+    if(navigator.sendBeacon){
+      navigator.sendBeacon('/api/auth/presence-offline',new Blob(['{}'],{type:'application/json'}));
+    }else{
+      fetch('/api/auth/presence-offline',{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},body:'{}'});
+    }
+  }catch{}
+}
+window.addEventListener('pagehide',markPresenceOffline);
+
+window.addEventListener('load',loadAccount);
+</script>
+</body>
+</html>

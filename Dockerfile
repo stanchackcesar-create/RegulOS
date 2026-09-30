@@ -11,11 +11,9 @@ ENV REGULOS_HOST=0.0.0.0
 ENV REGULOS_PORT=3000
 
 COPY package*.json ./
-
 RUN npm install --omit=dev --no-audit --no-fund
 
 COPY . .
-
 RUN mkdir -p /app/storage/data /app/storage/auth
 
 EXPOSE 3000

@@ -1,0 +1,16 @@
+{
+  "name": "RegulOS 12.11.0",
+  "short_name": "RegulOS",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#080e1a",
+  "theme_color": "#0ea5e9",
+  "icons": [
+    {
+      "src": "/icons/regulos-mark.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

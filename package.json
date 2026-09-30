@@ -1,17 +1,15 @@
 {
   "name": "regulos",
   "version": "12.11.0",
-  "description": "RegulOS - painel WhatsApp com sincronização automática de grupos, fila persistente, imagens e mensagens aleatórias",
+  "description": "RegulOS - versão Cloud para Railway, com até 2 usuários simultâneos e sessão WhatsApp persistente.",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js",
-    "start:local": "node src/supervisor.js"
+    "start": "node src/server.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",
     "express": "^4.21.2",
     "pino": "^9.6.0",
-    "qrcode": "^1.5.4",
-    "playwright": "^1.55.0"
+    "qrcode": "^1.5.4"
   }
 }

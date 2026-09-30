@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RegulOS — Entrar</title>
+<style>
+:root{color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:#070d18;color:#f4f7ff;font-family:Arial,Helvetica,sans-serif;display:flex;align-items:center;justify-content:center;padding:24px}
+.card{width:min(470px,100%);background:#111c30;border:1px solid #263653;border-radius:18px;padding:28px;box-shadow:0 16px 50px #0005}
+h1{margin:0 0 18px;font-size:28px}
+p{color:#b9c9e5;line-height:1.45}
+label{display:block;margin:16px 0 7px;color:#c9d7ef}
+input{width:100%;padding:14px;border-radius:10px;border:1px solid #334766;background:#08111f;color:#fff;font-size:16px;outline:none}
+input:focus{border-color:#4b8cff}
+button{width:100%;margin-top:18px;padding:14px;border:0;border-radius:10px;background:#20c45a;color:#06120a;font-size:16px;font-weight:800;cursor:pointer}
+button:hover{filter:brightness(1.05)}
+.msg{margin-top:14px;min-height:20px;color:#ff8f8f}
+.hidden{display:none}
+.badge{display:inline-block;padding:5px 9px;border-radius:999px;background:#263a5b;color:#dbe7ff;font-size:12px}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1 id="title">🔐 Entrar no RegulOS</h1>
+  <p id="description">Use o nome de usuário e a senha cadastrados pelo administrador.</p>
+
+  <form id="loginForm">
+    <label for="u">Nome de usuário</label>
+    <input id="u" name="username" autocomplete="username" required>
+
+    <label for="s">Senha</label>
+    <input id="s" name="password" type="password" autocomplete="current-password" required>
+
+    <button type="submit">🔓 Entrar</button>
+  </form>
+
+  <form id="setupForm" class="hidden">
+    <p><span class="badge">Primeiro acesso</span></p>
+    <p>Não existe nenhum usuário ainda. Crie a primeira conta, que será o administrador do RegulOS.</p>
+
+    <label for="su">Nome de usuário</label>
+    <input id="su" autocomplete="username" required>
+
+    <label for="ss">Senha</label>
+    <input id="ss" type="password" autocomplete="new-password" minlength="6" required>
+
+    <button type="submit">👑 Criar administrador</button>
+  </form>
+
+  <div id="msg" class="msg"></div>
+</div>
+<script>
+async function status(){
+  const r=await fetch('/api/auth/status',{cache:'no-store'});
+  const d=await r.json();
+  if(d.ok && d.configurado){
+    document.getElementById('loginForm').classList.remove('hidden');
+    document.getElementById('setupForm').classList.add('hidden');
+  }else{
+    document.getElementById('loginForm').classList.add('hidden');
+    document.getElementById('setupForm').classList.remove('hidden');
+    document.getElementById('title').textContent='🚀 Primeiro acesso';
+    document.getElementById('description').textContent='Crie a primeira conta administradora do RegulOS.';
+  }
+}
+async function send(url,body){
+  const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body),credentials:'same-origin'});
+  const d=await r.json().catch(()=>({ok:false,msg:'Resposta inválida do servidor.'}));
+  if(!r.ok||!d.ok) throw new Error(d.msg||'Não foi possível concluir a operação.');
+  return d;
+}
+document.getElementById('loginForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const msg=document.getElementById('msg'); msg.textContent='';
+  try{
+    await send('/api/auth/login',{usuario:document.getElementById('u').value,senha:document.getElementById('s').value});
+    location.href='/';
+  }catch(err){msg.textContent=err.message}
+});
+document.getElementById('setupForm').addEventListener('submit',async e=>{
+  e.preventDefault();
+  const msg=document.getElementById('msg'); msg.textContent='';
+  try{
+    await send('/api/auth/setup',{usuario:document.getElementById('su').value,senha:document.getElementById('ss').value});
+    location.href='/';
+  }catch(err){msg.textContent=err.message}
+});
+status().catch(e=>document.getElementById('msg').textContent=e.message);
+</script>
+</body>
+</html>

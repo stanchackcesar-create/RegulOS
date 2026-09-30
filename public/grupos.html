@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>RegulOS — Todos os grupos</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#080e1a;color:#eef3ff;font-family:Segoe UI,Arial,sans-serif}.wrap{max-width:1200px;margin:auto;padding:24px}.head{background:#111b2d;border:1px solid #263653;border-radius:15px;padding:18px;margin-bottom:14px}.title{font-size:27px;font-weight:800}.muted{color:#9eb0ca}.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}button{border:0;border-radius:9px;padding:10px 15px;font-weight:700;cursor:pointer;background:#34445c;color:#fff}button:hover{filter:brightness(1.08)}button.primary{background:#3d83f6}input{width:100%;background:#07101f;color:#eef3ff;border:1px solid #34445c;border-radius:9px;padding:11px;font:inherit}.groups{display:grid;grid-template-columns:1fr 1fr;gap:9px}.group{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px;border:1px solid #263653;border-radius:11px;background:#0b1423}.name{font-weight:800}.small{display:block;color:#9eb0ca;font-size:13px;margin-top:3px}.toggle{min-width:130px}.on{background:#116b38}.off{background:#652326}.notice{padding:10px;border-radius:9px;background:#19273e;margin-top:10px}.error{background:#481c27;color:#ffd3d8}@media(max-width:800px){.groups{grid-template-columns:1fr}.group{align-items:flex-start;flex-direction:column}.toggle{width:100%}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <div class="title">👥 Todos os grupos</div>
+    <div class="muted">Painel separado do Gerenciador de grupos. Aqui você pode visualizar e controlar todos os grupos.</div>
+    <div class="row">
+      <input id="search" placeholder="🔎 Pesquisar grupo..." oninput="render()">
+      <button class="primary" onclick="load()">🔄 Atualizar grupos</button>
+      <button onclick="window.close()">✖ Fechar aba</button>
+    </div>
+    <div id="summary" class="muted" style="margin-top:10px">Carregando...</div>
+  </div>
+  <div id="notice"></div>
+  <div id="groups" class="groups">Carregando grupos...</div>
+</div>
+<script>
+let groups=[];
+function friendlyFetchError(e){const m=String(e?.message||e||'');if(/Failed to fetch|NetworkError|Load failed|fetch failed|ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_NETWORK/i.test(m))return 'Servidor do RegulOS indisponível. Verifique se o programa está em execução e tente novamente.';return m||'Falha de comunicação com o servidor.';}
+async function api(url,opt={}){let e;for(let i=0;i<4;i++){try{const r=await fetch(url,{cache:'no-store',...opt});let d={};try{d=await r.json()}catch{};if(!r.ok)throw Error(d.msg||`HTTP ${r.status}`);return d}catch(x){e=new Error(friendlyFetchError(x));if(i<3)await new Promise(r=>setTimeout(r,600*(i+1)))}}throw e||new Error('Falha de comunicação com o servidor.')}
+async function load(){
+ const box=document.getElementById('groups');box.textContent='Carregando grupos...';
+ try{const d=await api('/api/grupos');groups=d.grupos||[];render();notice('');}
+ catch(e){notice(friendlyFetchError(e),true);box.textContent='Não foi possível carregar os grupos.'}
+}
+function notice(t,err=false){const n=document.getElementById('notice');n.className=err?'notice error':'notice';n.textContent=t;n.style.display=t?'block':'none'}
+function render(){
+ const q=(document.getElementById('search').value||'').toLowerCase().trim();
+ const list=groups.filter(g=>String(g.name||'').toLowerCase().includes(q)||String(g.id||'').toLowerCase().includes(q));
+ const on=list.filter(g=>g.config?.ativo!==false).length;
+ document.getElementById('summary').textContent=`${groups.length} grupo(s) carregado(s) · ${groups.filter(g=>g.config?.ativo!==false).length} ligado(s) · ${groups.filter(g=>g.config?.ativo===false).length} desligado(s)`;
+ const box=document.getElementById('groups');box.innerHTML='';
+ if(!list.length){box.innerHTML='<div class="muted">Nenhum grupo encontrado.</div>';return}
+ list.forEach(g=>{const active=g.config?.ativo!==false;const el=document.createElement('div');el.className='group';el.innerHTML=`<div><div class="name">${esc(g.name)}</div><span class="small">${g.members||0} membros · ${esc(g.id)}${g.allowed?' · permitido':''}</span></div><button class="toggle ${active?'on':'off'}">${active?'🟢 Ligado':'🔴 Desligado'}</button>`;el.querySelector('button').onclick=async()=>{try{await api('/api/grupos/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:g.id,ativo:!active})});g.config=g.config||{};g.config.ativo=!active;render()}catch(e){notice(friendlyFetchError(e),true)}};box.appendChild(el)})
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+load();
+</script>
+</body>
+</html>

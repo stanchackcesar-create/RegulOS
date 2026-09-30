@@ -1,47 +1,26 @@
-# RegulOS Cloud — Railway
+# RegulOS v12.11.0 — Cloud Railway
 
-Esta versão mantém o front-end e o back-end do RegulOS juntos em um único serviço Node.js no Railway.
+Versão preparada para execução no Railway.
 
-## O que muda
-- O painel HTML é servido pelo próprio Node.js.
-- Baileys roda no servidor continuamente.
-- A sessão do WhatsApp fica persistida em um Volume do Railway.
-- Dados, usuários, agendamentos e histórico ficam persistidos no mesmo Volume.
-- Login por usuário e senha.
-- Primeiro acesso cria a conta administradora.
-- O administrador pode criar usuários adicionais dentro do painel.
-- Todos os usuários autorizados usam a mesma instância do WhatsApp.
+## Estrutura
+- `src/server.js` — servidor principal
+- `src/supervisor.js` — supervisor para uso local
+- `public/` — painel web
+- `Dockerfile` — imagem de produção
+- `railway.json` — configuração Railway
+- `package.json` — dependências e inicialização
 
-## Deploy recomendado
-1. Crie um projeto no Railway.
-2. Faça deploy deste diretório/repositório usando o Dockerfile.
-3. Gere um domínio público em Networking.
-4. Crie um Volume para o serviço e monte em `/app/storage`.
-5. Aguarde o deploy ficar saudável.
-6. Abra o domínio público. No primeiro acesso, crie o usuário administrador.
-7. Entre no painel e conecte o WhatsApp pelo QR Code.
-8. Crie os demais usuários dentro do painel pelo bloco de contas.
+## Inicialização Cloud
+O Railway executa `node src/server.js` na porta definida por `PORT`.
 
 ## Persistência
-O código usa:
-- `/app/storage/data` para dados do RegulOS.
-- `/app/storage/auth` para as credenciais da sessão do WhatsApp.
+Crie um Volume Railway montado em `/app/storage`.
+O RegulOS usa:
+- `/app/storage/data`
+- `/app/storage/auth`
 
-O Volume `/app/storage` é obrigatório se você quiser que a sessão do WhatsApp e os dados sobrevivam a reinícios/deploys.
+## Usuários
+A primeira conta criada é administradora. O administrador pode criar no máximo mais uma conta, totalizando 2 usuários.
 
-## Importante
-Não é necessário deixar o navegador aberto para o agendador funcionar. O agendador e a conexão com o WhatsApp são processos do servidor.
-
-## v12.8.0 — endurecimento cloud
-- Horário padrão da nuvem: `America/Sao_Paulo`, configurável por `REGULOS_TIMEZONE`.
-- O servidor bloqueia destinos internos na busca de título/imagem para reduzir risco de SSRF.
-- Há limite básico de tentativas de login por endereço de origem.
-- Operações críticas da sessão WhatsApp (`Reconectar`, `Desconectar`, `Novo QR` e `Deslogar`) ficam restritas ao administrador.
-- O script `start` usa o supervisor automático, que reinicia o servidor se ele cair.
-- `ABRIR_REGULOS.vbs` permite iniciar no Windows sem abrir manualmente PowerShell/CMD.
-
-## Dependências
-O pacote enviado não contém `package-lock.json`. Para produção, gere o lockfile em um ambiente com acesso ao npm e depois troque o Dockerfile para `npm ci --omit=dev`. Nesta revisão não foi inventado um lockfile, porque o ambiente de revisão não conseguiu baixá-lo do registry.
-
-## Imagem/título
-A extração HTTP continua sendo a primeira tentativa. Sites que dependem de JavaScript para renderizar produto/imagem ainda podem exigir a futura etapa com navegador automatizado.
+## WhatsApp
+Os dois usuários compartilham a mesma sessão do WhatsApp no servidor.
