@@ -77,7 +77,6 @@ replacement = r'''async function saveLink(){
 text = text[:start] + replacement + text[end:]
 index.write_text(text, encoding='utf-8')
 
-# Also make the backend response explicit if persistence fails.
 server = Path('src/server.js')
 server_text = server.read_text(encoding='utf-8')
 needle = "  linkSchedules.push(item); writeJson(FILES.schedules,linkSchedules); syncLinkQueue();\n  res.json({ok:true,agendamento:item});"
@@ -94,4 +93,89 @@ replacement_server = """  try {
   res.json({ok:true,agendamento:item});"""
 if needle in server_text:
     server_text = server_text.replace(needle, replacement_server, 1)
+
+# ================= Mercado Livre image fallback =================
+marker = 'REGULOS_ML_IMAGE_FALLBACK_V1'
+if marker not in server_text:
+    helper = r'''
+// REGULOS_ML_IMAGE_FALLBACK_V1
+// Links meli.la podem redirecionar para uma página sem og:image útil.
+// Nesse caso usamos o item público da API do Mercado Livre para obter
+// pictures[].secure_url, mantendo o link de afiliado original para o envio.
+async function findMercadoLivreImageUrl(url) {
+  try {
+    const page = await fetchText(url);
+    const source = `${page.finalUrl || ''}\n${page.data || ''}`;
+    const ids = [];
+    const seen = new Set();
+    for (const m of source.matchAll(/\bMLB[-_]?\d{5,}\b/gi)) {
+      const id = String(m[0]).toUpperCase().replace(/[-_]/g,'');
+      if (!seen.has(id)) { seen.add(id); ids.push(id); }
+    }
+    for (const id of ids.slice(0,3)) {
+      try {
+        const api = await fetchText(`https://api.mercadolibre.com/items/${id}`);
+        const data = JSON.parse(api.data || '{}');
+        const pictures = Array.isArray(data.pictures) ? data.pictures : [];
+        for (const picture of pictures) {
+          const image = picture?.secure_url || picture?.url;
+          if (image && /^https?:\/\//i.test(image)) return image;
+        }
+        const thumb = data.secure_thumbnail || data.thumbnail;
+        if (thumb && /^https?:\/\//i.test(thumb)) return thumb;
+      } catch (e) {
+        addLog(`Mercado Livre API sem imagem para ${id}: ${e.message}`);
+      }
+    }
+  } catch (e) {
+    addLog(`Fallback Mercado Livre: ${e.message}`);
+  }
+  return '';
+}
+'''
+    needle_image = 'async function findProductImage(url) {'
+    if needle_image not in server_text:
+        raise SystemExit('findProductImage não encontrado')
+    server_text = server_text.replace(needle_image, helper + '\n' + needle_image, 1)
+    old_image = needle_image + '\n  try {\n    const page=await fetchText(url);'
+    new_image = needle_image + '''
+  try {
+    const mlImageUrl = await findMercadoLivreImageUrl(url);
+    if (mlImageUrl) {
+      try {
+        const image = await downloadBuffer(mlImageUrl, url);
+        addLog(`🖼️ Imagem do Mercado Livre encontrada via API: ${mlImageUrl}`);
+        return image;
+      } catch (e) {
+        addLog(`Imagem do Mercado Livre não pôde ser baixada: ${e.message}`);
+      }
+    }
+  } catch (e) {
+    addLog(`Fallback Mercado Livre ignorado: ${e.message}`);
+  }
+  try {
+    const page=await fetchText(url);'''
+    if old_image not in server_text:
+        raise SystemExit('Início de findProductImage não encontrado')
+    server_text = server_text.replace(old_image, new_image, 1)
+
+    preview_route = r'''app.get('/api/link-imagem-preview', async (req,res)=>{
+  const url=String(req.query?.url||'').trim();
+  if(!url)return res.status(400).json({ok:false,msg:'Informe um link.'});
+  try{
+    const ml=await findMercadoLivreImageUrl(url);
+    if(ml)return res.json({ok:true,imagemUrl:ml,fonte:'mercado-livre'});
+    const page=await fetchText(url);
+    const candidates=extractImageCandidates(page.data,page.finalUrl);
+    if(candidates.length)return res.json({ok:true,imagemUrl:candidates[0],fonte:'metadados',finalUrl:page.finalUrl});
+    return res.status(404).json({ok:false,msg:'Nenhuma imagem foi encontrada automaticamente.',finalUrl:page.finalUrl});
+  }catch(e){return res.status(502).json({ok:false,msg:e.message||'Não foi possível obter a imagem.'});}
+});
+
+'''
+    route = "app.post('/api/link-agendamentos',(req,res)=>{"
+    if route not in server_text:
+        raise SystemExit('Rota de agendamentos não encontrada')
+    server_text = server_text.replace(route, preview_route + route, 1)
+
 server.write_text(server_text, encoding='utf-8')
