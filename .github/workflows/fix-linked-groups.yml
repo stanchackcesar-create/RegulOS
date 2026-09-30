@@ -1,0 +1,68 @@
+name: Corrigir exibição dos grupos ligados
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, '[fix-linked-groups]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Aplicar correção
+        shell: python
+        run: |
+          from pathlib import Path
+
+          server = Path('src/server.js')
+          text = server.read_text(encoding='utf-8')
+
+          old = "grupos:groups.length, permitidos:allowed.length,"
+          new = """grupos:groups.length, permitidos:allowed.length,
+          gruposLigados:activeGroups().map(id=>{const g=groups.find(x=>String(x.id)===String(id));const c=getGroupConfig(id);return {id,nome:g?.name||c.nome||c.apelido||id};}),"""
+          if old not in text:
+              raise SystemExit('Trecho /api/status não encontrado')
+          text = text.replace(old, new, 1)
+
+          old = "const c=getGroupConfig(id);\n  if(typeof req.body.ativo==='boolean') c.ativo=req.body.ativo;"
+          new = """const c=getGroupConfig(id);
+  const grupoAtual=groups.find(g=>String(g.id)===id);
+  if(grupoAtual?.name) c.nome=grupoAtual.name;
+  if(typeof req.body.ativo==='boolean') c.ativo=req.body.ativo;"""
+          if old not in text:
+              raise SystemExit('Trecho /api/grupos/config não encontrado')
+          text = text.replace(old, new, 1)
+          server.write_text(text, encoding='utf-8')
+
+          index = Path('public/index.html')
+          text = index.read_text(encoding='utf-8')
+
+          old = '<span id="allowed" class="muted">0 permitidos</span>'
+          new = '<span id="allowed" class="muted">0 permitidos</span><span id="linkedGroups" class="muted" style="display:block;margin-top:4px">Ligados: nenhum</span>'
+          if old not in text:
+              raise SystemExit('Card de grupos não encontrado')
+          text = text.replace(old, new, 1)
+
+          old = "document.getElementById('allowed').textContent=(d.permitidos||0)+' permitidos';"
+          new = """document.getElementById('allowed').textContent=(d.permitidos||0)+' permitidos';
+  const linked=Array.isArray(d.gruposLigados)?d.gruposLigados:[];
+  const linkedBox=document.getElementById('linkedGroups');
+  if(linkedBox) linkedBox.textContent=linked.length?'Ligados: '+linked.map(g=>g.nome||g.id).join(', '):'Ligados: nenhum';"""
+          if old not in text:
+              raise SystemExit('Atualização do card de grupos não encontrada')
+          text = text.replace(old, new, 1)
+          index.write_text(text, encoding='utf-8')
+      - name: Commitar correção
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/server.js public/index.html
+          git diff --cached --quiet && exit 0
+          git commit -m "Corrigir exibição dos grupos ligados"
+          git push
