@@ -1,4 +1,4 @@
-# REGULOS_AUTO_OFFER_TRIGGER_V1
+# REGULOS_AUTO_OFFER_UI_TRIGGER_V2
 from pathlib import Path
 
 p = Path('public/index.html')
