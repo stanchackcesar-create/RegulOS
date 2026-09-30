@@ -93,7 +93,7 @@ function verifyPassword(password,user){
     return crypto.timingSafeEqual(Buffer.from(actual,'hex'),Buffer.from(user.hash,'hex'));
   }catch{return false;}
 }
-const USER_ONLINE_WINDOW_MS = 45 * 1000;
+const USER_ONLINE_WINDOW_MS = 12 * 1000;
 
 function userHasActiveSession(userId){
   const now = Date.now();

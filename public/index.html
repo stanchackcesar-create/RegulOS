@@ -241,7 +241,7 @@ async function refreshAll(){
   const btn=document.querySelector('.actions button.primary');
   const oldText=btn?.textContent||'🔄 Atualizar';
   if(btn){btn.disabled=true;btn.textContent='🔄 Atualizando...';}
-  const tasks=[status,loadGroups,loadLinks,loadSchedules,loadLinkHistory,loadLinkFailures,loadLogs,loadDashboard,refreshAccountPresence];
+  const tasks=[status,loadGroups,loadLinks,loadSchedules,loadLinkHistory,loadLinkFailures,loadLogs,loadDashboard,loadAccount,refreshAccountPresence];
   const results=await Promise.all(tasks.map(async fn=>{
     try{
       await Promise.race([Promise.resolve().then(fn),new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout')),8000))]);
@@ -546,9 +546,10 @@ async function accountHeartbeat(){
   try{ await fetch('/api/auth/heartbeat',{method:'POST',cache:'no-store',credentials:'same-origin'}); }
   catch{}
 }
-setInterval(accountHeartbeat,15000);
-setInterval(()=>{refreshAccountPresence();},5000);
-setTimeout(()=>{refreshAccountPresence();},1500);
+setInterval(accountHeartbeat,5000);
+setInterval(()=>{refreshAccountPresence();},2000);
+setInterval(()=>{loadAccount();},7000);
+setTimeout(()=>{refreshAccountPresence();},1000);
 function markPresenceOffline(){
   try{
     if(navigator.sendBeacon){
