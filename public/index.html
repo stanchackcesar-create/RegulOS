@@ -512,6 +512,32 @@ async function accountHeartbeat(){
   try{ await fetch('/api/auth/heartbeat',{method:'POST',cache:'no-store',credentials:'same-origin'}); }
   catch{}
 }
+async function refreshAccountPresence(){
+  const panel=document.getElementById('accountPanel');
+  if(!panel) return;
+  try{
+    const d=await jfetch('/api/usuarios');
+    const usuarios=Array.isArray(d.usuarios)?d.usuarios:[];
+    const rows=[...panel.querySelectorAll('.account-user-row[data-user-id]')];
+    rows.forEach(row=>{
+      const user=usuarios.find(x=>String(x.id)===String(row.dataset.userId));
+      if(!user) return;
+      const online=Boolean(user.online);
+      const dot=row.querySelector('.presence-dot');
+      const status=row.querySelector('.account-user-status');
+      if(dot){
+        dot.classList.toggle('presence-online',online);
+        dot.classList.toggle('presence-offline',!online);
+        dot.title=online?'Online':'Offline';
+      }
+      if(status){
+        status.textContent=online?'Online':'Offline';
+        status.classList.toggle('status-online',online);
+        status.classList.toggle('status-offline',!online);
+      }
+    });
+  }catch(e){ console.debug('Falha ao atualizar presença:',e); }
+}
 setInterval(accountHeartbeat,15000);
 function markPresenceOffline(){
   try{
