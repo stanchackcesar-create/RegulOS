@@ -1,0 +1,55 @@
+name: Enforce imagem obrigatória em agendamentos
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/enforce-image-all-schedules.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Aplicar regra
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/server.js')
+          s = p.read_text(encoding='utf-8')
+
+          old = "else if (item.imagemAutomatica !== false) {"
+          new = "else {"
+
+          if old not in s:
+              if 'REGULOS_IMAGE_REQUIRED_ALL_SCHEDULES_V1' in s:
+                  print('Regra já aplicada.')
+                  raise SystemExit(0)
+              raise SystemExit('Bloco de busca automática de imagem não encontrado; nenhuma alteração feita.')
+
+          s = s.replace(old, new, 1)
+          marker = "// REGULOS_IMAGE_REQUIRED_ALL_SCHEDULES_V1\n// Todo agendamento de link tenta obter uma imagem válida.\n// Com ou sem montagem automática de oferta, não enviamos link sem imagem.\n"
+          if 'REGULOS_IMAGE_REQUIRED_ALL_SCHEDULES_V1' not in s:
+              s = marker + s
+          p.write_text(s, encoding='utf-8')
+          PY
+
+      - name: Validar JavaScript
+        run: node --check src/server.js
+
+      - name: Commit e push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "Nenhuma alteração necessária."
+            exit 0
+          fi
+          git add src/server.js
+          git commit -m "Tornar imagem obrigatória em todos os agendamentos"
+          git push
