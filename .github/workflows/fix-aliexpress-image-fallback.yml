@@ -21,6 +21,7 @@ jobs:
         shell: python
         run: |
           from pathlib import Path
+          import re
 
           path = Path('src/server.js')
           text = path.read_text(encoding='utf-8')
@@ -29,36 +30,10 @@ jobs:
               print('Fallback já aplicado.')
               raise SystemExit(0)
 
-          start = text.find('async function findProductImage(url) {')
-          if start < 0:
-              raise SystemExit('findProductImage não encontrada')
-
-          depth = 0
-          in_str = None
-          esc = False
-          end = None
-          for i in range(start, len(text)):
-              c = text[i]
-              if in_str:
-                  if esc:
-                      esc = False
-                  elif c == '\\':
-                      esc = True
-                  elif c == in_str:
-                      in_str = None
-                  continue
-              if c in "'\"`":
-                  in_str = c
-                  continue
-              if c == '{':
-                  depth += 1
-              elif c == '}':
-                  depth -= 1
-                  if depth == 0:
-                      end = i + 1
-                      break
-          if end is None:
-              raise SystemExit('Não foi possível localizar o fim de findProductImage')
+          pattern = r'async function findProductImage\(url\) \{[\s\S]*?(?=\n\}\n\n(?:async )?function )'
+          match = re.search(pattern, text)
+          if not match:
+              raise SystemExit('findProductImage não encontrada ou limite da função não identificado')
 
           replacement = r'''async function findProductImage(url) {
             // REGULOS_BROWSER_IMAGE_FALLBACK_V2
@@ -81,6 +56,7 @@ jobs:
                 addLog(`Fallback Mercado Livre ignorado: ${e.message}`);
               }
 
+              // Método HTTP/metadata existente.
               try{
                 const fetched=await fetchText(target);
                 const candidates=extractImageCandidates(fetched.data,fetched.finalUrl||target);
@@ -97,6 +73,7 @@ jobs:
                 addLog(`Busca HTTP de imagem falhou: ${e.message}`);
               }
 
+              // Fallback para lojas que montam a imagem somente via JavaScript.
               try{
                 const browser=await getRegulosBrowser();
                 const context=await browser.newContext({
@@ -145,9 +122,12 @@ jobs:
               addLog(`Busca automática de imagem falhou: ${e.message}`);
             }
             return null;
-          }'''
+          }
 
-          path.write_text(text[:start] + replacement + text[end:], encoding='utf-8')
+          '''
+
+          text = text[:match.start()] + replacement + text[match.end():]
+          path.write_text(text, encoding='utf-8')
           print('Fallback de navegador aplicado em findProductImage.')
 
       - name: Commit da correção
@@ -162,5 +142,3 @@ jobs:
           fi
           git commit -m "fix: fallback de imagem via navegador no agendamento"
           git push
-
-          # Disparo intencional para aplicar a correção no main.
