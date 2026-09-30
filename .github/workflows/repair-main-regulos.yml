@@ -15,41 +15,121 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Corrigir JavaScript e limite de usuários
+      - name: Corrigir presença, Atualizar e usuários
         shell: python
         run: |
           from pathlib import Path
+          import re
 
           index = Path('public/index.html')
           text = index.read_text(encoding='utf-8')
 
-          # Corrige tanto a forma antiga quanto a forma duplicada criada pelas
-          # correções anteriores, que estava deixando "async async function".
+          # Mantém loadAccount válido. Nunca adiciona async duas vezes.
           text = text.replace('async async function loadAccount(){', 'async function loadAccount(){', 1)
-          text = text.replace('function loadAccount(){', 'async function loadAccount(){', 1)
 
-          index.write_text(text, encoding='utf-8')
+          # Identifica cada usuário para que a presença possa ser atualizada
+          # sem reconstruir o formulário inteiro da conta.
+          old_row = 'html+=`<div class="group account-user-row">'
+          new_row = 'html+=`<div class="group account-user-row" data-user-id="${esc(x.id)}">'
+          if old_row in text:
+              text = text.replace(old_row, new_row, 1)
+
+          # Atualização de presença em tempo real, independente do carregamento
+          # inicial da conta.
+          if 'async function refreshAccountPresence(){' not in text:
+              marker = 'async function createUser(){'
+              presence = r'''async function refreshAccountPresence(){
+            const list=document.getElementById('userList');
+            if(!list)return;
+            try{
+              const d=await jfetch('/api/usuarios');
+              const users=Array.isArray(d.usuarios)?d.usuarios:[];
+              users.forEach(x=>{
+                const row=list.querySelector(`[data-user-id="${CSS.escape(String(x.id))}"]`);
+                if(!row)return;
+                const online=Boolean(x.online);
+                const dot=row.querySelector('.presence-dot');
+                const status=row.querySelector('.account-user-status');
+                if(dot){dot.classList.toggle('presence-online',online);dot.classList.toggle('presence-offline',!online);dot.title=online?'Online':'Offline';}
+                if(status){status.textContent=online?'Online':'Offline';status.classList.toggle('status-online',online);status.classList.toggle('status-offline',!online);}
+              });
+            }catch(e){console.debug('Falha ao atualizar presença:',e);}
+          }
+          '''
+              if marker not in text:
+                  raise SystemExit('Marcador createUser não encontrado.')
+              text = text.replace(marker, presence + marker, 1)
+
+          # Substitui somente a função refreshAll existente por uma versão que
+          # continua carregando os dados e também atualiza os usuários.
+          start=text.find('async function refreshAll(){')
+          if start < 0:
+              raise SystemExit('Função refreshAll não encontrada.')
+          brace=text.find('{',start)
+          depth=0
+          end=None
+          for i in range(brace,len(text)):
+              if text[i]=='{': depth+=1
+              elif text[i]=='}':
+                  depth-=1
+                  if depth==0:
+                      end=i+1
+                      break
+          if end is None:
+              raise SystemExit('Não foi possível delimitar refreshAll.')
+          replacement='''async function refreshAll(){
+            if(window.__regulosRefreshBusy)return;
+            window.__regulosRefreshBusy=true;
+            const btn=document.querySelector('.actions button.primary');
+            const oldText=btn?.textContent||'🔄 Atualizar';
+            if(btn){btn.disabled=true;btn.textContent='🔄 Atualizando...';}
+            const tasks=[status,loadGroups,loadLinks,loadSchedules,loadLinkHistory,loadLinkFailures,loadLogs,loadDashboard,refreshAccountPresence];
+            const results=await Promise.all(tasks.map(async fn=>{
+              try{
+                await Promise.race([Promise.resolve().then(fn),new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout')),8000))]);
+                return true;
+              }catch(e){console.debug('Atualização falhou:',e);return false;}
+            }));
+            const failed=results.filter(x=>!x).length;
+            if(btn){btn.disabled=false;btn.textContent=oldText;}
+            window.__regulosRefreshBusy=false;
+            try{toast(failed?`Atualização concluída; ${failed} item(ns) não responderam.`:'Atualizado com sucesso.',failed>0);}catch{}
+          }'''
+          text=text[:start]+replacement+text[end:]
+
+          # Presença continua sendo atualizada mesmo sem clicar em Atualizar.
+          if 'setInterval(()=>{refreshAccountPresence();},5000);' not in text:
+              marker='setInterval(accountHeartbeat,15000);'
+              if marker in text:
+                  text=text.replace(marker,marker+'\nsetInterval(()=>{refreshAccountPresence();},5000);\nsetTimeout(()=>{refreshAccountPresence();},1500);',1)
+              else:
+                  text=text.replace('</script>','setInterval(()=>{refreshAccountPresence();},5000);\nsetTimeout(()=>{refreshAccountPresence();},1500);\n</script>',1)
+
+          index.write_text(text,encoding='utf-8')
 
           server = Path('src/server.js')
           text = server.read_text(encoding='utf-8')
           old = "if(currentUsers.length >= 2) return res.status(409).json({ok:false,msg:'O RegulOS Cloud permite no máximo 2 usuários: administrador e operador.'});"
           if old in text:
               text = text.replace(old, "if(currentUsers.length >= 20) return res.status(409).json({ok:false,msg:'O RegulOS permite no máximo 20 usuários.'});", 1)
-          server.write_text(text, encoding='utf-8')
+          server.write_text(text,encoding='utf-8')
 
       - name: Validar JavaScript do painel
         shell: python
         run: |
           from pathlib import Path
           import re
-          text = Path('public/index.html').read_text(encoding='utf-8')
-          match = re.search(r'<script>([\s\S]*?)</script>', text)
-          if not match:
+          text=Path('public/index.html').read_text(encoding='utf-8')
+          matches=re.findall(r'<script>([\s\S]*?)</script>',text)
+          if not matches:
               raise SystemExit('Bloco principal <script> não encontrado.')
-          Path('/tmp/regulos.js').write_text(match.group(1), encoding='utf-8')
+          Path('/tmp/regulos.js').write_text(matches[-1],encoding='utf-8')
 
       - name: Validar sintaxe com Node
         run: node --check /tmp/regulos.js
+
+      - name: Validar servidor
+        run: node --check src/server.js
 
       - name: Commit das correções
         run: |
@@ -60,5 +140,5 @@ jobs:
             echo "Nenhuma correção pendente."
             exit 0
           fi
-          git commit -m "Corrigir Atualizar, presença e usuários [skip ci]"
+          git commit -m "Corrigir Atualizar e presença em tempo real [skip ci]"
           git push origin HEAD:main
