@@ -36,14 +36,12 @@ function patchSection(startText, endText, replacements, label) {
   }
 }
 
-// A sessão do WhatsApp não deve desligar as seleções de grupos a cada reconexão.
 replaceOnce(
 `        // Por segurança, toda nova conexão começa com todos os grupos desligados.\n        // O envio só fica permitido depois que o usuário clicar em 🟢 Ligado.\n        for (const id of Object.keys(groupConfig)) {\n          groupConfig[id].ativo = false;\n        }\n        saveGroupsConfig();\n        await loadGroups();`,
 `        // As configurações dos grupos são persistentes entre reconexões.\n        await loadGroups();`,
 'persistência dos grupos'
 );
 
-// A Programação Geral é independente dos agendamentos de links.
 replaceOnce(
 `  if (runningLinkSchedules.has(item.id) || !online || !sock || !botWindowActive()) return;`,
 `  if (runningLinkSchedules.has(item.id) || !online || !sock) return;`,
@@ -60,18 +58,17 @@ replaceOnce(
 'fila independente da programação geral'
 );
 
-// Um agendamento explícito tem um único destino: o grupo escolhido ao salvar.
 patchSection(
   'async function sendScheduledLink(item) {',
   'async function processLinkSchedules() {',
   [
     [
 `  } else {\n    targets = activeGroups();\n    if (!targets.length) {`,
-`  } else {\n    const explicitIds = [...new Set([\n      item.reenvioGrupoId,\n      item.grupoId,\n      ...(Array.isArray(item.grupoIds) ? item.grupoIds : [])\n    ].map(v => String(v || '').trim()).filter(Boolean))];\n    targets = explicitIds.length\n      ? explicitIds.filter(id => groups.some(g => String(g.id) === id))\n      : activeGroups();\n    if (!targets.length) {`
+`  } else {\n    const explicitIds = [...new Set([\n      item.reenvioGrupoId,\n      item.grupoId,\n      ...(Array.isArray(item.grupoIds) ? item.grupoIds : [])\n    ].map(v => String(v || '').trim()).filter(Boolean))];\n    targets = explicitIds.length ? explicitIds : activeGroups();\n    if (!targets.length) {\n      item.status = 'agendado';\n      item.lastSkipKey = dateKey(now);\n      writeJson(FILES.schedules, linkSchedules);\n      addLog(\`Agendamento "\${item.nome}" aguardando destino/grupos disponíveis; tentará novamente.\`);\n      return;\n    }`
     ],
     [
 `      // Se o grupo foi desligado desde o início da ocorrência, não enviamos.\n      if (getGroupConfig(id).ativo === false) continue;`,
-`      // Quando o agendamento possui grupo explícito, esse grupo é o destino\n      // do agendamento e não depende do botão global de grupos.\n      const hasExplicitTarget = Boolean(String(item.reenvioGrupoId || item.grupoId || '').trim()) || Array.isArray(item.grupoIds);\n      if (!hasExplicitTarget && getGroupConfig(id).ativo === false) continue;`
+`      // Grupo explícito do agendamento é o destino e não depende do botão global.\n      const hasExplicitTarget = Boolean(String(item.reenvioGrupoId || item.grupoId || '').trim()) || Array.isArray(item.grupoIds);\n      if (!hasExplicitTarget && getGroupConfig(id).ativo === false) continue;`
     ],
     [
 `      if (!botWindowActive()) {\n        item.status = 'pausado';\n        writeJson(FILES.schedules, linkSchedules);\n        addLog(\`Agendamento "\${item.nome}" pausado no fim do horário. Retomará do próximo grupo.\`);\n        break;\n      }`,
@@ -91,42 +88,38 @@ patchSection(
     ],
     [
 `        if (productImage) {\n          await sock.sendMessage(id, { image: productImage.buffer, caption: text });\n        } else {\n          await sock.sendMessage(id, { text });\n        }`,
-`        if (!productImage || !productImage.buffer) {\n          throw new Error('Imagem obrigatória não disponível; envio bloqueado.');\n        }\n        if (typeof sock.waitForSocketOpen === 'function') {\n          await sock.waitForSocketOpen();\n        }\n        await sock.sendMessage(id, { image: productImage.buffer, caption: text });`
+`        if (!productImage || !productImage.buffer) {\n          throw new Error('Imagem obrigatória não disponível; envio bloqueado.');\n        }\n        if (typeof sock.waitForSocketOpen === 'function') await sock.waitForSocketOpen();\n        await sock.sendMessage(id, { image: productImage.buffer, caption: text });`
     ],
     [
 `      try {\n        // Registramos a intenção antes do envio.`,
-`      try {\n        if (typeof sock.waitForSocketOpen === 'function') {\n          await sock.waitForSocketOpen();\n        }\n        // Registramos a intenção antes do envio.`
+`      try {\n        if (typeof sock.waitForSocketOpen === 'function') await sock.waitForSocketOpen();\n        // Registramos a intenção antes do envio.`
     ]
   ],
   'fluxo completo do agendamento'
 );
 
-// Reativar um agendamento pausado deve criar uma nova ocorrência limpa.
 replaceOnce(
 `  if(b.rearmar===true) item.lastRunKey='';\n  writeJson(FILES.schedules,linkSchedules); syncLinkQueue();`,
-`  const estavaPausado = item.status === 'pausado' || item.status === 'erro';\n  if(b.rearmar===true || (b.ativo===true && estavaPausado)){\n    item.lastRunKey='';\n    item.lastSkipKey='';\n    item.progressKey='';\n    item.progressTargets=[];\n    item.progressGroupIds=[];\n    item.progressStartedAt='';\n    item.enviados=0;\n    item.sucessos=0;\n    item.erros=0;\n    item.ultimoEnvio=null;\n    item.lastSentAt=null;\n    item.motivoFalha=null;\n    item.status='agendado';\n  }\n  writeJson(FILES.schedules,linkSchedules); syncLinkQueue();`,
+`  const estavaPausado = item.status === 'pausado' || item.status === 'erro';\n  if(b.rearmar===true || (b.ativo===true && estavaPausado)){\n    item.lastRunKey=''; item.lastSkipKey=''; item.progressKey='';\n    item.progressTargets=[]; item.progressGroupIds=[]; item.progressStartedAt='';\n    item.enviados=0; item.sucessos=0; item.erros=0;\n    item.ultimoEnvio=null; item.lastSentAt=null; item.motivoFalha=null;\n    item.status='agendado';\n  }\n  writeJson(FILES.schedules,linkSchedules); syncLinkQueue();`,
 'reativação limpa'
 );
 
-// Reenvio de uma falha continua funcionando mesmo depois que o agendamento foi arquivado/removido.
 replaceOnce(
 `  const item=linkSchedules.find(x=>String(x.id)===String(failure.agendamentoId));\n  if(!item) return res.status(404).json({ok:false,msg:'O link associado à falha não está mais no Gerenciador de Links.'});`,
-`  let item=linkSchedules.find(x=>String(x.id)===String(failure.agendamentoId));\n  if(!item){\n    const imagemFalhou=String(failure.erro||'').toLowerCase().startsWith('imagem:');\n    item={\n      id:String(failure.agendamentoId||('reenvio-'+failure.id)),\n      nome:failure.nome||'Reenvio de link',\n      url:String(failure.url||'').trim(),\n      mensagem:failure.mensagem||'',\n      data:failure.data||new Date().toISOString().slice(0,10),\n      horario:failure.horario||new Date().toTimeString().slice(0,5),\n      repeticao:'uma_vez',\n      intervaloMin:Number(failure.intervaloMin||1),\n      intervaloMax:Number(failure.intervaloMax||1),\n      imagemAutomatica:true,\n      imagemUrl:imagemFalhou?'':String(failure.imagemUrl||''),\n      imagemStatus:'',\n      tituloProduto:failure.tituloProduto||'',\n      grupoId:String(failure.grupoId||''),\n      reenvioGrupoId:String(failure.grupoId||''),\n      ativo:true,\n      status:'agendado'\n    };\n  }`,
+`  let item=linkSchedules.find(x=>String(x.id)===String(failure.agendamentoId));\n  if(!item){\n    const imagemFalhou=String(failure.erro||'').toLowerCase().startsWith('imagem:');\n    item={id:String(failure.agendamentoId||('reenvio-'+failure.id)),nome:failure.nome||'Reenvio de link',url:String(failure.url||'').trim(),mensagem:failure.mensagem||'',data:failure.data||new Date().toISOString().slice(0,10),horario:failure.horario||new Date().toTimeString().slice(0,5),repeticao:'uma_vez',intervaloMin:Number(failure.intervaloMin||1),intervaloMax:Number(failure.intervaloMax||1),imagemAutomatica:true,imagemUrl:imagemFalhou?'':String(failure.imagemUrl||''),imagemStatus:'',tituloProduto:failure.tituloProduto||'',grupoId:String(failure.grupoId||''),reenvioGrupoId:String(failure.grupoId||''),ativo:true,status:'agendado'};\n  }`,
 'reenvio independente do agendamento original'
 );
 
-// Fallback de imagem por navegador continua disponível como última tentativa.
 patchSection(
   'async function findProductImage(url) {',
   'let regulosBrowserPromise=null;',
   [[
 `  } catch (e) { addLog(\`Não foi possível ler a página para buscar imagem: \${e.message}\`); }\n  return null;\n}`,
-`  } catch (e) { addLog(\`Não foi possível ler a página para buscar imagem: \${e.message}\`); }\n  try {\n    const browserImage = await findProductImageWithBrowser(url);\n    if (browserImage) {\n      addLog('🖼️ Imagem encontrada pelo fallback do navegador.');\n      return browserImage;\n    }\n  } catch (e) {\n    addLog(\`Fallback de imagem pelo navegador falhou: \${e.message}\`);\n  }\n  return null;\n}`
+`  } catch (e) { addLog(\`Não foi possível ler a página para buscar imagem: \${e.message}\`); }\n  try {\n    const browserImage = await findProductImageWithBrowser(url);\n    if (browserImage) { addLog('🖼️ Imagem encontrada pelo fallback do navegador.'); return browserImage; }\n  } catch (e) { addLog(\`Fallback de imagem pelo navegador falhou: \${e.message}\`); }\n  return null;\n}`
   ]],
   'fallback final de imagem'
 );
 
-// Logs de diagnóstico para o momento exato em que um agendamento fica devido.
 patchSection(
   'async function processLinkSchedules() {',
   'async function startLinkScheduler() {',
