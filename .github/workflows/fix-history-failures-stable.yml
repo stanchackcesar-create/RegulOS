@@ -28,13 +28,17 @@ jobs:
           s = s.replace('<div id="linkHistory" style="margin-top:10px">Carregando histórico...</div>', '<div id="linkHistory" style="margin-top:10px"></div>')
           s = s.replace('<div id="linkFailures" style="margin-top:10px">Carregando falhas...</div>', '<div id="linkFailures" style="margin-top:10px"></div>')
 
+          # A função antiga ainda podia escrever "Carregando histórico..."
+          # a cada polling. Remover essa escrita é obrigatório mesmo quando
+          # a assinatura já existe.
+          s = s.replace("box.innerHTML='<div class=\"muted\">🔄 Carregando histórico...</div>';", '', 1)
+
           # O histórico já usa assinatura em versões recentes. Se a assinatura
           # não existir, aplica a correção diretamente no carregador.
           if "let lastHistorySignature='';" not in s:
               marker = 'async function loadLinkHistory(){'
               if marker in s:
                   s = s.replace(marker, "let lastHistorySignature='';\n" + marker, 1)
-                  s = s.replace("box.innerHTML='<div class=\\\"muted\\\">🔄 Carregando histórico...</div>';", '', 1)
                   s = s.replace("const d=await jfetch('/api/link-historico'); box.innerHTML='';", "const d=await jfetch('/api/link-historico'); const signature=JSON.stringify(d.historico||[]); if(signature===lastHistorySignature)return; lastHistorySignature=signature; box.innerHTML='';", 1)
 
           # Corrige o painel de falhas com a mesma lógica: só redesenha quando
