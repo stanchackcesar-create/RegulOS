@@ -19,6 +19,6 @@ RUN mkdir -p /app/storage/data /app/storage/auth
 
 EXPOSE 3000
 
-# Usa o mesmo preboot do npm start: aplica o reset da programação ao desconectar,
-# depois as correções de agendamento/grupo/imagem e então inicia o servidor.
+# Inicializador único: mantém dados/agendamentos quando o WhatsApp cai
+# e aplica as correções de grupos, agendamento e imagem antes do servidor.
 CMD ["node", "tools/preboot-regulos.js"]
