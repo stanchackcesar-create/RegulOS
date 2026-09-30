@@ -20,12 +20,12 @@ jobs:
           from pathlib import Path
           import re
 
-          p = Path('public/index.html')
-          s = p.read_text(encoding='utf-8')
+          p=Path('public/index.html')
+          s=p.read_text(encoding='utf-8')
 
-          s = s.replace('<div id="linkHistory" style="margin-top:10px">Carregando histórico...</div>', '<div id="linkHistory" style="margin-top:10px"></div>')
-          s = s.replace('<div id="linkFailures" style="margin-top:10px">Carregando falhas...</div>', '<div id="linkFailures" style="margin-top:10px"></div>')
-          s = s.replace("box.innerHTML='<div class=\"muted\">🔄 Carregando histórico...</div>';", '', 1)
+          s=s.replace('<div id="linkHistory" style="margin-top:10px">Carregando histórico...</div>','<div id="linkHistory" style="margin-top:10px"></div>')
+          s=s.replace('<div id="linkFailures" style="margin-top:10px">Carregando falhas...</div>','<div id="linkFailures" style="margin-top:10px"></div>')
+          s=s.replace("box.innerHTML='<div class=\"muted\">🔄 Carregando histórico...</div>';",'',1)
 
           if "let lastHistorySignature='';" not in s:
               marker='async function loadLinkHistory(){'
@@ -46,21 +46,17 @@ jobs:
               if marker not in block:
                   block=block.replace(target,target+'\n  '+marker+'\n  '+guard+'\n  '+assign,1)
 
-              # Remove duplicate signature guard lines left by older patches.
-              lines=block.splitlines(); seen_sig=False; seen_guard=False; seen_assign=False; out=[]
-              for line in lines:
-                  t=line.strip()
-                  if t==marker:
-                      if seen_sig: continue
-                      seen_sig=True
-                  elif t==guard:
-                      if seen_guard: continue
-                      seen_guard=True
-                  elif t==assign:
-                      if seen_assign: continue
-                      seen_assign=True
-                  out.append(line)
-              block='\n'.join(out)
+              # Collapse repeated signature guards, including when an older
+              # patch placed the second assignment on the same line as box.innerHTML.
+              first=block.find(marker)
+              if first!=-1:
+                  after=block[first+len(marker):]
+                  after=re.sub(r"\s*"+re.escape(guard)+r"\s*"+re.escape(assign),"",after)
+                  after=re.sub(r"\s*"+re.escape(marker),"",after)
+                  block=block[:first+len(marker)]+after
+                  # Restore exactly one guard and assignment immediately after the signature.
+                  block=block.replace(marker,marker+'\n  '+guard+'\n  '+assign,1)
+
               s=s[:start]+block+s[end:]
 
           p.write_text(s,encoding='utf-8')
@@ -73,9 +69,12 @@ jobs:
           s=Path('public/index.html').read_text(encoding='utf-8')
           assert 'Carregando histórico...' not in s
           assert 'Carregando falhas...' not in s
-          assert s.count("const signature=JSON.stringify(d.falhas||[]);") == 1
-          assert s.count("if(signature===lastFailureSignature)return;") == 1
-          assert s.count("lastFailureSignature=signature;") == 1
+          start=s.find('async function loadLinkFailures(){')
+          end=s.find('\nasync function ',start+10) if start!=-1 else -1
+          block=s[start:end if end!=-1 else len(s)]
+          assert block.count("const signature=JSON.stringify(d.falhas||[]);") == 1
+          assert block.count("if(signature===lastFailureSignature)return;") == 1
+          assert block.count("lastFailureSignature=signature;") == 1
           print('Painel OK')
           PY
           node --check src/server.js
