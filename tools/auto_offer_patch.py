@@ -72,7 +72,7 @@ async function buildAutomaticOffer(url){
         raise SystemExit('Ponto de integração não encontrado em src/server.js')
     s = s.replace(needle, helper + '\n' + needle, 1)
 
-    route = r'''app.get('/api/oferta-preview', async (req,res)=>{
+    route = r'''app.get('/api/oferta-preview', requireAuth, async (req,res)=>{
   const url=String(req.query?.url||'').trim();
   if(!url)return res.status(400).json({ok:false,msg:'Informe o link do produto.'});
   if(!/^https?:\/\//i.test(url))return res.status(400).json({ok:false,msg:'O link deve começar com http:// ou https://.'});
@@ -85,7 +85,10 @@ async function buildAutomaticOffer(url){
 
 '''
     s = s.replace(needle, route + needle, 1)
-    server.write_text(s, encoding='utf-8')
+else:
+    s = s.replace("app.get('/api/oferta-preview', async (req,res)=>{", "app.get('/api/oferta-preview', requireAuth, async (req,res)=>{", 1)
+
+server.write_text(s, encoding='utf-8')
 
 index = Path('public/index.html')
 text = index.read_text(encoding='utf-8')
