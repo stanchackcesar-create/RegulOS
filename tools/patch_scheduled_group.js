@@ -42,6 +42,10 @@ patchFile(SERVER, [
   [
 `      // Se o grupo foi desligado desde o início da ocorrência, não enviamos.\n      if (getGroupConfig(id).ativo === false) continue;`,
 `      // Agendamento com grupo explícito é independente do botão global de grupos:\n      // o próprio agendamento já define o destino. Para agendamentos antigos,\n      // mantém-se a regra de usar somente grupos ligados.\n      const hasExplicitScheduledGroup = Boolean(String(item.reenvioGrupoId || item.grupoId || '').trim()) || Array.isArray(item.grupoIds);\n      if (!hasExplicitScheduledGroup && getGroupConfig(id).ativo === false) continue;`
+  ],
+  [
+`  if(typeof b.ativo==='boolean') item.ativo=b.ativo;`,
+`  if(typeof b.ativo==='boolean') item.ativo=b.ativo;\n  // Editar um agendamento deve rearmar uma ocorrência pausada/errored.\n  // O novo horário e os novos dados passam a representar uma nova tentativa.\n  if(typeof b.ativo==='boolean' && b.ativo===true){\n    item.status='agendado';\n    item.lastRunKey=null;\n    item.lastSkipKey=null;\n    item.progressKey=null;\n    item.enviados=0;\n    item.sucessos=0;\n    item.erros=0;\n    item.ultimoEnvio=null;\n    item.motivoFalha=null;\n  }`
   ]
 ], 'server');
 
@@ -68,12 +72,16 @@ patchFile(INDEX, [
 ` const random=document.getElementById('lrandom');if(random)random.checked=false;\n const grupo=document.getElementById('lgrupo');if(grupo)grupo.value='';`
   ],
   [
-`async function editLink(id){const d=await jfetch('/api/link-agendamentos');const x=d.agendamentos.find(a=>a.id===id);if(!x)return;editingId=id;showForm();lnome.value=x.nome||'';lurl.value=x.url||'';limagemUrl.value=x.imagemUrl||'';`,
-`async function editLink(id){const d=await jfetch('/api/link-agendamentos');const x=d.agendamentos.find(a=>a.id===id);if(!x)return;editingId=id;showForm(x.grupoId||'');lnome.value=x.nome||'';lurl.value=x.url||'';limagemUrl.value=x.imagemUrl||'';`
+`async function editLink(id){const d=await jfetch('/api/link-agendamentos');const x=d.agendamentos.find(a=>a.id===id);if(!x)return;editingId=id;showForm();`,
+`async function editLink(id){try{const d=await jfetch('/api/link-agendamentos');const x=d.agendamentos.find(a=>a.id===id);if(!x){throw new Error('Agendamento não encontrado.');}editingId=id;showForm(x.grupoId||'');await loadScheduleGroups(x.grupoId||'');`
   ],
   [
-`async function editFailedLink(id){try{const d=await jfetch('/api/link-falhas');const f=d.falhas.find(x=>String(x.id)===String(id));if(!f)return;editingId=f.agendamentoId;editingFailedId=f.id;showForm();lnome.value=f.nome||'';lurl.value=f.url||'';limagemUrl.value=f.imagemUrl||'';`,
-`async function editFailedLink(id){try{const d=await jfetch('/api/link-falhas');const f=d.falhas.find(x=>String(x.id)===String(id));if(!f)return;editingId=f.agendamentoId;editingFailedId=f.id;showForm(f.grupoId||'');lnome.value=f.nome||'';lurl.value=f.url||'';limagemUrl.value=f.imagemUrl||'';`
+`syncRandomAll()}\nasync function editFailedLink`,
+`syncRandomAll()}catch(e){try{toast('Não foi possível abrir o agendamento: '+(e?.message||e));}catch{} }\n}\nasync function editFailedLink`
+  ],
+  [
+`async function editFailedLink(id){try{const d=await jfetch('/api/link-falhas');const f=d.falhas.find(x=>String(x.id)===String(id));if(!f)return;editingId=f.agendamentoId;editingFailedId=f.id;showForm();`,
+`async function editFailedLink(id){try{const d=await jfetch('/api/link-falhas');const f=d.falhas.find(x=>String(x.id)===String(id));if(!f)return;editingId=f.agendamentoId;editingFailedId=f.id;showForm(f.grupoId||'');await loadScheduleGroups(f.grupoId||'');`
   ]
 ], 'index');
 
