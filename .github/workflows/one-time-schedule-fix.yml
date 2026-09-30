@@ -1,0 +1,77 @@
+name: Correção única do agendamento
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: contains(github.event.head_commit.message, '[one-time-schedule-fix]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Corrigir estado do agendamento
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('src/server.js')
+          s = p.read_text(encoding='utf-8')
+
+          old = """    if (!targets.length) {
+      item.status = 'pausado';
+      item.lastSkipKey = dateKey(now);
+      writeJson(FILES.schedules, linkSchedules);
+      addLog(`Agendamento \"${item.nome}\" aguardando: nenhum grupo Ligado.`);
+      return;
+    }"""
+          new = """    if (!targets.length) {
+      // Não desative nem marque como pausado um agendamento só porque
+      // nenhum grupo está ligado neste instante. Ele deve continuar ativo
+      // e tentar novamente no próximo ciclo.
+      item.status = 'agendado';
+      item.lastSkipKey = dateKey(now);
+      writeJson(FILES.schedules, linkSchedules);
+      addLog(`Agendamento \"${item.nome}\" aguardando: nenhum grupo Ligado. Tentará novamente.`);
+      return;
+    }"""
+          if old not in s:
+              raise SystemExit('Bloco de nenhum grupo não encontrado.')
+          s = s.replace(old, new, 1)
+
+          old = """    const allDone = (item.progressTargets || []).every(id => (item.progressGroupIds || []).includes(id) || getGroupConfig(id).ativo === false);"""
+          new = """    // Um grupo desligado não conta como envio concluído. Só encerramos
+    // a ocorrência quando cada grupo-alvo tiver recebido a mensagem.
+    const allDone = (item.progressTargets || []).every(id => (item.progressGroupIds || []).includes(id));"""
+          if old not in s:
+              raise SystemExit('Regra allDone não encontrada.')
+          s = s.replace(old, new, 1)
+
+          old = """    } else {
+      item.status = botWindowActive() ? 'enviando' : 'pausado';
+      writeJson(FILES.schedules, linkSchedules);
+      addLog(`Link \"${item.nome}\": progresso preservado; continuará de onde parou.`);
+    }"""
+          new = """    } else {
+      // Falha ou grupo desligado não transforma o agendamento em pausado.
+      // Mantemos a ocorrência ativa para uma nova tentativa no próximo ciclo.
+      item.status = botWindowActive() ? 'agendado' : 'pausado';
+      writeJson(FILES.schedules, linkSchedules);
+      addLog(`Link \"${item.nome}\": progresso preservado; continuará de onde parou.`);
+    }"""
+          if old not in s:
+              raise SystemExit('Bloco de progresso preservado não encontrado.')
+          s = s.replace(old, new, 1)
+
+          p.write_text(s, encoding='utf-8')
+      - name: Validar servidor
+        run: node --check src/server.js
+      - name: Gravar correção
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/server.js
+          git commit -m "Corrigir pausa indevida de agendamentos [skip ci]"
+          git push
