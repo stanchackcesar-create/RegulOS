@@ -11,7 +11,8 @@ ENV REGULOS_HOST=0.0.0.0
 ENV REGULOS_PORT=3000
 
 COPY package*.json ./
-RUN npm install --omit=dev --no-audit --no-fund
+RUN npm install --omit=dev --no-audit --no-fund \
+  && npx playwright install --with-deps chromium
 
 COPY . .
 RUN mkdir -p /app/storage/data /app/storage/auth
