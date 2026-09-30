@@ -1,6 +1,6 @@
 (() => {
   // Histórico e falhas ficam estáveis durante o polling.
-  // Não mostramos "Carregando..." e não apagamos a lista durante atualizações.
+  // Não mostramos "Carregando..." nem apagamos a lista sem necessidade.
   const boxes = {
     linkHistory: '🔄 Carregando histórico...',
     linkFailures: 'Carregando falhas...'
@@ -23,11 +23,6 @@
     });
   }
 
-  ['linkHistory','linkFailures'].forEach(id => {
-    const box = document.getElementById(id);
-    if (box) box.textContent = '';
-  });
-
   const wrapStable = (name, endpoint, key, boxId) => {
     const original = window[name];
     if (typeof original !== 'function') return;
@@ -40,20 +35,26 @@
       if (checking) return;
       checking = true;
       try {
-        const response = await fetch(endpoint, { cache: 'no-store', credentials: 'same-origin' });
+        const response = await fetch(endpoint, {
+          cache: 'no-store',
+          credentials: 'same-origin'
+        });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
         const value = data && Array.isArray(data[key]) ? data[key] : [];
         const signature = JSON.stringify(value);
 
+        // Primeira carga também precisa renderizar o painel.
         if (!initialized) {
           initialized = true;
           lastSignature = signature;
-          return;
+          return await original.apply(this, args);
         }
 
+        // Se nada mudou, não força uma nova renderização.
         if (signature === lastSignature) return;
         lastSignature = signature;
+
         const box = document.getElementById(boxId);
         if (box) box.replaceChildren();
         return await original.apply(this, args);
