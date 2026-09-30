@@ -1599,8 +1599,8 @@ app.post('/api/link-falhas/:id/reenviar', async (req,res)=>{
     const text=[chooseRandomMessage(item),item.tituloProduto?`📦 ${item.tituloProduto}`:'',String(item.mensagem||'').trim(),'👉 Garanta agora:',String(item.url||'').trim()].filter(Boolean).join('\n\n');
     let image=null;
     if(String(item.imagemUrl||'').trim()) image=await downloadBuffer(String(item.imagemUrl).trim(),String(item.url||'').trim());
-    else if(item.imagemAutomatica!==false) image=await findProductImage(String(item.url||'').trim());
-    if(item.imagemAutomatica!==false && !image) throw new Error('Não foi possível obter a imagem. Edite o link ou informe uma URL de imagem.');
+    else image=await findProductImage(String(item.url||'').trim());
+    if(!image) throw new Error('Não foi possível obter a imagem. Edite o link ou informe uma URL de imagem.');
     if(image) await sock.sendMessage(target,{image:image.buffer,caption:text}); else await sock.sendMessage(target,{text});
     addHistory({grupoId:target,link:item.url,status:'sucesso',agendamentoId:item.id,tipo:'reenvio',at:new Date().toISOString()});
     archiveSentFailureAsHistory(item,failure,target);
