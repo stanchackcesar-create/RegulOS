@@ -23,10 +23,11 @@ jobs:
           index = Path('public/index.html')
           text = index.read_text(encoding='utf-8')
 
-          # Corrige o erro de sintaxe que interrompe todo o JavaScript do painel.
+          # Corrige tanto a forma antiga quanto a forma duplicada criada pelas
+          # correções anteriores, que estava deixando "async async function".
+          text = text.replace('async async function loadAccount(){', 'async function loadAccount(){', 1)
           text = text.replace('function loadAccount(){', 'async function loadAccount(){', 1)
 
-          # Garante que o botão Atualizar e a presença tenham funções assíncronas válidas.
           index.write_text(text, encoding='utf-8')
 
           server = Path('src/server.js')
