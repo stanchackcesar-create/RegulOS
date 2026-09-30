@@ -16,6 +16,32 @@ function replaceOnce(oldText, newText, label) {
   console.log(`[boot] ${label}: corrigido.`);
 }
 
+function patchSection(startText, endText, replacements, label) {
+  const start = source.indexOf(startText);
+  if (start < 0) {
+    console.log(`[boot] ${label}: início não encontrado.`);
+    return;
+  }
+  const end = source.indexOf(endText, start);
+  if (end < 0) {
+    console.log(`[boot] ${label}: fim não encontrado.`);
+    return;
+  }
+  let section = source.slice(start, end);
+  let sectionChanged = false;
+  for (const [oldText, newText] of replacements) {
+    if (section.includes(newText)) continue;
+    if (!section.includes(oldText)) continue;
+    section = section.replace(oldText, newText);
+    sectionChanged = true;
+  }
+  if (sectionChanged) {
+    source = source.slice(0, start) + section + source.slice(end);
+    changed = true;
+    console.log(`[boot] ${label}: corrigido.`);
+  }
+}
+
 // 1) Uma reconexão não pode desligar novamente os grupos que o usuário já ligou.
 replaceOnce(
 `        // Por segurança, toda nova conexão começa com todos os grupos desligados.\n        // O envio só fica permitido depois que o usuário clicar em 🟢 Ligado.\n        for (const id of Object.keys(groupConfig)) {\n          groupConfig[id].ativo = false;\n        }\n        saveGroupsConfig();\n        await loadGroups();`,
@@ -67,6 +93,31 @@ replaceOnce(
 `  for (let guard = 0; guard < queue.length; guard++) {\n    if (!botWindowActive()) return;`,
 `  for (let guard = 0; guard < queue.length; guard++) {\n    if (!online || !sock) return;`,
 'fila de agendamentos independente'
+);
+
+// 6) Reaplica as regras diretamente dentro das funções críticas, mesmo que o
+// server.js tenha recebido uma versão intermediária diferente. Isso evita que
+// um patch anterior deixe o agendador preso na programação geral.
+patchSection(
+  'async function sendScheduledLink(item) {',
+  'async function processLinkSchedules() {',
+  [
+    [`if (runningLinkSchedules.has(item.id) || !online || !sock || !botWindowActive()) return;`, `if (runningLinkSchedules.has(item.id) || !online || !sock) return;`],
+    [`if (!botWindowActive()) {`, `if (!online || !sock) {`],
+    [`item.status = botWindowActive() ? 'enviando' : 'pausado';`, `item.status = online && sock ? 'enviando' : 'pausado';`]
+  ],
+  'endurecimento do envio agendado'
+);
+
+patchSection(
+  'async function processLinkSchedules() {',
+  'async function startLinkScheduler() {',
+  [
+    [`if (!online || !botWindowActive()) return;`, `if (!online || !sock) return;`],
+    [`if (!botWindowActive()) return;`, `if (!online || !sock) return;`],
+    [`    if (!scheduleDue(item, now)) return;`, `    if (!scheduleDue(item, now)) return;\n    addLog(\`Agendamento "\${item.nome}" chegou ao horário; iniciando tentativa de envio.\`);`]
+  ],
+  'diagnóstico do processador de agendamentos'
 );
 
 if (changed) {
