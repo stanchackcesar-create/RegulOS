@@ -1187,6 +1187,7 @@ app.get('/api/status', (req,res) => res.json({
   numero: connectedNumber ? formatPhone(connectedNumber) : '',
   numeroBruto: connectedNumber,
   grupos:groups.length, permitidos:allowed.length,
+gruposLigados:activeGroups().map(id=>{const g=groups.find(x=>String(x.id)===String(id));const c=getGroupConfig(id);return {id,nome:g?.name||c.nome||c.apelido||id};}),
   links:linkSchedules.length, filaLinks: orderedLinks().length, filaCursor: linkQueue.cursor, filaAtual: linkQueue.currentId, janela:botWindowLabel(),
   programacao:botSchedule
 }));
@@ -1308,7 +1309,9 @@ app.post('/api/grupos/config', (req,res) => {
   const id=String(req.body?.id||'');
   if(!id) return res.status(400).json({ok:false,msg:'Grupo inválido.'});
   const c=getGroupConfig(id);
-  if(typeof req.body.ativo==='boolean') c.ativo=req.body.ativo;
+const grupoAtual=groups.find(g=>String(g.id)===id);
+if(grupoAtual?.name) c.nome=grupoAtual.name;
+if(typeof req.body.ativo==='boolean') c.ativo=req.body.ativo;
   saveGroupsConfig();
   res.json({ok:true,config:c,msg:c.ativo?'Envio ligado.':'Envio desligado.'});
 });
