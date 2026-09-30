@@ -1,3 +1,6 @@
+// REGULOS_IMAGE_REQUIRED_ALL_SCHEDULES_V1
+// Todo agendamento de link tenta obter uma imagem válida.
+// Com ou sem montagem automática de oferta, não enviamos link sem imagem.
 const {
   default: makeWASocket,
   useMultiFileAuthState,
@@ -1115,7 +1118,7 @@ async function sendScheduledLink(item) {
       item.status = 'erro'; item.ativo = false; writeJson(FILES.schedules, linkSchedules);
       return;
     }
-  } else if (item.imagemAutomatica !== false) {
+  } else {
     productImage = await findProductImage(String(item.url||'').trim());
     item.imagemStatus = productImage ? 'encontrada' : 'não encontrada';
     item.imagemUltimaTentativa = new Date().toISOString();
