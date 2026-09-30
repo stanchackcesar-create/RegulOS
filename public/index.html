@@ -39,6 +39,15 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 .status-online{color:#22c55e}
 .status-offline{color:#ef4444}
 @media(max-width:560px){.account-user-line{gap:8px}.account-user-status{font-size:14px}.account-user-row>button{width:100%;margin-top:8px}}
+
+/* REGULOS_SCHEDULE_FILTER_V1 */
+.schedule-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
+.schedule-tools input{flex:1 1 280px;min-width:180px}
+.schedule-scroll{max-height:520px;overflow-y:auto;overflow-x:hidden;padding-right:6px;overscroll-behavior:contain;scrollbar-width:thin}
+.schedule-scroll .link{margin-right:2px}
+.schedule-filter-result{font-size:13px;color:#9eb0ca;min-height:18px;margin-top:4px}
+@media(max-width:560px){.schedule-scroll{max-height:60vh}.schedule-tools{align-items:stretch}.schedule-tools input{flex-basis:100%}.schedule-tools button{min-height:44px}}
+
 </style>
 </head>
 <body>
@@ -135,7 +144,12 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 <div class="panel" style="margin-top:14px">
 <h2>📅 Agendamentos</h2>
 <div class="muted">Aqui ficam somente os links que possuem envio agendado. A programação geral do bot fica em um painel separado.</div>
-<div id="schedules" style="margin-top:10px">Carregando agendamentos...</div>
+<div class="schedule-tools" id="scheduleTools">
+  <input id="scheduleFilter" type="search" placeholder="🔎 Pesquisar nome do link ou horário (ex.: Epson, 03:15)" oninput="filterSchedules()" autocomplete="off">
+  <button type="button" onclick="clearScheduleFilter()">Limpar</button>
+</div>
+<div id="scheduleFilterResult" class="schedule-filter-result"></div>
+<div id="schedules" class="schedule-scroll" style="margin-top:10px">Carregando agendamentos...</div>
 </div>
 
 <div class="panel" style="margin-top:14px">
@@ -487,6 +501,49 @@ async function loadLinkFailures(){const box=document.getElementById('linkFailure
 async function toggleLink(id,ativo){try{await jfetch('/api/link-agendamentos/'+id+'/toggle',{method:'POST'});await loadLinks();await loadSchedules()}catch(e){toast(e.message,true)}}
 async function sendNow(id){try{const d=await jfetch('/api/link-agendamentos/'+id+'/enviar-agora',{method:'POST'});toast(d.msg);await loadLinks();await loadSchedules()}catch(e){toast(e.message,true)}}
 async function deleteLink(id){if(!confirm('Excluir este agendamento?'))return;try{await jfetch('/api/link-agendamentos/'+id,{method:'DELETE'});await loadLinks();await loadSchedules()}catch(e){toast(e.message,true)}}
+// REGULOS_SCHEDULE_FILTER_JS_V1
+function filterSchedules(){
+  const input=document.getElementById('scheduleFilter');
+  const box=document.getElementById('schedules');
+  const result=document.getElementById('scheduleFilterResult');
+  if(!input||!box)return;
+  const q=String(input.value||'').trim().toLocaleLowerCase('pt-BR');
+  const cards=[...box.querySelectorAll('.link')];
+  let visible=0;
+  cards.forEach(card=>{
+    const hay=String(card.textContent||'').toLocaleLowerCase('pt-BR');
+    const show=!q||hay.includes(q);
+    card.style.display=show?'':'none';
+    if(show)visible++;
+  });
+  if(!cards.length){
+    if(result)result.textContent='';
+    return;
+  }
+  if(result)result.textContent=q?`${visible} agendamento(s) encontrado(s).`:`${cards.length} agendamento(s).`;
+}
+
+function clearScheduleFilter(){
+  const input=document.getElementById('scheduleFilter');
+  if(input)input.value='';
+  filterSchedules();
+  if(input)input.focus();
+}
+
+(function installScheduleFilterObserver(){
+  const start=()=>{
+    const box=document.getElementById('schedules');
+    if(!box)return;
+    if(box.__regulosScheduleObserver)return;
+    const observer=new MutationObserver(()=>filterSchedules());
+    observer.observe(box,{childList:true,subtree:true});
+    box.__regulosScheduleObserver=observer;
+    filterSchedules();
+  };
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',start,{once:true});
+  else start();
+})();
+
 async function saveBotSchedule(){
  try{
   const inicio=botInicio.value.trim();
