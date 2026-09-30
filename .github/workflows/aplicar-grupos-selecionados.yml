@@ -1,0 +1,34 @@
+name: Aplicar correção dos grupos selecionados
+
+on:
+  push:
+    branches:
+      - fix/grupos-selecionados
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+
+      - name: Aplicar correção
+        run: python scripts/aplicar-grupos-selecionados.py
+
+      - name: Verificar sintaxe do servidor
+        run: node --check src/server.js
+
+      - name: Salvar correção no GitHub
+        run: |
+          if git diff --quiet; then
+            echo "Nenhuma alteração pendente."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/server.js public/index.html
+          git commit -m "Corrigir exibição dos grupos selecionados"
+          git push
