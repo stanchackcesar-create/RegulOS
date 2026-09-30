@@ -18,4 +18,6 @@ RUN mkdir -p /app/storage/data /app/storage/auth
 
 EXPOSE 3000
 
-CMD ["node", "tools/boot-regulos.js"]
+# Use o mesmo inicializador do npm start. Ele aplica primeiro as correções
+# de agendamento/grupo e só então inicia o servidor.
+CMD ["node", "tools/patch_scheduled_group.js"]
