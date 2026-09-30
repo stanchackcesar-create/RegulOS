@@ -21,4 +21,4 @@ EXPOSE 3000
 
 # Inicializador único: mantém dados/agendamentos quando o WhatsApp cai
 # e aplica as correções de grupos, agendamento, imagem e interface mobile antes do servidor.
-CMD ["node", "tools/cloud-start.js"]
+CMD ["sh", "-c", "node tools/mobile-scroll-tabs.js && node tools/cloud-start.js"]
