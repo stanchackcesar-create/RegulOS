@@ -1,10 +1,10 @@
+# REGULOS_AUTO_OFFER_TRIGGER_V1
 from pathlib import Path
 
 p = Path('public/index.html')
 t = p.read_text(encoding='utf-8')
 marker = '<!-- REGULOS_AUTO_OFFER_UI_V1 -->'
 
-# 1) Add the checkbox to the existing link form.
 if marker not in t:
     needle = '<div class="two"><div><label><input id="limagem" type="checkbox" checked style="width:auto"> 🖼️ Buscar imagem automaticamente</label></div><div><label><input id="lrandom" type="checkbox" onchange="toggleRandomBox()" style="width:auto"> ✍️ Usar mensagem aleatória</label></div></div>'
     if needle not in t:
@@ -12,32 +12,21 @@ if marker not in t:
     injection = needle + '\n' + marker + '\n<div class="notice" style="margin-top:10px"><label style="margin:0"><input id="lautoOferta" type="checkbox" onchange="toggleAutoOfferPreview()" style="width:auto"> ☑️ <b>Montar oferta automaticamente</b></label><div class="muted" style="margin-top:5px">Coloque somente o link. O RegulOS buscará título, preço, desconto e imagem somente quando esses dados estiverem publicados na página. Nenhum valor será inventado.</div></div>'
     t = t.replace(needle, injection, 1)
 
-# 2) Reset the checkbox when the form is cleared.
 needle = " const random=document.getElementById('lrandom');if(random)random.checked=false;"
 if "const autoOferta=document.getElementById('lautoOferta')" not in t:
-    if needle not in t:
-        raise SystemExit('Reset do formulário não encontrado.')
+    if needle not in t: raise SystemExit('Reset do formulário não encontrado.')
     t = t.replace(needle, needle + "\n const autoOferta=document.getElementById('lautoOferta');if(autoOferta)autoOferta.checked=false;", 1)
 
-# 3) Add the state to saveLink().
 needle = " const imagemAutomatica=Boolean(get('limagem')?.checked);"
 if "const montarOfertaAutomatica=Boolean(get('lautoOferta')?.checked);" not in t:
-    if needle not in t:
-        raise SystemExit('Estado da imagem automática não encontrado.')
+    if needle not in t: raise SystemExit('Estado da imagem automática não encontrado.')
     t = t.replace(needle, needle + "\n const montarOfertaAutomatica=Boolean(get('lautoOferta')?.checked);", 1)
 
-# 4) In automatic mode, name is optional.
-t = t.replace(
-    " if(!nome)return fail('Digite o nome de registro do link.');",
-    " if(!nome&&!montarOfertaAutomatica)return fail('Digite o nome de registro do link ou marque Montar oferta automaticamente.');",
-    1
-)
+t = t.replace(" if(!nome)return fail('Digite o nome de registro do link.');", " if(!nome&&!montarOfertaAutomatica)return fail('Digite o nome de registro do link ou marque Montar oferta automaticamente.');", 1)
 
-# 5) Add automatic preview/build before the normal save request.
 needle = " const body={\n  nome,url,mensagem:(get('lmensagem')?.value||'').trim(),data,horario,repeticao,"
 if "REGULOS_AUTO_OFFER_BUILD_V1" not in t:
-    if needle not in t:
-        raise SystemExit('Objeto body do saveLink não encontrado.')
+    if needle not in t: raise SystemExit('Objeto body do saveLink não encontrado.')
     replacement = """ // REGULOS_AUTO_OFFER_BUILD_V1
  let nomeFinal=nome;
  let mensagemFinal=(get('lmensagem')?.value||'').trim();
@@ -68,20 +57,16 @@ if "REGULOS_AUTO_OFFER_BUILD_V1" not in t:
   nome:nomeFinal,url,mensagem:mensagemFinal,data,horario,repeticao,"""
     t = t.replace(needle, replacement, 1)
 
-# 6) Replace the image fields in the payload only inside saveLink.
 start = t.find('async function saveLink(){')
 end = t.find('\n}\nfunction toggleAllRandom', start)
-if start < 0 or end < 0:
-    raise SystemExit('Limites da função saveLink não encontrados.')
+if start < 0 or end < 0: raise SystemExit('Limites da função saveLink não encontrados.')
 block = t[start:end]
 block = block.replace("imagemAutomatica,imagemUrl:(get('limagemUrl')?.value||'').trim(),", "imagemAutomatica:imagemAutomaticaFinal,imagemUrl:imagemUrlFinal,", 1)
 t = t[:start] + block + t[end:]
 
-# 7) Add small placeholder behavior.
 if 'function toggleAutoOfferPreview()' not in t:
     needle = 'function toggleRandomBox(){'
-    if needle not in t:
-        raise SystemExit('toggleRandomBox não encontrado.')
+    if needle not in t: raise SystemExit('toggleRandomBox não encontrado.')
     fn = """function toggleAutoOfferPreview(){
  const box=document.getElementById('lautoOferta');
  const name=document.getElementById('lnome');
