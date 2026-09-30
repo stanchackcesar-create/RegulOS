@@ -1459,7 +1459,16 @@ app.post('/api/link-agendamentos',(req,res)=>{
     imagemStatus:'pendente',imagemUltimaTentativa:'',
     enviados:0,sucessos:0,erros:0,lastRunKey:'',createdAt:new Date().toISOString()
   };
-  linkSchedules.push(item); writeJson(FILES.schedules,linkSchedules); syncLinkQueue();
+  try {
+    linkSchedules.push(item);
+    writeJson(FILES.schedules,linkSchedules);
+    syncLinkQueue();
+  } catch (e) {
+    linkSchedules = linkSchedules.filter(x => x.id !== item.id);
+    addLog(`Falha persistindo agendamento: ${e.message}`);
+    return res.status(500).json({ok:false,msg:`Não foi possível salvar o agendamento no armazenamento: ${e.message}`});
+  }
+  res.set('Cache-Control','no-store');
   res.json({ok:true,agendamento:item});
 });
 app.put('/api/link-agendamentos/:id',(req,res)=>{
