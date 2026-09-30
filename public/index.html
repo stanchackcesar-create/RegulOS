@@ -380,14 +380,14 @@ async function saveLink(){
   mensagemAleatoriaAtiva:randomEnabled,
   rearmar:Boolean(window.editingFailedId)
  };
- const endpoint=window.editingId?('/api/link-agendamentos/'+encodeURIComponent(window.editingId)):'/api/link-agendamentos';
- const method=window.editingId?'PUT':'POST';
+ const endpoint=editingId?('/api/link-agendamentos/'+encodeURIComponent(editingId)):'/api/link-agendamentos';
+ const method=editingId?'PUT':'POST';
  if(result)result.textContent='⏳ Salvando agendamento...';
  try{
   const d=await jfetch(endpoint,{method,headers:{'Content-Type':'application/json','Cache-Control':'no-cache'},cache:'no-store',body:JSON.stringify(body)});
   if(!d||d.ok!==true)throw new Error(d?.msg||'O servidor não confirmou o salvamento.');
   if(result)result.textContent='✅ Agendamento salvo com sucesso.';
-  try{toast(window.editingId?'Agendamento atualizado.':'Agendamento salvo com sucesso.');}catch{}
+  try{toast(editingId?'Agendamento atualizado.':'Agendamento salvo com sucesso.');}catch{}
   window.editingId=null;
   window.editingFailedId=null;
   clearLinkForm();
