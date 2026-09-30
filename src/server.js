@@ -1186,7 +1186,7 @@ app.get('/api/status', (req,res) => res.json({
   ok:true, conectado:online, status, temQR:Boolean(qr), qr,
   numero: connectedNumber ? formatPhone(connectedNumber) : '',
   numeroBruto: connectedNumber,
-  grupos:groups.length, permitidos:allowed.length,
+  grupos:groups.length, permitidos:allowed.length, permitidosNomes:groups.filter(g=>allowed.includes(g.id)).map(g=>g.name).filter(Boolean),
   links:linkSchedules.length, filaLinks: orderedLinks().length, filaCursor: linkQueue.cursor, filaAtual: linkQueue.currentId, janela:botWindowLabel(),
   programacao:botSchedule
 }));

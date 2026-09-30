@@ -57,7 +57,7 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 <div class="cards">
 <div class="card metric"><small>WhatsApp</small><b id="conn">...</b><span id="number" class="muted">Número: —</span></div>
 <div class="card metric"><small>Mensagens hoje</small><b id="today">0</b></div>
-<div class="card metric"><small>Grupos</small><b id="groupCount">0</b><span id="allowed" class="muted">0 permitidos</span></div>
+<div class="card metric"><small>Grupos</small><b id="groupCount">0</b><span id="allowed" class="muted">0 permitidos</span><div id="allowedNames" class="muted" style="margin-top:6px;font-size:12px">Grupos ligados: —</div></div>
 <div class="card metric"><small>Links</small><b id="linkCount">0</b></div>
 </div>
 
@@ -220,6 +220,8 @@ async function status(){
   document.getElementById('numberBig').textContent='Número conectado: '+(d.numero||'—');
   document.getElementById('groupCount').textContent=d.grupos||0;
   document.getElementById('allowed').textContent=(d.permitidos||0)+' permitidos';
+  const permitidosNomes=Array.isArray(d.permitidosNomes)?d.permitidosNomes:[];
+  document.getElementById('allowedNames').textContent=permitidosNomes.length?'Grupos ligados: '+permitidosNomes.join(', '):'Grupos ligados: —';
   document.getElementById('linkCount').textContent=d.links||0;
   document.getElementById('windowBadge').textContent=d.janela||'...';
   document.getElementById('windowBadge').className='badge '+(d.janela==='dentro do horário'?'good':d.janela==='fora do horário'?'bad':'neutral');
