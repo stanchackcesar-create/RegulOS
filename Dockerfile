@@ -18,4 +18,4 @@ RUN mkdir -p /app/storage/data /app/storage/auth
 
 EXPOSE 3000
 
-CMD ["node", "src/server.js"]
+CMD ["node", "tools/boot-regulos.js"]
