@@ -23,20 +23,28 @@ jobs:
           p = Path('src/server.js')
           s = p.read_text(encoding='utf-8')
 
-          old = "else if (item.imagemAutomatica !== false) {"
-          new = "else {"
+          changed = False
+          replacements = [
+              ('else if (item.imagemAutomatica !== false) {', 'else {'),
+              ('else if(item.imagemAutomatica!==false) image=await findProductImage(String(item.url||\'\').trim());', 'else image=await findProductImage(String(item.url||\'\').trim());'),
+              ('if(item.imagemAutomatica!==false && !image) throw new Error(', 'if(!image) throw new Error('),
+          ]
 
-          if old not in s:
-              if 'REGULOS_IMAGE_REQUIRED_ALL_SCHEDULES_V1' in s:
-                  print('Regra já aplicada.')
-                  raise SystemExit(0)
-              raise SystemExit('Bloco de busca automática de imagem não encontrado; nenhuma alteração feita.')
+          for old, new in replacements:
+              if old in s:
+                  s = s.replace(old, new)
+                  changed = True
 
-          s = s.replace(old, new, 1)
           marker = "// REGULOS_IMAGE_REQUIRED_ALL_SCHEDULES_V1\n// Todo agendamento de link tenta obter uma imagem válida.\n// Com ou sem montagem automática de oferta, não enviamos link sem imagem.\n"
           if 'REGULOS_IMAGE_REQUIRED_ALL_SCHEDULES_V1' not in s:
               s = marker + s
-          p.write_text(s, encoding='utf-8')
+              changed = True
+
+          if not changed:
+              print('Regra já aplicada; nenhuma alteração necessária.')
+          else:
+              p.write_text(s, encoding='utf-8')
+              print('Regra de imagem obrigatória aplicada ao agendamento e ao reenvio.')
           PY
 
       - name: Validar JavaScript
@@ -51,5 +59,5 @@ jobs:
             exit 0
           fi
           git add src/server.js
-          git commit -m "Tornar imagem obrigatória em todos os agendamentos"
+          git commit -m "Exigir imagem em agendamentos e reenvios"
           git push
