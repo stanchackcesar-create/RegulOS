@@ -289,7 +289,7 @@ async function buildAutomaticOffer(url){
   return {titulo,preco,desconto,imagemUrl:imagem,finalUrl:page.finalUrl||url};
 }
 
-app.get('/api/oferta-preview', async (req,res)=>{
+app.get('/api/oferta-preview', requireAuth, async (req,res)=>{
   const url=String(req.query?.url||'').trim();
   if(!url)return res.status(400).json({ok:false,msg:'Informe o link do produto.'});
   if(!/^https?:\/\//i.test(url))return res.status(400).json({ok:false,msg:'O link deve começar com http:// ou https://.'});
