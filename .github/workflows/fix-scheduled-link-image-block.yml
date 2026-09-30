@@ -1,0 +1,59 @@
+name: Corrigir envio agendado quando imagem automática falhar
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[skip scheduled-image-fix]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ajustar bloqueio por imagem automática
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/server.js')
+          s = p.read_text(encoding='utf-8')
+
+          old = """    if (!productImage) {
+      const msg = 'Não foi possível encontrar ou baixar a imagem automaticamente.';
+      for (const id of targets) upsertLinkFailure(item, id, msg);
+      item.status = 'erro'; item.ativo = false; writeJson(FILES.schedules, linkSchedules);
+      addLog(`Falha agendamento ${item.nome}: ${msg}`);
+      return;
+    }
+    addLog(`Imagem encontrada para \"${item.nome}\".`);"""
+
+          new = """    if (!productImage) {
+      // A imagem automática é um enriquecimento do envio, não deve impedir
+      // que o link agendado seja entregue. Nenhum preço ou dado é inventado:
+      // quando a imagem não puder ser obtida, enviamos somente o texto/link.
+      addLog(`Imagem automática não encontrada para \"${item.nome}\". Enviando o link somente em texto.`);
+    } else {
+      addLog(`Imagem encontrada para \"${item.nome}\".`);
+    }"""
+
+          if old not in s:
+              raise SystemExit('Bloco esperado de bloqueio por imagem não encontrado; nenhuma alteração aplicada.')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+          print('Correção aplicada.')
+          PY
+
+      - name: Validar sintaxe
+        run: node --check src/server.js
+
+      - name: Commit da correção
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/server.js
+          git diff --cached --quiet && echo "Nada para commitar." && exit 0
+          git commit -m "Permitir envio agendado sem imagem automática [skip scheduled-image-fix]"
+          git push
