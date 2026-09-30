@@ -1,4 +1,4 @@
-FROM node:20-bookworm-slim
+FROM node:20-bookworm
 
 WORKDIR /app
 
@@ -12,6 +12,7 @@ ENV REGULOS_PORT=3000
 
 COPY package*.json ./
 RUN npm install --omit=dev --no-audit --no-fund
+RUN npx playwright install --with-deps chromium
 
 COPY . .
 RUN mkdir -p /app/storage/data /app/storage/auth
