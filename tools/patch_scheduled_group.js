@@ -53,15 +53,19 @@ patchFile(INDEX, [
   ],
   [
 `function showForm(){\n const form=document.getElementById('linkForm');\n form.classList.remove('hidden');`,
-`async function loadScheduleGroups(selected=''){\n const sel=document.getElementById('lgrupo');\n if(!sel)return;\n try{\n  const d=await jfetch('/api/grupos?refresh=1',{cache:'no-store'});\n  const grupos=Array.isArray(d?.grupos)?d.grupos:[];\n  sel.innerHTML='<option value="">Selecione o grupo de destino...</option>'+grupos.map(g=>{\n   const id=String(g.id||''); const nome=String(g.name||g.id||'');\n   return '<option value="'+esc(id)+'">'+esc(nome)+'</option>';\n  }).join('');\n  if(selected)sel.value=selected;\n }catch(e){\n  sel.innerHTML='<option value="">Não foi possível carregar os grupos</option>';\n }\n}\nfunction showForm(){\n const form=document.getElementById('linkForm');\n form.classList.remove('hidden');\n loadScheduleGroups(document.getElementById('lgrupo')?.value||'');`
+`async function loadScheduleGroups(selected=''){\n const sel=document.getElementById('lgrupo');\n if(!sel)return;\n try{\n  const d=await jfetch('/api/grupos?refresh=1',{cache:'no-store'});\n  const grupos=Array.isArray(d?.grupos)?d.grupos:[];\n  sel.innerHTML='<option value="">Selecione o grupo de destino...</option>'+grupos.map(g=>{\n   const id=String(g.id||''); const nome=String(g.name||g.id||'');\n   return '<option value="'+esc(id)+'">'+esc(nome)+'</option>';\n  }).join('');\n  if(selected)sel.value=selected;\n }catch(e){\n  sel.innerHTML='<option value="">Não foi possível carregar os grupos</option>';\n }\n}\nfunction showForm(selectedGroup=''){\n const form=document.getElementById('linkForm');\n form.classList.remove('hidden');\n loadScheduleGroups(selectedGroup);`
+  ],
+  [
+` const random=document.getElementById('lrandom');if(random)random.checked=false;`,
+` const random=document.getElementById('lrandom');if(random)random.checked=false;\n const grupo=document.getElementById('lgrupo');if(grupo)grupo.value='';`
   ],
   [
 `lnome.value=x.nome||'';lurl.value=x.url||'';limagemUrl.value=x.imagemUrl||'';`,
-`lnome.value=x.nome||'';lurl.value=x.url||'';loadScheduleGroups(x.grupoId||'');limagemUrl.value=x.imagemUrl||'';`
+`lnome.value=x.nome||'';lurl.value=x.url||'';showForm(x.grupoId||'');limagemUrl.value=x.imagemUrl||'';`
   ],
   [
-`lnome.value=f.nome||'';lurl.value=f.url||'';limagemUrl.value=f.imagemUrl||'';`,
-`lnome.value=f.nome||'';lurl.value=f.url||'';loadScheduleGroups(f.grupoId||'');limagemUrl.value=f.imagemUrl||'';`
+`editingId=id;showForm();lnome.value=f.nome||'';`,
+`editingId=id;showForm(f.grupoId||'');lnome.value=f.nome||'';`
   ]
 ], 'index');
 
