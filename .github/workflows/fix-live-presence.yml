@@ -1,0 +1,150 @@
+name: Fix live user presence
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-ui:
+    if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch RegulOS UI
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          path = Path('public/index.html')
+          text = path.read_text(encoding='utf-8')
+          original = text
+
+          # Keep each user row identifiable so presence can be updated without
+          # rebuilding the whole account panel (which would erase form input).
+          old_row = 'html+=`<div class="group account-user-row">'
+          new_row = 'html+=`<div class="group account-user-row" data-user-id="${esc(x.id)}">'
+          if old_row in text and 'data-user-id="${esc(x.id)}"' not in text:
+              text = text.replace(old_row, new_row, 1)
+
+          # Live presence updater: only changes the existing rows, never the
+          # account form fields.
+          marker = 'async function createUser(){'
+          if 'async function refreshAccountPresence(){' not in text and marker in text:
+              presence = r'''async function refreshAccountPresence(){
+            const list=document.getElementById('userList');
+            if(!list)return;
+            try{
+              const d=await jfetch('/api/usuarios');
+              const users=Array.isArray(d.usuarios)?d.usuarios:[];
+              const rows=[...list.querySelectorAll('[data-user-id]')];
+              users.forEach(x=>{
+                const row=rows.find(r=>r.dataset.userId===String(x.id));
+                if(!row)return;
+                const online=Boolean(x.online);
+                const dot=row.querySelector('.presence-dot');
+                const status=row.querySelector('.account-user-status');
+                if(dot){
+                  dot.classList.toggle('presence-online',online);
+                  dot.classList.toggle('presence-offline',!online);
+                  dot.title=online?'Online':'Offline';
+                }
+                if(status){
+                  status.textContent=online?'Online':'Offline';
+                  status.classList.toggle('status-online',online);
+                  status.classList.toggle('status-offline',!online);
+                }
+              });
+            }catch{}
+          }
+          '''
+              text = text.replace(marker, presence + marker, 1)
+
+          # Replace the old sequential refresh with a guarded refresh. One
+          # failed endpoint cannot make the Atualizar button appear dead.
+          old_refresh = re.compile(
+              r"async function refreshAll\(\)\{await status\(\);await loadGroups\(\);await loadLinks\(\);await loadSchedules\(\);await loadLinkHistory\(\);await loadLinkFailures\(\);await loadLogs\(\);await loadDashboard\(\)\}\n"
+          )
+          new_refresh = r'''let refreshBusy=false;
+          function refreshTask(fn,ms=8000){
+            return Promise.race([
+              Promise.resolve().then(fn),
+              new Promise((_,reject)=>setTimeout(()=>reject(new Error('Tempo limite ao atualizar este item.')),ms))
+            ]);
+          }
+          async function refreshAll(){
+            if(refreshBusy)return;
+            refreshBusy=true;
+            const btn=document.querySelector('.actions button.primary');
+            const oldText=btn?.textContent;
+            if(btn){btn.disabled=true;btn.textContent='🔄 Atualizando...';}
+            try{
+              const results=await Promise.allSettled([
+                refreshTask(status),
+                refreshTask(loadGroups),
+                refreshTask(loadLinks),
+                refreshTask(loadSchedules),
+                refreshTask(loadLinkHistory),
+                refreshTask(loadLinkFailures),
+                refreshTask(loadLogs),
+                refreshTask(loadDashboard),
+                refreshTask(refreshAccountPresence)
+              ]);
+              const failed=results.filter(r=>r.status==='rejected').length;
+              toast(failed?`Atualização concluída com ${failed} item(ns) pendente(s).`:'Atualizado com sucesso.',failed>0);
+            }finally{
+              refreshBusy=false;
+              if(btn){btn.disabled=false;btn.textContent=oldText||'🔄 Atualizar';}
+            }
+          }
+          '''
+          text, n = old_refresh.subn(new_refresh, text, count=1)
+
+          # Add account presence to the existing 3-second polling loop, while
+          # keeping the heavier account panel refresh out of the loop.
+          old_poll = re.compile(
+              r"let poll=null;let lastLinksUiRefresh=0;function startPolling\(fast=false\)\{if\(poll\)clearInterval\(poll\);poll=setInterval\(async\(\)=>\{await status\(\);const now=Date\.now\(\);if\(now-lastGroupUiRefresh>5000\)await loadGroups\(\);if\(now-lastLinksUiRefresh>3500 && document\.getElementById\('linkForm'\)\?\.classList\.contains\('hidden'\)\)\{lastLinksUiRefresh=now;await loadLinks\(\);await loadSchedules\(\);await loadLinkHistory\(\);\}\},fast\?1200:3000\);status\(\)\}\n"
+          )
+          new_poll = r'''let poll=null;let lastLinksUiRefresh=0;let lastAccountPresenceRefresh=0;
+          function startPolling(fast=false){
+            if(poll)clearInterval(poll);
+            poll=setInterval(async()=>{
+              await status();
+              const now=Date.now();
+              if(now-lastGroupUiRefresh>5000)await loadGroups();
+              if(now-lastAccountPresenceRefresh>5000){lastAccountPresenceRefresh=now;await refreshAccountPresence();}
+              if(now-lastLinksUiRefresh>3500 && document.getElementById('linkForm')?.classList.contains('hidden')){
+                lastLinksUiRefresh=now;await loadLinks();await loadSchedules();await loadLinkHistory();
+              }
+            },fast?1200:3000);
+            status();
+          }
+          '''
+          text, n2 = old_poll.subn(new_poll, text, count=1)
+
+          # The dedicated groups manager is already the right place for group
+          # administration; make the shortcut label explicit.
+          text = text.replace('>👥 Grupos</button>', '>👥 Gerenciar grupos</button>', 1)
+
+          if text == original:
+              raise SystemExit('Nenhuma alteração encontrada; abortando para evitar um commit vazio.')
+
+          path.write_text(text, encoding='utf-8')
+          print(f'Patched public/index.html (refresh={n}, polling={n2})')
+
+      - name: Commit patched UI
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/index.html
+          if git diff --cached --quiet; then
+            echo "No UI changes needed."
+            exit 0
+          fi
+          git commit -m "Fix live user presence and refresh button [skip ci]"
+          git push origin HEAD:main
