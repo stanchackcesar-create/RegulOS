@@ -103,6 +103,7 @@
     }
   }
   btn.onclick=()=>{modal.classList.add('open');load();};
+  jfetch('/api/auth/me').then(d=>{if(d?.usuario?.admin!==true){btn.style.display='none';const menuBtn=[...document.querySelectorAll('button')].find(x=>x.textContent.includes('📊 Monitor'));if(menuBtn)menuBtn.style.display='none';}}).catch(()=>{});
   $('Close').onclick=()=>modal.classList.remove('open');
   $('Refresh').onclick=load;
   $('Search').oninput=render; $('Type').onchange=render; $('Period').onchange=render;
