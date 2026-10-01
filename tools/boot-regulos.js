@@ -138,6 +138,90 @@ patchSection(
   'log de destino do agendamento'
 );
 
+
+// v12.11.0 — correção final do fluxo da fila de agendamentos
+// Falha de envio/imagem encerra somente a ocorrência e libera os próximos links.
+function patchSchedulerFlowV11() {
+  const before = source;
+
+  source = source.replace(
+    'async function sendScheduledLink(item) {\n  if (runningLinkSchedules.has(item.id) || !online || !sock || !botWindowActive()) return;',
+    'async function sendScheduledLink(item) {\n  if (runningLinkSchedules.has(item.id) || !online || !sock) return;'
+  );
+
+  source = source.replace(
+    "      item.status = 'erro'; item.ativo = false; writeJson(FILES.schedules, linkSchedules);\n      return;",
+    "      item.status = 'erro'; item.ativo = false; item.lastRunKey = item.progressKey || occurrenceKey(item, new Date()); item.progressKey = ''; item.progressTargets = []; item.progressGroupIds = []; item.progressStartedAt = ''; writeJson(FILES.schedules, linkSchedules);\n      addLog(`Agendamento \\\"${item.nome}\\\" movido para Links com falha; fila liberada.`);\n      return;"
+  );
+
+  const failureNeedle = "    const allDone = (item.progressTargets || []).every(id => (item.progressGroupIds || []).includes(id));\n    if (allDone) {";
+  const failureInsert = [
+    "    const connectionLost = !online || !sock;",
+    "    const executionFailed = Number(errors || 0) > 0;",
+    "    if (connectionLost && (item.progressTargets || []).some(id => !(item.progressGroupIds || []).includes(id))) {",
+    "      item.status = 'pausado';",
+    "      writeJson(FILES.schedules, linkSchedules);",
+    "      addLog(`Agendamento \\\"${item.nome}\\\" pausado por desconexão; progresso preservado.`);",
+    "      return;",
+    "    }",
+    "    if (executionFailed) {",
+    "      item.lastRunKey = item.progressKey || occurrenceKey(item, new Date());",
+    "      item.lastRunAt = new Date().toISOString();",
+    "      item.progressKey = '';",
+    "      item.progressTargets = [];",
+    "      item.progressGroupIds = [];",
+    "      item.progressStartedAt = '';",
+    "      if (item.repeticao === 'uma_vez') { item.ativo = false; item.status = 'erro'; }",
+    "      else { item.status = 'agendado'; }",
+    "      writeJson(FILES.schedules, linkSchedules);",
+    "      addLog(`Agendamento \\\"${item.nome}\\\" falhou nesta ocorrência; fila liberada para o próximo link.`);",
+    "      return;",
+    "    }",
+    failureNeedle
+  ].join("\n");
+  if (source.includes(failureNeedle) && !source.includes('executionFailed = Number(errors || 0)')) {
+    source = source.replace(failureNeedle, failureInsert);
+  }
+
+  source = source.replace(
+    'async function processLinkSchedules() {\n  if (!online || !botWindowActive()) return;',
+    'async function processLinkSchedules() {\n  if (!online || !sock) return;'
+  );
+
+  source = source.replace(
+    '  for (let guard = 0; guard < queue.length; guard++) {\n    if (!botWindowActive()) return;',
+    '  for (let guard = 0; guard < queue.length; guard++) {\n    if (!online || !sock) return;'
+  );
+
+  source = source.replace(
+    '    const item = currentQueue[idx];',
+    '    let item = currentQueue[idx];'
+  );
+
+  const dueNeedle = '    const now = new Date();\n    if (!scheduleDue(item, now)) return;';
+  const dueReplacement = [
+    '    const now = new Date();',
+    '    if (!scheduleDue(item, now)) {',
+    '      const due = currentQueue.filter(x => scheduleDue(x, now));',
+    '      if (!due.length) return;',
+    '      item = due[0];',
+    '      linkQueue.currentId = String(item.id);',
+    '      linkQueue.cursor = Math.max(0, currentQueue.findIndex(x => String(x.id) === String(item.id)));',
+    '      saveLinkQueue();',
+    '    }',
+    '    const before = item.lastRunKey;'
+  ].join("\n");
+  if (source.includes(dueNeedle)) {
+    source = source.replace(dueNeedle, dueReplacement);
+  }
+
+  if (source !== before) {
+    changed = true;
+    console.log('[boot] Fluxo do agendador corrigido: falhas liberam a fila e itens devidos não ficam bloqueados por horário futuro.');
+  }
+}
+patchSchedulerFlowV11();
+
 if (changed) {
   fs.writeFileSync(serverPath, source, 'utf8');
   console.log('[boot] Runtime consolidado de agendamento, destino, imagem e conexão aplicado.');
