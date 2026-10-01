@@ -38,12 +38,11 @@ async function readState(key, fallback) {
 async function writeState(key, value) {
   try {
     const db = await openSqlite();
-    const payload = JSON.stringify(value);
     await db.run(
       `INSERT INTO state (key, value, updated_at)
        VALUES (?, ?, datetime('now'))
        ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`,
-      [key, payload]
+      [key, JSON.stringify(value)]
     );
   } catch (e) {
     addLog(`SQLite writeState falhou para ${key}: ${e.message}`);
@@ -73,4 +72,25 @@ async function writeJson(file, value) {
   const key = path.basename(file);
   await writeState(key, value);
   return scheduleJsonWrite(file, value);
+}
+
+const scheduleQueue = [];
+let scheduleWorkerRunning = false;
+
+function enqueueScheduleJob(job) {
+  scheduleQueue.push(job);
+  if (!scheduleWorkerRunning) {
+    scheduleWorkerRunning = true;
+    setTimeout(async () => {
+      while (scheduleQueue.length) {
+        const job = scheduleQueue.shift();
+        try {
+          await job();
+        } catch (e) {
+          addLog(`Erro no job do scheduler: ${e.message}`);
+        }
+      }
+      scheduleWorkerRunning = false;
+    }, 0);
+  }
 }
