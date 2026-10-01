@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Scheduler Dashboard - RegulOS</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #e5e7eb;
+      padding: 20px;
+    }
+    .container { max-width: 1400px; margin: 0 auto; }
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #374151;
+    }
+    h1 { font-size: 28px; font-weight: 700; }
+    .health-badge {
+      padding: 8px 16px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .health-badge.healthy {
+      background: #166534;
+      color: #dcfce7;
+    }
+    .health-badge.attention {
+      background: #7c2d12;
+      color: #fed7aa;
+    }
+    .health-badge.offline {
+      background: #7f1d1d;
+      color: #fecaca;
+    }
+    .status-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    .health-badge.healthy .status-dot { background: #22c55e; }
+    .health-badge.attention .status-dot { background: #f97316; }
+    .health-badge.offline .status-dot { background: #ef4444; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card {
+      background: #1f2937;
+      padding: 20px;
+      border-radius: 12px;
+      border: 1px solid #374151;
+      transition: all 0.3s ease;
+    }
+    .card:hover { border-color: #4b5563; background: #111827; }
+    .card-label { font-size: 13px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
+    .card-value { font-size: 36px; font-weight: 700; color: #f0f9ff; }
+    .card.warning .card-value { color: #fbbf24; }
+    .card.danger .card-value { color: #f87171; }
+    .queue-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 24px; }
+    .queue-card {
+      background: #111827;
+      padding: 16px;
+      border-radius: 10px;
+      border-left: 4px solid #374151;
+      text-align: center;
+    }
+    .queue-card.send { border-left-color: #ef4444; }
+    .queue-card.history { border-left-color: #8b5cf6; }
+    .queue-card.preview { border-left-color: #3b82f6; }
+    .queue-card.failure { border-left-color: #f97316; }
+    .queue-name { font-size: 12px; color: #9ca3af; margin-bottom: 6px; }
+    .queue-count { font-size: 28px; font-weight: 700; }
+    .latency-section { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .latency-card {
+      background: #1f2937;
+      padding: 20px;
+      border-radius: 12px;
+      border: 1px solid #374151;
+    }
+    .latency-type { font-size: 12px; color: #9ca3af; margin-bottom: 8px; }
+    .latency-value { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+    .latency-detail { font-size: 11px; color: #6b7280; }
+    .chart-section { margin-top: 24px; }
+    .chart-header {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #d1d5db;
+    }
+    .bar-chart {
+      display: flex;
+      align-items: flex-end;
+      gap: 12px;
+      height: 200px;
+      background: #1f2937;
+      padding: 16px;
+      border-radius: 12px;
+      border: 1px solid #374151;
+    }
+    .bar { flex: 1; background: #3b82f6; border-radius: 4px 4px 0 0; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 8px; min-height: 20px; }
+    .bar-label { font-size: 11px; color: #9ca3af; }
+    .bar-value { font-size: 12px; font-weight: 600; color: #f0f9ff; }
+    .refresh-info {
+      text-align: center;
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid #374151;
+      font-size: 12px;
+      color: #6b7280;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>Scheduler Dashboard</h1>
+      <div class="health-badge healthy" id="health">
+        <span class="status-dot"></span>
+        <span>Monitoring</span>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="card-label">Total de Jobs</div>
+        <div class="card-value" id="metric-total">0</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Processados</div>
+        <div class="card-value" id="metric-processed" style="color: #86efac;">0</div>
+      </div>
+      <div class="card danger">
+        <div class="card-label">Falhas</div>
+        <div class="card-value" id="metric-failed">0</div>
+      </div>
+      <div class="card warning">
+        <div class="card-label">Retries</div>
+        <div class="card-value" id="metric-retries">0</div>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <div class="card-label">Taxa de Sucesso</div>
+        <div class="card-value" id="success-rate" style="color: #60a5fa;">0%</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Latência Média</div>
+        <div class="card-value" id="latency-box" style="color: #fbbf24;">0ms</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Filas Ativas</div>
+        <div class="card-value" id="workers-active">0</div>
+      </div>
+      <div class="card">
+        <div class="card-label">Jobs em Fila</div>
+        <div class="card-value" id="total-queued">0</div>
+      </div>
+    </div>
+
+    <div class="chart-header">Estado das Filas</div>
+    <div class="queue-grid">
+      <div class="queue-card send">
+        <div class="queue-name">SEND (Crítico)</div>
+        <div class="queue-count" id="queue-send">0</div>
+      </div>
+      <div class="queue-card history">
+        <div class="queue-name">HISTORY</div>
+        <div class="queue-count" id="queue-history">0</div>
+      </div>
+      <div class="queue-card preview">
+        <div class="queue-name">PREVIEW</div>
+        <div class="queue-count" id="queue-preview">0</div>
+      </div>
+      <div class="queue-card failure">
+        <div class="queue-name">FAILURE</div>
+        <div class="queue-count" id="queue-failure">0</div>
+      </div>
+    </div>
+
+    <div class="chart-section">
+      <div class="chart-header">Latência por Tipo de Job</div>
+      <div class="bar-chart" id="latency-chart"></div>
+    </div>
+
+    <div class="chart-section">
+      <div class="chart-header">Jobs Processados por Tipo</div>
+      <div class="bar-chart" id="processed-chart"></div>
+    </div>
+
+    <div class="refresh-info">
+      <span id="last-update">Atualizado agora</span> · Atualizando a cada 2 segundos
+    </div>
+  </div>
+
+  <script>
+    (async function initSchedulerDashboard() {
+      const health = document.getElementById('health');
+      const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = value;
+      };
+
+      function updateLatencyChart(data) {
+        const chart = document.getElementById('latency-chart');
+        const latency = data.latency || {};
+        chart.innerHTML = '';
+
+        Object.entries(latency).forEach(([type, entry]) => {
+          if (entry && entry.avgMs) {
+            const bar = document.createElement('div');
+            bar.className = 'bar';
+            const maxMs = 1000;
+            const height = Math.min((entry.avgMs / maxMs) * 100, 100);
+            bar.style.height = `${height}%`;
+            bar.innerHTML = `<div class="bar-value">${Math.round(entry.avgMs)}ms</div><div class="bar-label">${type}</div>`;
+            chart.appendChild(bar);
+          }
+        });
+      }
+
+      function updateProcessedChart(data) {
+        const chart = document.getElementById('processed-chart');
+        const byType = data.byType || {};
+        chart.innerHTML = '';
+
+        const maxVal = Math.max(...Object.values(byType).map(Number), 1);
+        Object.entries(byType).forEach(([type, count]) => {
+          const bar = document.createElement('div');
+          bar.className = 'bar';
+          const height = (Number(count) / maxVal) * 100;
+          bar.style.height = `${height}%`;
+          bar.innerHTML = `<div class="bar-value">${Number(count)}</div><div class="bar-label">${type}</div>`;
+          chart.appendChild(bar);
+        });
+      }
+
+      async function loadMetrics() {
+        try {
+          const res = await fetch('/api/scheduler-metrics', { cache: 'no-store' });
+          if (!res.ok) throw new Error('metrics unavailable');
+          const data = await res.json();
+
+          setText('metric-total', Number(data.total || 0));
+          setText('metric-processed', Number(data.processed || 0));
+          setText('metric-failed', Number(data.failed || 0));
+          setText('metric-retries', Number(data.retries || 0));
+          setText('queue-send', Number(data.queue?.send || 0));
+          setText('queue-preview', Number(data.queue?.preview || 0));
+          setText('queue-history', Number(data.queue?.history || 0));
+          setText('queue-failure', Number(data.queue?.failure || 0));
+
+          const total = Number(data.total || 0);
+          const processed = Number(data.processed || 0);
+          const successRate = total ? Math.round((processed / total) * 100) : 0;
+          setText('success-rate', `${successRate}%`);
+
+          const latencyEntries = data.latency || {};
+          let avg = 0, count = 0;
+          Object.values(latencyEntries).forEach(v => {
+            if (v && v.avgMs) {
+              avg += v.avgMs;
+              count += 1;
+            }
+          });
+          setText('latency-box', count ? `${Math.round(avg / count)}ms` : '0ms');
+
+          const totalQueued = Object.values(data.queue || {}).reduce((sum, v) => sum + Number(v || 0), 0);
+          setText('workers-active', Object.keys(data.queue || {}).filter(k => data.queue[k] > 0).length);
+          setText('total-queued', totalQueued);
+
+          const hasIssue = Number(data.failed || 0) > 0 || Number(data.queue?.send || 0) > 25 || Number(data.queue?.preview || 0) > 50;
+          health.className = hasIssue ? 'health-badge attention' : 'health-badge healthy';
+          health.innerHTML = `<span class="status-dot"></span><span>${hasIssue ? 'Atenção' : 'Healthy'}</span>`;
+
+          updateLatencyChart(data);
+          updateProcessedChart(data);
+
+          const now = new Date();
+          document.getElementById('last-update').textContent = `Atualizado às ${now.toLocaleTimeString('pt-BR')}`;
+        } catch (e) {
+          health.className = 'health-badge offline';
+          health.innerHTML = `<span class="status-dot"></span><span>Offline</span>`;
+          console.error('Erro ao carregar métricas:', e);
+        }
+      }
+
+      await loadMetrics();
+      setInterval(loadMetrics, 2000);
+    })();
+  </script>
+</body>
+</html>
