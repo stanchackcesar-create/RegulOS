@@ -1,1 +1,1 @@
-function startPolling(fast=false){if(poll)clearInterval(poll);const intervalMs=fast?6000:15000;poll=setInterval(async()=>{await status();const now=Date.now();if(now-lastGroupUiRefresh>15000) await loadGroups();},intervalMs);}
+function startPolling(fast=false){if(poll)clearInterval(poll);const intervalMs=fast?8000:20000;poll=setInterval(async()=>{await status();const now=Date.now();if(now-lastGroupUiRefresh>20000) await loadGroups();},intervalMs);}
