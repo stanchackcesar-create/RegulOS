@@ -208,8 +208,7 @@ function patchSchedulerFlowV11() {
     '      linkQueue.currentId = String(item.id);',
     '      linkQueue.cursor = Math.max(0, currentQueue.findIndex(x => String(x.id) === String(item.id)));',
     '      saveLinkQueue();',
-    '    }',
-    '    const before = item.lastRunKey;'
+    '    }'
   ].join("\n");
   if (source.includes(dueNeedle)) {
     source = source.replace(dueNeedle, dueReplacement);
