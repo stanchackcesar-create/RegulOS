@@ -1997,7 +1997,13 @@ app.get('/api/link-agendamentos',(req,res)=>{
 app.get('/api/links',(req,res)=>{
   try {
     const requestedUserId=String(req.query?.userId||'');
-    const agendamentos=(Array.isArray(linkSchedules)?linkSchedules:[]).filter(x=>req.user?.admin===true ? (!requestedUserId || String(x.whatsappUserId||'')===requestedUserId || (!x.whatsappUserId && requestedUserId===String(req.user?.id||''))) : String(x.whatsappUserId||'')===String(req.user?.id||''));
+    const targetId=requestedUserId || String(req.user?.id||'');
+    if(requestedUserId && req.user?.admin!==true)
+      return res.status(403).json({ok:false,msg:whatsappAccessDeniedMessage()});
+    if(req.user?.admin===true && !canAdminAccessWhatsApp(req,targetId))
+      return res.status(403).json({ok:false,msg:whatsappAccessDeniedMessage()});
+    const agendamentos=(Array.isArray(linkSchedules)?linkSchedules:[])
+      .filter(x=>scheduleOwnerId(x)===targetId);
     res.set('Cache-Control','no-store');
     res.json({ok:true,links:agendamentos,agendamentos});
   } catch(e) { res.status(500).json({ok:false,msg:'Não foi possível carregar os links.'}); }
