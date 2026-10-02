@@ -1121,6 +1121,67 @@ async function sendLegacyAutoLink() {
 }
 
 const runningLinkSchedules = new Set();
+const scheduledGroupRevalidationAt = new Map();
+const SCHEDULED_GROUP_REVALIDATE_COOLDOWN_MS = 30 * 1000;
+
+async function ensureScheduledGroupsAvailable(selectedGroupIds) {
+  const ids = normalizeScheduleGroupIds(selectedGroupIds);
+  if (!ids.length || !online || !sock) return false;
+
+  // Primeiro tentamos atualizar o cache completo, respeitando o rate-limit/backoff
+  // já existente em loadGroups(). Isso resolve a maioria dos casos de cache antigo.
+  await loadGroups();
+
+  let missing = ids.filter(id => !groups.some(g => String(g?.id || '') === id));
+  if (!missing.length) return true;
+
+  // Se o refresh geral ainda não encontrou um grupo específico, consultamos
+  // somente esse JID diretamente. Há um cooldown para não repetir a consulta
+  // a cada ciclo de 10s do scheduler.
+  for (const id of missing) {
+    const now = Date.now();
+    const lastAttempt = Number(scheduledGroupRevalidationAt.get(id) || 0);
+    if (now - lastAttempt < SCHEDULED_GROUP_REVALIDATE_COOLDOWN_MS) continue;
+
+    scheduledGroupRevalidationAt.set(id, now);
+    try {
+      const meta = await sock.groupMetadata(id);
+      const metaId = String(meta?.id || id).trim();
+      if (metaId !== id || !isValidGroupJid(metaId)) continue;
+
+      const refreshedGroup = {
+        id: metaId,
+        name: meta.subject || metaId,
+        members: Array.isArray(meta.participants)
+          ? meta.participants.length
+          : Number(meta.size || 0),
+        allowed: allowed.includes(metaId),
+        config: getGroupConfig(metaId)
+      };
+
+      const existingIndex = groups.findIndex(g => String(g?.id || '') === metaId);
+      if (existingIndex >= 0) {
+        groups[existingIndex] = refreshedGroup;
+      } else {
+        groups.push(refreshedGroup);
+      }
+      groups.sort((a,b) => String(a.name || a.id).localeCompare(String(b.name || b.id), 'pt-BR'));
+      addLog(`Grupo revalidado para o agendamento: ${metaId} — ${refreshedGroup.name}`);
+    } catch (e) {
+      // O grupo pode ter sido removido, a sessão pode não ter acesso a ele,
+      // ou a consulta pode ter sido recusada. Neste ponto não transformamos
+      // uma falha temporária de cache em falha permanente do agendamento.
+      if (isGroupRateLimitError(e)) {
+        addLog(`Revalidação do grupo ${id} limitada por rate-limit; aguardando nova tentativa.`);
+      } else {
+        addLog(`Grupo ${id} ainda não foi revalidado: ${e.message}`);
+      }
+    }
+  }
+
+  missing = ids.filter(id => !groups.some(g => String(g?.id || '') === id));
+  return missing.length === 0;
+}
 function isoWeekKey(d) {
   const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const day = x.getDay() || 7;
@@ -1170,17 +1231,17 @@ async function sendScheduledLink(item) {
     addLog(`Agendamento "${item.nome}" bloqueado: ${erro}`);
     return;
   }
-  const selectedGroups=selectedGroupIds.map(id=>groups.find(g=>String(g.id)===id));
-  if(selectedGroups.some(g=>!g)){
-    const missing=selectedGroupIds.filter(id=>!groups.some(g=>String(g.id)===id));
-    const erro=`Grupo(s) de envio não estão no cache atual: ${missing.join(', ')}. Atualize os grupos antes de executar.`;
-    item.status='erro';
-    item.ativo=false;
-    upsertLinkFailure(item,missing[0]||selectedGroupIds[0],erro);
+  const groupsAvailable = await ensureScheduledGroupsAvailable(selectedGroupIds);
+  if(!groupsAvailable){
+    const missing=selectedGroupIds.filter(id=>!groups.some(g=>String(g?.id||'')===id));
+    item.status='aguardando_grupo';
+    item.lastGroupCheckAt=new Date().toISOString();
     writeJson(FILES.schedules,linkSchedules);
-    addLog(`Agendamento "${item.nome}" bloqueado: ${erro}`);
+    addLog(`Agendamento "${item.nome}" aguardando revalidação do grupo: ${missing.join(', ')}`);
     return;
   }
+
+  const selectedGroups=selectedGroupIds.map(id=>groups.find(g=>String(g.id)===id)).filter(Boolean);
   item.grupoNomes=Object.fromEntries(selectedGroups.map(g=>[String(g.id),String(g.name||g.id)]));
   item.grupoNome=selectedGroupIds.length===1?item.grupoNomes[selectedGroupIds[0]]:`${selectedGroupIds.length} grupos`;
 
