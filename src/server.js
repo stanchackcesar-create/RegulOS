@@ -446,7 +446,7 @@ function clearLinkFailures() { linkFailures = []; writeJson(FILES.linkFailures, 
 function upsertLinkFailure(item, grupoId, erro, extra={}) {
   const key = `${item.id}:${String(grupoId)}`;
   const record = {
-    id: key, agendamentoId: item.id, grupoId: String(grupoId || ''), nome: item.nome, url: item.url,
+    id: key, agendamentoId: item.id, grupoId: String(grupoId || ''), grupoNome: item.grupoNome || groupNameForId(grupoId), nome: item.nome, url: item.url,
     mensagem: item.mensagem || '', data: item.data, horario: item.horario, repeticao: item.repeticao,
     intervaloMin: item.intervaloMin, intervaloMax: item.intervaloMax, ativo: false,
     imagemAutomatica: item.imagemAutomatica !== false, imagemUrl: item.imagemUrl || '',
@@ -470,7 +470,7 @@ function archiveSentFailureAsHistory(item, failure, grupoId) {
     tituloProduto: item.tituloProduto || '', repeticao: item.repeticao, data: item.data, horario: item.horario,
     intervaloMin: item.intervaloMin, intervaloMax: item.intervaloMax, imagemAutomatica: item.imagemAutomatica !== false,
     imagemUrl: item.imagemUrl || '', imagemStatus: item.imagemStatus || '', enviados: 1, sucessos: 1, erros: 0,
-    grupoId: String(grupoId || failure?.grupoId || ''), lastRunAt: new Date().toISOString(),
+    grupoId: String(grupoId || failure?.grupoId || ''), grupoNome: item.grupoNome || groupNameForId(grupoId || failure?.grupoId), lastRunAt: new Date().toISOString(),
     concluidoAt: new Date().toISOString(), motivo: 'reenvio realizado com sucesso'
   };
   linkHistory.unshift(snapshot); saveLinkHistory();
@@ -1051,10 +1051,18 @@ async function loadGroups() {
   return groupRefreshInFlight;
 }
 
+function isValidGroupJid(id) {
+  const value = String(id || '').trim();
+  return Boolean(value) && value !== 'undefined' && value !== 'null' && /^[^@\s]+@g\.us$/.test(value);
+}
+function groupNameForId(id) {
+  const value = String(id || '').trim();
+  return groups.find(g => String(g?.id || '') === value)?.name || value || '';
+}
 function activeGroups() {
   return groups
     .map(g => String(g?.id || '').trim())
-    .filter(id => id && id !== 'undefined' && id !== 'null' && /@g\.us$/.test(id))
+    .filter(id => isValidGroupJid(id))
     .filter(id => getGroupConfig(id).ativo !== false);
 }
 
@@ -1139,27 +1147,51 @@ async function sendScheduledLink(item) {
   let targets;
   const now = new Date();
 
+  // Cada agendamento tem um único destino explícito. Nunca usamos a lista
+  // global de grupos como fallback, evitando broadcast acidental e JIDs inválidos.
+  const selectedGroupId=String(item.grupoId||'').trim();
+  if(!isValidGroupJid(selectedGroupId)){
+    const erro='Grupo de envio não definido ou inválido. Edite o agendamento e selecione um grupo válido.';
+    item.status='erro';
+    item.ativo=false;
+    upsertLinkFailure(item,selectedGroupId,erro);
+    writeJson(FILES.schedules,linkSchedules);
+    addLog(`Agendamento "${item.nome}" bloqueado: ${erro}`);
+    return;
+  }
+  const selectedGroup=groups.find(g=>String(g.id)===selectedGroupId);
+  if(!selectedGroup){
+    const erro=`Grupo de envio "${selectedGroupId}" não está no cache atual. Atualize os grupos antes de executar.`;
+    item.status='erro';
+    item.ativo=false;
+    upsertLinkFailure(item,selectedGroupId,erro);
+    writeJson(FILES.schedules,linkSchedules);
+    addLog(`Agendamento "${item.nome}" bloqueado: ${erro}`);
+    return;
+  }
+  item.grupoNome=String(selectedGroup.name||selectedGroupId);
+
   // Mantém a mesma ocorrência entre reinícios. O progresso fica gravado em
   // disco depois de cada grupo, então o próximo processo continua do ponto
   // exato em que o anterior parou.
   if (hasPendingProgress(item)) {
-    targets = Array.isArray(item.progressTargets) ? [...item.progressTargets] : [];
+    targets = Array.isArray(item.progressTargets) ? [...item.progressTargets] : [selectedGroupId];
   } else {
-    targets = activeGroups();
-    if (!targets.length) {
+    targets = [selectedGroupId];
+    if (getGroupConfig(selectedGroupId).ativo === false) {
       item.status = 'pausado';
       item.lastSkipKey = dateKey(now);
       writeJson(FILES.schedules, linkSchedules);
-      addLog(`Agendamento "${item.nome}" aguardando: nenhum grupo Ligado.`);
+      addLog(`Agendamento "${item.nome}" aguardando: o grupo "${item.grupoNome}" está desligado.`);
       return;
     }
     item.progressKey = occurrenceKey(item, now);
-    item.progressTargets = [...new Set(targets.map(String))];
+    item.progressTargets = [selectedGroupId];
     item.progressGroupIds = [];
     item.progressStartedAt = now.toISOString();
     item.status = 'enviando';
     writeJson(FILES.schedules, linkSchedules);
-    addLog(`Agendamento "${item.nome}" iniciado. Progresso salvo em disco.`);
+    addLog(`Agendamento "${item.nome}" iniciado para "${item.grupoNome}" (${selectedGroupId}). Progresso salvo em disco.`);
   }
 
   // Grupos já concluídos nesta ocorrência nunca recebem a mesma execução de novo.
@@ -1237,6 +1269,9 @@ async function sendScheduledLink(item) {
       if (getGroupConfig(id).ativo === false) continue;
 
       try {
+        if(!isValidGroupJid(id)){
+          throw new Error('JID do grupo de destino inválido.');
+        }
         // Registramos a intenção antes do envio. Isso privilegia a regra do
         // RegulOS de nunca duplicar um envio após uma queda/reinício.
         // Em caso de erro, removemos a marca para permitir nova tentativa.
@@ -1759,9 +1794,13 @@ app.post('/api/link-agendamentos',(req,res)=>{
   const data=String(b.data||''), horario=String(b.horario||'');
   if(!nome||!url||!data||!horario) return res.status(400).json({ok:false,msg:'Nome, link, data e horário são obrigatórios.'});
   const min=Math.max(1,Number(b.intervaloMin||1)), max=Math.max(min,Number(b.intervaloMax||min));
+  const grupoId=String(b.grupoId||'').trim();
+  if(!isValidGroupJid(grupoId)) return res.status(400).json({ok:false,msg:'Selecione um grupo de envio válido.'});
+  const grupoEncontrado=groups.find(g=>String(g.id)===grupoId);
+  if(!grupoEncontrado) return res.status(400).json({ok:false,msg:'O grupo selecionado não está disponível no cache atual. Atualize a lista de grupos e tente novamente.'});
   const item={
     id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),
-    nome,url,mensagem:String(b.mensagem||''),tituloProduto:'',tituloUltimaTentativa:'',data,horario,
+    nome,url,mensagem:String(b.mensagem||''),grupoId,grupoNome:String(grupoEncontrado.name||grupoId),tituloProduto:'',tituloUltimaTentativa:'',data,horario,
     repeticao:['uma_vez','diariamente','semanalmente'].includes(b.repeticao)?b.repeticao:'uma_vez',
     intervaloMin:min,intervaloMax:max,ativo:b.ativo!==false,status:b.ativo===false?'pausado':'agendado',
     imagemAutomatica:b.imagemAutomatica!==false, imagemUrl:String(b.imagemUrl||'').trim(),
@@ -1791,6 +1830,22 @@ app.put('/api/link-agendamentos/:id',(req,res)=>{
   item.url=String(b.url||item.url).trim();
   if (item.url !== oldUrl) { item.tituloProduto=''; item.tituloUltimaTentativa=''; item.imagemStatus='pendente'; }
   item.mensagem=String(b.mensagem??item.mensagem);
+  if(Object.prototype.hasOwnProperty.call(b,'grupoId')){
+    const novoGrupoId=String(b.grupoId||'').trim();
+    if(!isValidGroupJid(novoGrupoId)) return res.status(400).json({ok:false,msg:'Selecione um grupo de envio válido.'});
+    const grupoAnterior=String(item.grupoId||'').trim();
+    const grupoEncontrado=groups.find(g=>String(g.id)===novoGrupoId);
+    if(!grupoEncontrado) return res.status(400).json({ok:false,msg:'O grupo selecionado não está disponível no cache atual. Atualize a lista de grupos e tente novamente.'});
+    if(novoGrupoId!==grupoAnterior){
+      item.progressKey='';
+      item.progressTargets=[];
+      item.progressGroupIds=[];
+      item.progressStartedAt='';
+      item.lastRunKey='';
+    }
+    item.grupoId=novoGrupoId;
+    item.grupoNome=String(grupoEncontrado.name||novoGrupoId);
+  }
   item.data=String(b.data||item.data);
   item.horario=String(b.horario||item.horario);
   item.repeticao=['uma_vez','diariamente','semanalmente'].includes(b.repeticao)?b.repeticao:item.repeticao;
