@@ -629,6 +629,7 @@ async function loadAccount(){
   let html=`<div style="margin-top:2px"><b>Usuário atual:</b> ${esc(u.usuario||'')} ${u.admin?'<span class="badge good">Administrador</span>':''}</div>`;
   if(u.admin){
     const d=await jfetch('/api/usuarios');
+    window.__accountUsersForWhatsApp=d.usuarios||[];
     html+=`<div style="margin-top:14px"><b>Usuários com acesso ao mesmo RegulOS</b></div>
     <div id="userList" style="margin-top:8px">`;
     (d.usuarios||[]).forEach(x=>{
@@ -661,7 +662,7 @@ async function loadAccount(){
         </div>
       </div>`;
   }
-  const accountUsers = u.admin ? (d?.usuarios||[]) : [{id:u.id,usuario:u.usuario,admin:u.admin}];
+  const accountUsers = u.admin ? (window.__accountUsersForWhatsApp||[]) : [{id:u.id,usuario:u.usuario,admin:u.admin}];
   const selectedId = window.regulosWhatsAppUserId || u.id;
   html += `
     <div class="panel" style="margin-top:12px;padding:12px">
