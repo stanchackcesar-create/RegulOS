@@ -456,15 +456,19 @@ app.get('/api/whatsapp-contas',(req,res)=>{
   if(req.user?.admin===true){
     users.forEach(ensureWhatsAppAccount);
     const current=readWhatsAppAccounts();
-    return res.json({ok:true,contas:Object.values(current).map(sanitizeWhatsAppAccount)});
+    const contas=users
+      .filter(u=>String(u.id)===String(req.user.id) || u.whatsappAdminAccess===true)
+      .map(u=>sanitizeWhatsAppAccount(current[String(u.id)]||ensureWhatsAppAccount(u)))
+      .filter(Boolean);
+    return res.json({ok:true,contas});
   }
   const account=ensureWhatsAppAccount(req.user);
   return res.json({ok:true,contas:account?[sanitizeWhatsAppAccount(account)]:[]});
 });
 
 app.get('/api/whatsapp-contas/:userId',(req,res)=>{
-  if(req.user?.admin!==true && req.user?.id!==req.params.userId)
-    return res.status(403).json({ok:false,msg:'Acesso restrito ao administrador ou ao próprio usuário.'});
+  if(!canAdminAccessWhatsApp(req,req.params.userId))
+    return res.status(403).json({ok:false,msg:whatsappAccessDeniedMessage()});
   const user=readUsers().find(x=>x.id===req.params.userId);
   if(!user)return res.status(404).json({ok:false,msg:'Usuário não encontrado.'});
   const account=ensureWhatsAppAccount(user);
@@ -1736,17 +1740,40 @@ async function start() {
   }
 }
 
-app.get('/api/status', (req,res) => res.json({
-  ok:true, conectado:online, status, temQR:Boolean(qr), qr,
-  numero: connectedNumber ? formatPhone(connectedNumber) : '',
-  numeroBruto: connectedNumber,
-  grupos:groups.length, permitidos:allowed.length,
-gruposLigados:activeGroups().map(id=>{const g=groups.find(x=>String(x.id)===String(id));const c=getGroupConfig(id);return {id,nome:g?.name||c.nome||c.apelido||id};}),
-  links:linkSchedules.length, filaLinks: orderedLinks().length, filaCursor: linkQueue.cursor, filaAtual: linkQueue.currentId, janela:botWindowLabel(),
-  programacao:botSchedule
-}));
-app.get('/api/qr', (req,res) => res.json({ok:true, qr, status, conectado:online}));
-app.get('/api/logs', (req,res) => res.json({ok:true, logs:[...logs].reverse()}));
+app.get('/api/status', (req,res) => {
+  const user=req.user;
+  const userGroups=user?.admin ? groups : (readWhatsAppGroups()[String(user?.id)]||[]);
+  const userAllowed=user?.admin
+    ? activeGroups()
+    : userGroups.filter(g=>getWhatsAppGroupConfig(user.id,g.id).ativo).map(g=>String(g.id));
+  const userSchedules=linkSchedules.filter(x=>String(x.whatsappUserId||'')===String(user?.id||''));
+  const live=user?.admin ? null : whatsappSessionManager.status(user.id);
+  res.json({
+    ok:true,
+    conectado:isWhatsAppOnlineForUser(user),
+    status:user?.admin ? status : (live?.status||'Não conectado'),
+    temQR:user?.admin ? Boolean(qr) : Boolean(live?.qr),
+    qr:user?.admin ? qr : (live?.qr||null),
+    numero:user?.admin ? (connectedNumber ? formatPhone(connectedNumber) : '') : (live?.numero||''),
+    numeroBruto:user?.admin ? connectedNumber : (live?.numero||''),
+    grupos:userGroups.length,
+    permitidos:userAllowed.length,
+    gruposLigados:userAllowed.map(id=>{const g=userGroups.find(x=>String(x.id)===String(id));const cfg=user?.admin?getGroupConfig(id):getWhatsAppGroupConfig(user.id,id);return {id,nome:g?.name||cfg.nome||cfg.apelido||id};}),
+    links:userSchedules.length,
+    filaLinks:userSchedules.filter(x=>x.ativo!==false).length,
+    filaCursor:0,
+    filaAtual:userSchedules.find(x=>x.ativo!==false)?.id||'',
+    janela:botWindowLabel(),
+    programacao:botSchedule
+  });
+});
+app.get('/api/qr', (req,res) => {
+  const user=req.user;
+  if(user?.admin) return res.json({ok:true,qr,status,conectado:online});
+  const live=whatsappSessionManager.status(user.id);
+  return res.json({ok:true,qr:live.qr,status:live.status,conectado:live.connected});
+});
+app.get('/api/logs', requireAdmin, (req,res) => res.json({ok:true, logs:[...logs].reverse()}));
 
 app.post('/api/reconectar', requireAdmin, async (req,res) => {
   clearReconnect(); stopSchedulers(); manualDisconnected=false;
@@ -1999,7 +2026,9 @@ app.post('/api/link-falhas/:id/reenviar', async (req,res)=>{
   if(!failure) return res.status(404).json({ok:false,msg:'Falha não encontrada.'});
   const item=linkSchedules.find(x=>String(x.id)===String(failure.agendamentoId));
   if(!item) return res.status(404).json({ok:false,msg:'O link associado à falha não está mais no Gerenciador de Links.'});
-  if(!online || !sock) return res.status(503).json({ok:false,msg:'WhatsApp não conectado.'});
+  const owner=readUsers().find(x=>String(x.id)===String(item.whatsappUserId||failure.whatsappUserId||''));
+  const ownerSock=owner ? getWhatsAppSocketForUser(owner) : null;
+  if(!owner || !isWhatsAppOnlineForUser(owner) || !ownerSock) return res.status(503).json({ok:false,msg:'WhatsApp da conta do agendamento não está conectado.'});
   const target=String(failure.grupoId||'');
   if(!target) return res.status(400).json({ok:false,msg:'A falha não possui grupo de destino registrado.'});
   try {
@@ -2008,8 +2037,8 @@ app.post('/api/link-falhas/:id/reenviar', async (req,res)=>{
     if(String(item.imagemUrl||'').trim()) image=await downloadBuffer(String(item.imagemUrl).trim(),String(item.url||'').trim());
     else image=await findProductImage(String(item.url||'').trim());
     if(!image) throw new Error('Não foi possível obter a imagem. Edite o link ou informe uma URL de imagem.');
-    if(image) await sock.sendMessage(target,{image:image.buffer,caption:text}); else await sock.sendMessage(target,{text});
-    addHistory({grupoId:target,link:item.url,status:'sucesso',agendamentoId:item.id,tipo:'reenvio',at:new Date().toISOString()});
+    if(image) await ownerSock.sendMessage(target,{image:image.buffer,caption:text}); else await ownerSock.sendMessage(target,{text});
+    addHistory({whatsappUserId:String(item.whatsappUserId||owner.id),grupoId:target,link:item.url,status:'sucesso',agendamentoId:item.id,tipo:'reenvio',at:new Date().toISOString()});
     archiveSentFailureAsHistory(item,failure,target);
     removeLinkFailure(failure.id);
     item.sucessos=Number(item.sucessos||0)+1; item.enviados=Number(item.enviados||0)+1; item.erros=Math.max(0,Number(item.erros||0)-1);
@@ -2304,6 +2333,20 @@ for(const layer of (regulosRouteStack||[])){
         addLog(`Histórico de links limpo pelo usuário ${req.user.usuario}: ${mine.length} registro(s) removido(s).`);
       }
       return res.json({ok:true,msg:`Histórico limpo. ${mine.length} registro(s) removido(s).`});
+    };
+  }
+}
+
+// Protege a exclusão individual de histórico.
+const deleteHistoryItemLayer=(regulosRouteStack||[]).find(l=>l.route?.path==='/api/link-historico/:id' && l.route?.methods?.delete);
+if(deleteHistoryItemLayer){
+  for(const entry of deleteHistoryItemLayer.route.stack){
+    const original=entry.handle;
+    entry.handle=async function(req,res,next){
+      const item=linkHistory.find(x=>String(x.id)===String(req.params.id));
+      if(!item || !historyBelongsToUser(item,req.user))
+        return res.status(404).json({ok:false,msg:'Registro de histórico não encontrado.'});
+      return original(req,res,next);
     };
   }
 }
