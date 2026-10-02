@@ -1054,7 +1054,7 @@ async function loadGroups() {
 function activeGroups() {
   return groups
     .map(g => String(g?.id || '').trim())
-    .filter(id => id && id !== 'undefined' && id !== 'null' && /@g\\.us$/.test(id))
+    .filter(id => id && id !== 'undefined' && id !== 'null' && /@g\.us$/.test(id))
     .filter(id => getGroupConfig(id).ativo !== false);
 }
 
