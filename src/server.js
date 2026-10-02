@@ -305,6 +305,11 @@ app.get('/api/oferta-preview', requireAuth, async (req,res)=>{
 
 app.use(requireAuth);
 
+// Arquivos estáticos do painel (JS/CSS/imagens) são servidos somente após autenticação.
+// Sem este middleware, o fallback "*" abaixo devolve index.html para arquivos .js,
+// fazendo o navegador bloquear os scripts por MIME type text/html.
+app.use(express.static(PUBLIC, { index: false }));
+
 app.get('/api/usuarios',(req,res)=>{
   const usuarios=readUsers().map(u=>({...sanitizeUser(u),online:userHasActiveSession(u.id)}));
   res.json({ok:true,usuarios});
