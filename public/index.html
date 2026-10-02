@@ -634,6 +634,7 @@ async function loadAccount(){
     <div id="userList" style="margin-top:8px">`;
     (d.usuarios||[]).forEach(x=>{
       const online=Boolean(x.online);
+      const wa=x.admin ? true : x.whatsappAdminAccess===true;
       html+=`<div class="group account-user-row" data-user-id="${esc(x.id)}">
         <div class="account-user-line">
           <div class="account-user-name">
@@ -642,6 +643,9 @@ async function loadAccount(){
             ${x.admin?'<span class="badge good">Administrador</span>':''}
           </div>
           <span class="account-user-status ${online?'status-online':'status-offline'}">${online?'Online':'Offline'}</span>
+        </div>
+        <div class="muted" style="margin-top:7px;font-size:12px">
+          📱 WhatsApp: ${wa?'🔓 administrador autorizado':'🔒 autorização não concedida'}
         </div>
         ${x.id!==u.id?`<button class="red" onclick="deleteUser('${x.id}')">Excluir</button>`:''}
       </div>`;
@@ -662,7 +666,9 @@ async function loadAccount(){
         </div>
       </div>`;
   }
-  const accountUsers = u.admin ? (window.__accountUsersForWhatsApp||[]) : [{id:u.id,usuario:u.usuario,admin:u.admin}];
+  const accountUsers = u.admin
+    ? (window.__accountUsersForWhatsApp||[]).filter(x=>String(x.id)===String(u.id) || x.whatsappAdminAccess===true)
+    : [{id:u.id,usuario:u.usuario,admin:u.admin,whatsappAdminAccess:u.whatsappAdminAccess===true}];
   const selectedId = window.regulosWhatsAppUserId || u.id;
   html += `
     <div class="panel" style="margin-top:12px;padding:12px">
@@ -672,6 +678,7 @@ async function loadAccount(){
       <label style="margin-top:10px">Conta WhatsApp</label>
       <select id="whatsappUserSelect" onchange="selectWhatsAppAccount(this.value)"></select>
       <div id="whatsappAccountStatus" class="statusline" style="margin-top:8px">Carregando...</div>
+      <div id="whatsappAdminAccessBox" class="notice" style="margin-top:10px;display:none"></div>
       <div class="row" style="margin-top:8px">
         <button class="green" onclick="startWhatsAppAccount()">📱 Conectar / gerar QR</button>
         <button onclick="newWhatsAppQR()">🔄 Novo QR</button>
@@ -711,6 +718,27 @@ async function selectWhatsAppAccount(id){
   window.regulosWhatsAppUserId=String(id||'');
   await refreshWhatsAppAccountPanel();
 }
+async function refreshWhatsAppAdminAccessBox(selectedUser){
+  const box=document.getElementById('whatsappAdminAccessBox');
+  if(!box)return;
+  if(selectedUser?.admin){
+    box.style.display='none';
+    return;
+  }
+  box.style.display='';
+  const authorized=selectedUser?.whatsappAdminAccess===true;
+  box.className='notice '+(authorized?'success':'error');
+  box.innerHTML=authorized
+    ? '🔓 <b>Administrador autorizado.</b> O administrador pode gerenciar esta sessão enquanto esta autorização permanecer ativa. <button type="button" style="margin-left:8px" onclick="setWhatsAppAdminAccess(false)">Revogar autorização</button>'
+    : '🔒 <b>Administrador não autorizado.</b> Esta conta só pode ser gerenciada pelo próprio usuário. <button type="button" style="margin-left:8px" onclick="setWhatsAppAdminAccess(true)">Autorizar administrador</button>';
+}
+async function setWhatsAppAdminAccess(autorizado){
+  try{
+    const d=await jfetch('/api/whatsapp-admin-access',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({autorizado})});
+    toast(d.msg||'Autorização atualizada.');
+    await loadAccount();
+  }catch(e){toast(e.message,true)}
+}
 async function refreshWhatsAppAccountPanel(){
   const id=String(window.regulosWhatsAppUserId||'');
   const statusEl=document.getElementById('whatsappAccountStatus');
@@ -719,7 +747,8 @@ async function refreshWhatsAppAccountPanel(){
   const qrImg=document.getElementById('whatsappAccountQrImg');
   if(!id || !statusEl)return;
   const selectedUser=(window.regulosWhatsAppUsers||[]).find(x=>String(x.id)===id);
-  const individualButtons=document.querySelectorAll('#whatsappUserSelect ~ .statusline + .row button');
+  const individualButtons=document.querySelectorAll('#whatsappUserSelect ~ .statusline + #whatsappAdminAccessBox + .row button');
+  await refreshWhatsAppAdminAccessBox(selectedUser);
   try{
     if(selectedUser?.admin){
       const d=await jfetch('/api/status');
