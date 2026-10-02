@@ -484,11 +484,16 @@ app.post('/api/usuarios',requireAdmin,(req,res)=>{
   const u={id:crypto.randomUUID(),nome:usuario,usuario,salt,hash:hashPassword(senha,salt),admin:false,criadoEm:new Date().toISOString()};
   users.push(u);saveUsers(users); ensureWhatsAppAccount(u); res.json({ok:true,usuario:sanitizeUser(u)});
 });
-app.delete('/api/usuarios/:id',requireAdmin,(req,res)=>{
+app.delete('/api/usuarios/:id',requireAdmin,async(req,res)=>{
   const users=readUsers(); const target=users.find(x=>x.id===req.params.id);
   if(!target)return res.status(404).json({ok:false,msg:'Usuário não encontrado.'});
   if(target.id===req.user.id)return res.status(400).json({ok:false,msg:'A conta administradora atual não pode ser excluída por ela mesma.'});
-  saveUsers(users.filter(x=>x.id!==target.id)); const sessions=readSessions(); for(const [k,v] of Object.entries(sessions))if(v.userId===target.id)delete sessions[k];saveSessions(sessions);res.json({ok:true,msg:'Usuário excluído.'});
+  const account=ensureWhatsAppAccount(target);
+  try { await whatsappSessionManager.stop(account,{logout:true,clearAuth:true}); } catch(e) { addLog(`Falha encerrando WhatsApp do usuário excluído: ${e.message}`); }
+  saveUsers(users.filter(x=>x.id!==target.id));
+  const sessions=readSessions(); for(const [k,v] of Object.entries(sessions))if(v.userId===target.id)delete sessions[k];saveSessions(sessions);
+  const accounts=readWhatsAppAccounts(); delete accounts[target.id]; saveWhatsAppAccounts(accounts);
+  res.json({ok:true,msg:'Usuário excluído.'});
 });
 
 
