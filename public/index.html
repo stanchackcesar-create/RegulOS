@@ -164,13 +164,13 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 
 <div class="panel" style="margin-top:14px">
 <div class="row" style="justify-content:space-between;align-items:center">
-  <div><h2 style="margin:0">👥 Gerenciador de grupos</h2><div class="muted">Os grupos ficam ocultos até você clicar no botão.</div></div>
+  <div><h2 style="margin:0">👥 Gerenciador de grupos</h2><div class="muted">Os grupos são descobertos uma vez por conexão e depois ficam no cache. Pesquise novamente somente quando precisar atualizar a lista.</div></div>
   <button class="primary" id="toggleGroupsBtn" onclick="toggleGroupsPanel()">👥 Mostrar todos os grupos</button>
 </div>
 <div id="groupsPanel" class="hidden" style="margin-top:12px">
   <div class="row" style="align-items:center">
     <input id="search" placeholder="🔎 Pesquisar grupo..." oninput="renderGroups()" style="flex:1">
-    <button onclick="updateGroups()">🔄 Atualizar grupos</button>
+    <button onclick="updateGroups()">🔄 Pesquisar grupos</button>
   </div>
   <div id="groups" class="groups" style="max-height:420px;overflow:auto;margin-top:10px">Carregando grupos...</div>
 </div>
@@ -286,7 +286,7 @@ function renderGroups(){
   el.querySelector('button').onclick=()=>toggleGroup(g.id,!on);
   box.appendChild(el);
  });
- if(!box.children.length)box.innerHTML='<div class="muted">Nenhum grupo carregado ainda. Clique em <b>🔄 Atualizar grupos</b> ou aguarde a sincronização automática.</div>';
+ if(!box.children.length)box.innerHTML='<div class="muted">Nenhum grupo carregado ainda. Clique em <b>🔄 Pesquisar grupos</b> para consultar o WhatsApp.</div>';
 }
 async function toggleGroup(id,ativo){
  try{await jfetch('/api/grupos/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,ativo})});const g=groups.find(x=>x.id===id);if(g)g.config.ativo=ativo;renderGroups()}catch(e){toast(e.message,true)}
