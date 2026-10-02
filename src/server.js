@@ -22,6 +22,7 @@ const net = require('net');
 const zlib = require('zlib');
 const crypto = require('crypto');
 const { chromium } = require('playwright');
+const { createWhatsAppSessionManager } = require('./whatsapp-sessions');
 
 const ROOT = path.join(__dirname, '..');
 const PUBLIC = path.join(ROOT, 'public');
@@ -68,6 +69,24 @@ app.post('/api/programacao-dinamica/reorganizar', requireAuth, requireAdmin, (re
 app.use(express.json({ limit: '100kb' }));
 
 const logger = P({ level: 'silent' });
+
+// Stage 2 — sessões WhatsApp individuais por usuário.
+// Esta camada não altera ainda o agendador/grupos globais; ela isola
+// autenticação, QR, número e conexão de cada conta para a próxima etapa.
+const whatsappSessionManager = createWhatsAppSessionManager({
+  onUpdate: (id, patch) => {
+    const accounts = readWhatsAppAccounts();
+    const account = accounts[String(id)];
+    if (!account) return;
+    if (patch.status !== undefined) account.status = patch.status;
+    if (patch.connected !== undefined) account.connected = patch.connected === true;
+    if (patch.numero !== undefined) account.numero = patch.numero || '';
+    account.atualizadoEm = new Date().toISOString();
+    accounts[String(id)] = account;
+    saveWhatsAppAccounts(accounts);
+  },
+  onLog: (msg) => addLog(msg)
+});
 
 // Cabeçalhos básicos de segurança para o painel público.
 app.use((req,res,next)=>{
@@ -399,6 +418,55 @@ app.get('/api/whatsapp-contas/:userId',(req,res)=>{
   if(!user)return res.status(404).json({ok:false,msg:'Usuário não encontrado.'});
   const account=ensureWhatsAppAccount(user);
   res.json({ok:true,conta:sanitizeWhatsAppAccount(account)});
+});
+
+function whatsappTargetUser(req, userId) {
+  const targetId = String(userId || req.user?.id || '');
+  if (!targetId) return null;
+  if (req.user?.admin !== true && String(req.user?.id) !== targetId) return null;
+  return readUsers().find(x => String(x.id) === targetId) || null;
+}
+
+app.get('/api/whatsapp-contas/:userId/status',(req,res)=>{
+  const user=whatsappTargetUser(req,req.params.userId);
+  if(!user) return res.status(403).json({ok:false,msg:'Acesso restrito ao administrador ou ao próprio usuário.'});
+  const account=ensureWhatsAppAccount(user);
+  const live=whatsappSessionManager.status(account.id);
+  res.set('Cache-Control','no-store');
+  res.json({ok:true,conta:sanitizeWhatsAppAccount(account),status:live});
+});
+
+app.get('/api/whatsapp-contas/:userId/qr',(req,res)=>{
+  const user=whatsappTargetUser(req,req.params.userId);
+  if(!user) return res.status(403).json({ok:false,msg:'Acesso restrito ao administrador ou ao próprio usuário.'});
+  const account=ensureWhatsAppAccount(user);
+  const live=whatsappSessionManager.status(account.id);
+  res.set('Cache-Control','no-store');
+  res.json({ok:true,qr:live.qr,status:live.status,conectado:live.connected,numero:live.numero});
+});
+
+app.post('/api/whatsapp-contas/:userId/iniciar',async(req,res)=>{
+  const user=whatsappTargetUser(req,req.params.userId);
+  if(!user) return res.status(403).json({ok:false,msg:'Acesso restrito ao administrador ou ao próprio usuário.'});
+  const account=ensureWhatsAppAccount(user);
+  const live=await whatsappSessionManager.start(account);
+  res.json({ok:true,msg:live.temQR?'QR Code gerado.':'Conexão iniciada.',status:live});
+});
+
+app.post('/api/whatsapp-contas/:userId/novo-qr',async(req,res)=>{
+  const user=whatsappTargetUser(req,req.params.userId);
+  if(!user) return res.status(403).json({ok:false,msg:'Acesso restrito ao administrador ou ao próprio usuário.'});
+  const account=ensureWhatsAppAccount(user);
+  const live=await whatsappSessionManager.stop(account,{logout:true,clearAuth:true,newQr:true});
+  res.json({ok:true,msg:'Sessão individual limpa. Novo QR Code será exibido.',status:live});
+});
+
+app.post('/api/whatsapp-contas/:userId/desconectar',async(req,res)=>{
+  const user=whatsappTargetUser(req,req.params.userId);
+  if(!user) return res.status(403).json({ok:false,msg:'Acesso restrito ao administrador ou ao próprio usuário.'});
+  const account=ensureWhatsAppAccount(user);
+  const live=await whatsappSessionManager.stop(account,{logout:true});
+  res.json({ok:true,msg:'WhatsApp desta conta foi desconectado.',status:live});
 });
 
 app.get('/api/usuarios',(req,res)=>{
