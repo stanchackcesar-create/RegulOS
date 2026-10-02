@@ -51,7 +51,9 @@ const FILES = {
   linkFailures: path.join(DATA, 'links_com_falha.json'),
   botSchedule: path.join(DATA, 'programacao_bot.json'),
   linkQueue: path.join(DATA, 'fila_links.json'),
-  whatsappAccounts: path.join(DATA, 'whatsapp_contas.json')
+  whatsappAccounts: path.join(DATA, 'whatsapp_contas.json'),
+  whatsappGroups: path.join(DATA, 'whatsapp_grupos.json'),
+  whatsappGroupConfig: path.join(DATA, 'whatsapp_grupos_config.json')
 };
 
 const app = express();
@@ -147,6 +149,38 @@ function sanitizeWhatsAppAccount(account){
     criadoEm:account.criadoEm,
     atualizadoEm:account.atualizadoEm
   };
+}
+
+function readWhatsAppGroups(){const v=readJson(FILES.whatsappGroups,{});return v&&typeof v==='object'&&!Array.isArray(v)?v:{};}
+function saveWhatsAppGroups(v){writeJson(FILES.whatsappGroups,v);}
+function readWhatsAppGroupConfig(){const v=readJson(FILES.whatsappGroupConfig,{});return v&&typeof v==='object'&&!Array.isArray(v)?v:{};}
+function saveWhatsAppGroupConfig(v){writeJson(FILES.whatsappGroupConfig,v);}
+function getWhatsAppGroupConfig(userId,id){
+  const all=readWhatsAppGroupConfig(),key=String(userId),gid=String(id);
+  if(!all[key]||typeof all[key]!=='object'||Array.isArray(all[key]))all[key]={};
+  if(!all[key][gid])all[key][gid]={ativo:false,apelido:''};
+  return all[key][gid];
+}
+function saveWhatsAppGroupsForUser(userId,list){const all=readWhatsAppGroups();all[String(userId)]=Array.isArray(list)?list:[];saveWhatsAppGroups(all);}
+function saveWhatsAppGroupConfigForUser(){saveWhatsAppGroupConfig(readWhatsAppGroupConfig());}
+function getWhatsAppSocketForUser(user){if(!user)return null;return user.admin===true?sock:whatsappSessionManager.socket(user.id);}
+function isWhatsAppOnlineForUser(user){if(!user)return false;return user.admin===true?(online&&!!sock):whatsappSessionManager.online(user.id);}
+async function loadWhatsAppGroupsForUser(user){
+  const socket=getWhatsAppSocketForUser(user);
+  if(!socket||!isWhatsAppOnlineForUser(user))return {ok:false,msg:'WhatsApp desta conta não está conectado.',grupos:[]};
+  try{
+    const all=await socket.groupFetchAllParticipating();
+    const list=Object.values(all||{}).filter(g=>g&&typeof g.id==='string'&&/@g\\.us$/.test(g.id))
+      .map(g=>({id:String(g.id),name:g.subject||String(g.id),members:Array.isArray(g.participants)?g.participants.length:0}))
+      .sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
+    saveWhatsAppGroupsForUser(user.id,list);
+    const cfg=readWhatsAppGroupConfig(),key=String(user.id);
+    if(!cfg[key]||typeof cfg[key]!=='object'||Array.isArray(cfg[key]))cfg[key]={};
+    for(const g of list)if(!cfg[key][g.id])cfg[key][g.id]={ativo:false,apelido:''};
+    saveWhatsAppGroupConfig(cfg);
+    addLog('Grupos carregados para usuário '+user.usuario+': '+list.length);
+    return {ok:true,grupos:list};
+  }catch(e){addLog('Erro nos grupos do usuário '+user.usuario+': '+e.message);return {ok:false,msg:e.message||'Não foi possível carregar os grupos.',grupos:[]};}
 }
 function hashPassword(password,salt){
   return crypto.scryptSync(String(password),salt,64).toString('hex');
@@ -1786,51 +1820,53 @@ app.post('/api/deslogar', requireAdmin, async (req,res) => {
 });
 
 app.get('/api/grupos', async (req,res) => {
-  // Consulta somente o cache. A descoberta no WhatsApp ocorre na conexão
-  // ou quando o usuário solicita explicitamente "Pesquisar grupos".
-  res.json({
-    ok:true,
-    grupos:groups.map(g => ({...g,config:getGroupConfig(g.id),allowed:allowed.includes(g.id)})),
-    permitidos:allowed,
-    gruposCacheAt:lastGroupRefreshAt || null,
-    gruposRateLimitUntil:groupRateLimitUntil || null
-  });
+  if(req.user && req.user.admin!==true){
+    const list=readWhatsAppGroups()[String(req.user.id)]||[];
+    const permitidos=list.filter(g=>getWhatsAppGroupConfig(req.user.id,g.id).ativo).map(g=>String(g.id));
+    return res.json({ok:true,grupos:list.map(g=>({...g,config:getWhatsAppGroupConfig(req.user.id,g.id),allowed:permitidos.includes(String(g.id))})),permitidos});
+  }
+  res.json({ok:true,grupos:groups.map(g=>({...g,config:getGroupConfig(g.id),allowed:allowed.includes(g.id)})),permitidos:allowed,gruposCacheAt:lastGroupRefreshAt||null,gruposRateLimitUntil:groupRateLimitUntil||null});
 });
 app.post('/api/grupos/atualizar', async (req,res) => {
-  if(!online) return res.status(503).json({ok:false,msg:'WhatsApp não conectado.'});
+  if(req.user && req.user.admin!==true){
+    const result=await loadWhatsAppGroupsForUser(req.user);
+    const list=result.grupos||[];
+    const permitidos=list.filter(g=>getWhatsAppGroupConfig(req.user.id,g.id).ativo).map(g=>String(g.id));
+    if(!result.ok)return res.status(503).json({...result,permitidos});
+    return res.json({ok:true,msg:list.length+' grupo(s) carregado(s).',grupos:list.map(g=>({...g,config:getWhatsAppGroupConfig(req.user.id,g.id),allowed:permitidos.includes(String(g.id))})),permitidos});
+  }
+  if(!online)return res.status(503).json({ok:false,msg:'WhatsApp não conectado.'});
   const ok=await loadGroups();
-  if (ok) return res.status(200).json({ok:true,msg:groups.length+' grupo(s) carregado(s).',grupos:groups,permitidos:allowed});
+  if(ok)return res.status(200).json({ok:true,msg:groups.length+' grupo(s) carregado(s).',grupos:groups,permitidos:allowed});
   const retryAfterMs=Math.max(0,groupRateLimitUntil-Date.now());
-  const statusCode=retryAfterMs>0?429:500;
-  return res.status(statusCode).json({
-    ok:false,
-    msg:retryAfterMs>0?'Atualização dos grupos em espera. Tente novamente em ~'+Math.ceil(retryAfterMs/1000)+'s.':'Não foi possível atualizar os grupos.',
-    retryAfterMs,grupos:groups,permitidos:allowed
-  });
+  return res.status(retryAfterMs>0?429:500,{});
 });
-app.post('/api/grupos/config', (req,res) => {
-  const id=String(req.body?.id||'');
-  if(!id) return res.status(400).json({ok:false,msg:'Grupo inválido.'});
-  const c=getGroupConfig(id);
-const grupoAtual=groups.find(g=>String(g.id)===id);
-if(grupoAtual?.name) c.nome=grupoAtual.name;
-if(typeof req.body.ativo==='boolean') {
-  c.ativo=req.body.ativo;
-  // Mantém "Permitidos" sincronizado com "Ligados" para evitar dois estados diferentes.
-  if(c.ativo) allowed=[...new Set([...allowed,id])];
-  else allowed=allowed.filter(x=>String(x)!==id);
-  writeJson(FILES.groups, allowed);
-}
-  saveGroupsConfig();
-  res.json({ok:true,config:c,permitidos:allowed,msg:c.ativo?'Envio ligado.':'Envio desligado.'});
+app.post('/api/grupos/config',(req,res)=>{
+  const id=String(req.body?.id||'');if(!id)return res.status(400).json({ok:false,msg:'Grupo inválido.'});
+  if(req.user&&req.user.admin!==true){
+    const list=readWhatsAppGroups()[String(req.user.id)]||[];
+    if(!list.some(g=>String(g.id)===id))return res.status(404).json({ok:false,msg:'Grupo não pertence ao WhatsApp desta conta.'});
+    const c=getWhatsAppGroupConfig(req.user.id,id),g=list.find(x=>String(x.id)===id);
+    if(g?.name)c.nome=g.name;if(typeof req.body.ativo==='boolean')c.ativo=req.body.ativo;
+    saveWhatsAppGroupConfigForUser(req.user.id);
+    const permitidos=list.filter(g=>getWhatsAppGroupConfig(req.user.id,g.id).ativo).map(g=>String(g.id));
+    return res.json({ok:true,config:c,permitidos,msg:c.ativo?'Envio ligado.':'Envio desligado.'});
+  }
+  const c=getGroupConfig(id),g=groups.find(x=>String(x.id)===id);
+  if(g?.name)c.nome=g.name;if(typeof req.body.ativo==='boolean'){c.ativo=req.body.ativo;if(c.ativo)allowed=[...new Set([...allowed,id])];else allowed=allowed.filter(x=>String(x)!==id);writeJson(FILES.groups,allowed);}
+  saveGroupsConfig();res.json({ok:true,config:c,permitidos:allowed,msg:c.ativo?'Envio ligado.':'Envio desligado.'});
 });
-app.post('/api/grupos/salvar', (req,res) => {
-  if(!Array.isArray(req.body?.ids)) return res.status(400).json({ok:false,msg:'IDs inválidos.'});
-  allowed=[...new Set(req.body.ids.map(String))];
-  writeJson(FILES.groups,allowed);
-  res.json({ok:true,msg:`${allowed.length} grupo(s) permitido(s).`});
+app.post('/api/grupos/salvar',(req,res)=>{
+  if(!Array.isArray(req.body?.ids))return res.status(400).json({ok:false,msg:'IDs inválidos.'});
+  if(req.user&&req.user.admin!==true){
+    const list=readWhatsAppGroups()[String(req.user.id)]||[],ids=[...new Set(req.body.ids.map(String))];
+    if(ids.some(id=>!list.some(g=>String(g.id)===id)))return res.status(403).json({ok:false,msg:'Só é possível selecionar grupos do próprio WhatsApp.'});
+    const cfg=readWhatsAppGroupConfig(),key=String(req.user.id);if(!cfg[key]||typeof cfg[key]!=='object')cfg[key]={};
+    for(const g of list)cfg[key][String(g.id)]={...(cfg[key][String(g.id)]||{}),ativo:ids.includes(String(g.id))};
+    saveWhatsAppGroupConfig(cfg);return res.json({ok:true,msg:ids.length+' grupo(s) permitido(s).'});
+  }
+  allowed=[...new Set(req.body.ids.map(String))];writeJson(FILES.groups,allowed);res.json({ok:true,msg:allowed.length+' grupo(s) permitido(s).'});
 });
-
 app.get('/api/mensagem', (req,res)=>res.json({ok:true}));
 app.post('/api/mensagem', async (req,res) => {
   const message=String(req.body?.message||'').trim();
