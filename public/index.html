@@ -650,6 +650,15 @@ async function loadAccount(){
         <input id="newUserLogin" autocomplete="off" placeholder="Nome de usuário">
         <input id="newUserPass" type="password" autocomplete="new-password" placeholder="Senha (mín. 6)">
         <button class="green" onclick="createUser()">➕ Criar usuário</button>
+      </div>
+      <div class="panel" style="margin-top:12px;padding:12px">
+        <b>🔐 Alterar senha do administrador</b>
+        <div class="two" style="margin-top:8px">
+          <input id="adminCurrentPass" type="password" autocomplete="current-password" placeholder="Senha atual">
+          <input id="adminNewPass" type="password" autocomplete="new-password" placeholder="Nova senha (mín. 6)">
+          <input id="adminConfirmPass" type="password" autocomplete="new-password" placeholder="Confirmar nova senha">
+          <button class="primary" onclick="changeAdminPassword()">🔄 Alterar senha</button>
+        </div>
       </div>`;
   }
   document.getElementById('accountPanel').innerHTML=html;
@@ -671,6 +680,16 @@ async function refreshAccountPresence(){
       if(status){status.textContent=online?'Online':'Offline';status.classList.toggle('status-online',online);status.classList.toggle('status-offline',!online);}
     });
   }catch(e){console.debug('Falha ao atualizar presença:',e);}
+}
+async function changeAdminPassword(){
+ const senhaAtual=document.getElementById('adminCurrentPass')?.value||'';
+ const novaSenha=document.getElementById('adminNewPass')?.value||'';
+ const confirmarSenha=document.getElementById('adminConfirmPass')?.value||'';
+ try{
+  await jfetch('/api/auth/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({senhaAtual,novaSenha,confirmarSenha})});
+  toast('Senha alterada. Faça login novamente com a nova senha.');
+  setTimeout(()=>{location.href='/login'},700);
+ }catch(e){toast(e.message,true)}
 }
 async function createUser(){
  const usuario=document.getElementById('newUserLogin')?.value||'',senha=document.getElementById('newUserPass')?.value||'';
