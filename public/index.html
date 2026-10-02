@@ -789,7 +789,7 @@ async function createUser(){
  const usuario=document.getElementById('newUserLogin')?.value||'',senha=document.getElementById('newUserPass')?.value||'';
  try{
   await jfetch('/api/usuarios',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario,senha})});
-  toast('Usuário criado. Ele poderá entrar e usar o mesmo WhatsApp.');
+  toast('Usuário criado. Ele poderá entrar e conectar o próprio WhatsApp.');
   loadAccount();
  }catch(e){toast(e.message,true)}
 }
