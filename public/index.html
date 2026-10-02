@@ -718,7 +718,19 @@ async function refreshWhatsAppAccountPanel(){
   const qrBox=document.getElementById('whatsappAccountQr');
   const qrImg=document.getElementById('whatsappAccountQrImg');
   if(!id || !statusEl)return;
+  const selectedUser=(window.regulosWhatsAppUsers||[]).find(x=>String(x.id)===id);
+  const individualButtons=document.querySelectorAll('#whatsappUserSelect ~ .statusline + .row button');
   try{
+    if(selectedUser?.admin){
+      const d=await jfetch('/api/status');
+      statusEl.textContent=d.conectado?'🟢 Conectado':'🔴 '+(d.status||'Desconectado');
+      numberEl.textContent='Número: '+(d.numero||'—');
+      if(d.qr){qrImg.src=d.qr;qrBox.classList.remove('hidden')}else qrBox.classList.add('hidden');
+      individualButtons.forEach(b=>b.disabled=true);
+      statusEl.title='Nesta etapa, o administrador mantém a sessão principal já existente.';
+      return;
+    }
+    individualButtons.forEach(b=>b.disabled=false);
     const d=await jfetch('/api/whatsapp-contas/'+encodeURIComponent(id)+'/status');
     const x=d.status||{};
     statusEl.textContent=x.connected?'🟢 Conectado':(x.temQR?'🟡 QR disponível':'🔴 '+(x.status||'Não conectado'));
@@ -731,7 +743,9 @@ async function refreshWhatsAppAccountPanel(){
 }
 async function startWhatsAppAccount(){
   const id=String(window.regulosWhatsAppUserId||'');
+  const selectedUser=(window.regulosWhatsAppUsers||[]).find(x=>String(x.id)===id);
   if(!id)return;
+  if(selectedUser?.admin){toast('O administrador mantém a sessão WhatsApp principal nesta etapa.');return;}
   try{
     const d=await jfetch('/api/whatsapp-contas/'+encodeURIComponent(id)+'/iniciar',{method:'POST'});
     toast(d.msg||'Conexão iniciada.');
@@ -740,6 +754,8 @@ async function startWhatsAppAccount(){
 }
 async function newWhatsAppQR(){
   const id=String(window.regulosWhatsAppUserId||'');
+  const selectedUser=(window.regulosWhatsAppUsers||[]).find(x=>String(x.id)===id);
+  if(selectedUser?.admin){toast('O administrador mantém a sessão WhatsApp principal nesta etapa.');return;}
   if(!id || !confirm('Isso limpa somente a sessão WhatsApp da conta selecionada e gera um novo QR. Continuar?'))return;
   try{
     const d=await jfetch('/api/whatsapp-contas/'+encodeURIComponent(id)+'/novo-qr',{method:'POST'});
@@ -749,6 +765,8 @@ async function newWhatsAppQR(){
 }
 async function disconnectWhatsAppAccount(){
   const id=String(window.regulosWhatsAppUserId||'');
+  const selectedUser=(window.regulosWhatsAppUsers||[]).find(x=>String(x.id)===id);
+  if(selectedUser?.admin){toast('O administrador mantém a sessão WhatsApp principal nesta etapa.');return;}
   if(!id || !confirm('Desconectar somente o WhatsApp da conta selecionada?'))return;
   try{
     const d=await jfetch('/api/whatsapp-contas/'+encodeURIComponent(id)+'/desconectar',{method:'POST'});
