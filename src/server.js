@@ -1,3 +1,5 @@
+// REGULOS_MULTI_GROUP_SCHEDULE_V1
+// Cada agendamento pode apontar para um ou mais grupos selecionados no painel.
 // REGULOS_IMAGE_REQUIRED_ALL_SCHEDULES_V1
 // Todo agendamento de link tenta obter uma imagem válida.
 // Com ou sem montagem automática de oferta, não enviamos link sem imagem.
@@ -446,7 +448,7 @@ function clearLinkFailures() { linkFailures = []; writeJson(FILES.linkFailures, 
 function upsertLinkFailure(item, grupoId, erro, extra={}) {
   const key = `${item.id}:${String(grupoId)}`;
   const record = {
-    id: key, agendamentoId: item.id, grupoId: String(grupoId || ''), grupoNome: item.grupoNome || groupNameForId(grupoId), nome: item.nome, url: item.url,
+    id: key, agendamentoId: item.id, grupoId: String(grupoId || ''), grupoNome: groupNameForId(grupoId) || item.grupoNomes?.[String(grupoId)] || item.grupoNome || '', nome: item.nome, url: item.url,
     mensagem: item.mensagem || '', data: item.data, horario: item.horario, repeticao: item.repeticao,
     intervaloMin: item.intervaloMin, intervaloMax: item.intervaloMax, ativo: false,
     imagemAutomatica: item.imagemAutomatica !== false, imagemUrl: item.imagemUrl || '',
@@ -1055,9 +1057,18 @@ function isValidGroupJid(id) {
   const value = String(id || '').trim();
   return Boolean(value) && value !== 'undefined' && value !== 'null' && /^[^@\s]+@g\.us$/.test(value);
 }
+function normalizeScheduleGroupIds(itemOrIds) {
+  const raw = Array.isArray(itemOrIds)
+    ? itemOrIds
+    : (Array.isArray(itemOrIds?.grupoIds) ? itemOrIds.grupoIds : (itemOrIds?.grupoId ? [itemOrIds.grupoId] : []));
+  return [...new Set(raw.map(v => String(v || '').trim()).filter(Boolean))];
+}
 function groupNameForId(id) {
   const value = String(id || '').trim();
   return groups.find(g => String(g?.id || '') === value)?.name || value || '';
+}
+function groupNamesForIds(ids) {
+  return normalizeScheduleGroupIds(ids).map(groupNameForId).filter(Boolean);
 }
 function activeGroups() {
   return groups
@@ -1147,51 +1158,54 @@ async function sendScheduledLink(item) {
   let targets;
   const now = new Date();
 
-  // Cada agendamento tem um único destino explícito. Nunca usamos a lista
+  // Cada agendamento pode ter vários destinos explícitos. Nunca usamos a lista
   // global de grupos como fallback, evitando broadcast acidental e JIDs inválidos.
-  const selectedGroupId=String(item.grupoId||'').trim();
-  if(!isValidGroupJid(selectedGroupId)){
-    const erro='Grupo de envio não definido ou inválido. Edite o agendamento e selecione um grupo válido.';
+  const selectedGroupIds=normalizeScheduleGroupIds(item);
+  if(!selectedGroupIds.length || selectedGroupIds.some(id=>!isValidGroupJid(id))){
+    const erro='Grupos de envio não definidos ou inválidos. Edite o agendamento e selecione pelo menos um grupo válido.';
     item.status='erro';
     item.ativo=false;
-    upsertLinkFailure(item,selectedGroupId,erro);
+    upsertLinkFailure(item,selectedGroupIds[0]||'',erro);
     writeJson(FILES.schedules,linkSchedules);
     addLog(`Agendamento "${item.nome}" bloqueado: ${erro}`);
     return;
   }
-  const selectedGroup=groups.find(g=>String(g.id)===selectedGroupId);
-  if(!selectedGroup){
-    const erro=`Grupo de envio "${selectedGroupId}" não está no cache atual. Atualize os grupos antes de executar.`;
+  const selectedGroups=selectedGroupIds.map(id=>groups.find(g=>String(g.id)===id));
+  if(selectedGroups.some(g=>!g)){
+    const missing=selectedGroupIds.filter(id=>!groups.some(g=>String(g.id)===id));
+    const erro=`Grupo(s) de envio não estão no cache atual: ${missing.join(', ')}. Atualize os grupos antes de executar.`;
     item.status='erro';
     item.ativo=false;
-    upsertLinkFailure(item,selectedGroupId,erro);
+    upsertLinkFailure(item,missing[0]||selectedGroupIds[0],erro);
     writeJson(FILES.schedules,linkSchedules);
     addLog(`Agendamento "${item.nome}" bloqueado: ${erro}`);
     return;
   }
-  item.grupoNome=String(selectedGroup.name||selectedGroupId);
+  item.grupoNomes=Object.fromEntries(selectedGroups.map(g=>[String(g.id),String(g.name||g.id)]));
+  item.grupoNome=selectedGroupIds.length===1?item.grupoNomes[selectedGroupIds[0]]:`${selectedGroupIds.length} grupos`;
 
   // Mantém a mesma ocorrência entre reinícios. O progresso fica gravado em
   // disco depois de cada grupo, então o próximo processo continua do ponto
   // exato em que o anterior parou.
   if (hasPendingProgress(item)) {
-    targets = Array.isArray(item.progressTargets) ? [...item.progressTargets] : [selectedGroupId];
+    targets = Array.isArray(item.progressTargets) ? [...item.progressTargets] : [...selectedGroupIds];
   } else {
-    targets = [selectedGroupId];
-    if (getGroupConfig(selectedGroupId).ativo === false) {
+    targets = [...selectedGroupIds];
+    const activeSelectedTargets = targets.filter(id => getGroupConfig(id).ativo !== false);
+    if (!activeSelectedTargets.length) {
       item.status = 'pausado';
       item.lastSkipKey = dateKey(now);
       writeJson(FILES.schedules, linkSchedules);
-      addLog(`Agendamento "${item.nome}" aguardando: o grupo "${item.grupoNome}" está desligado.`);
+      addLog(`Agendamento "${item.nome}" aguardando: todos os grupos selecionados estão desligados.`);
       return;
     }
     item.progressKey = occurrenceKey(item, now);
-    item.progressTargets = [selectedGroupId];
+    item.progressTargets = [...selectedGroupIds];
     item.progressGroupIds = [];
     item.progressStartedAt = now.toISOString();
     item.status = 'enviando';
     writeJson(FILES.schedules, linkSchedules);
-    addLog(`Agendamento "${item.nome}" iniciado para "${item.grupoNome}" (${selectedGroupId}). Progresso salvo em disco.`);
+    addLog(`Agendamento "${item.nome}" iniciado para ${selectedGroupIds.length} grupo(s). Progresso salvo em disco.`);
   }
 
   // Grupos já concluídos nesta ocorrência nunca recebem a mesma execução de novo.
@@ -1794,13 +1808,14 @@ app.post('/api/link-agendamentos',(req,res)=>{
   const data=String(b.data||''), horario=String(b.horario||'');
   if(!nome||!url||!data||!horario) return res.status(400).json({ok:false,msg:'Nome, link, data e horário são obrigatórios.'});
   const min=Math.max(1,Number(b.intervaloMin||1)), max=Math.max(min,Number(b.intervaloMax||min));
-  const grupoId=String(b.grupoId||'').trim();
-  if(!isValidGroupJid(grupoId)) return res.status(400).json({ok:false,msg:'Selecione um grupo de envio válido.'});
-  const grupoEncontrado=groups.find(g=>String(g.id)===grupoId);
-  if(!grupoEncontrado) return res.status(400).json({ok:false,msg:'O grupo selecionado não está disponível no cache atual. Atualize a lista de grupos e tente novamente.'});
+  const grupoIds=normalizeScheduleGroupIds(b.grupoIds?.length ? b.grupoIds : b.grupoId ? [b.grupoId] : []);
+  if(!grupoIds.length || grupoIds.some(id=>!isValidGroupJid(id))) return res.status(400).json({ok:false,msg:'Selecione pelo menos um grupo de envio válido.'});
+  const gruposEncontrados=grupoIds.map(id=>groups.find(g=>String(g.id)===id));
+  if(gruposEncontrados.some(g=>!g)) return res.status(400).json({ok:false,msg:'Um ou mais grupos selecionados não estão disponíveis no cache atual. Atualize a lista de grupos e tente novamente.'});
+  const grupoNomes=Object.fromEntries(gruposEncontrados.map(g=>[String(g.id),String(g.name||g.id)]));
   const item={
     id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),
-    nome,url,mensagem:String(b.mensagem||''),grupoId,grupoNome:String(grupoEncontrado.name||grupoId),tituloProduto:'',tituloUltimaTentativa:'',data,horario,
+    nome,url,mensagem:String(b.mensagem||''),grupoIds,grupoNomes,grupoNome:grupoIds.length===1?grupoNomes[grupoIds[0]]:`${grupoIds.length} grupos`,tituloProduto:'',tituloUltimaTentativa:'',data,horario,
     repeticao:['uma_vez','diariamente','semanalmente'].includes(b.repeticao)?b.repeticao:'uma_vez',
     intervaloMin:min,intervaloMax:max,ativo:b.ativo!==false,status:b.ativo===false?'pausado':'agendado',
     imagemAutomatica:b.imagemAutomatica!==false, imagemUrl:String(b.imagemUrl||'').trim(),
@@ -1830,21 +1845,24 @@ app.put('/api/link-agendamentos/:id',(req,res)=>{
   item.url=String(b.url||item.url).trim();
   if (item.url !== oldUrl) { item.tituloProduto=''; item.tituloUltimaTentativa=''; item.imagemStatus='pendente'; }
   item.mensagem=String(b.mensagem??item.mensagem);
-  if(Object.prototype.hasOwnProperty.call(b,'grupoId')){
-    const novoGrupoId=String(b.grupoId||'').trim();
-    if(!isValidGroupJid(novoGrupoId)) return res.status(400).json({ok:false,msg:'Selecione um grupo de envio válido.'});
-    const grupoAnterior=String(item.grupoId||'').trim();
-    const grupoEncontrado=groups.find(g=>String(g.id)===novoGrupoId);
-    if(!grupoEncontrado) return res.status(400).json({ok:false,msg:'O grupo selecionado não está disponível no cache atual. Atualize a lista de grupos e tente novamente.'});
-    if(novoGrupoId!==grupoAnterior){
+  if(Object.prototype.hasOwnProperty.call(b,'grupoIds') || Object.prototype.hasOwnProperty.call(b,'grupoId')){
+    const novosGrupoIds=normalizeScheduleGroupIds(Array.isArray(b.grupoIds) ? b.grupoIds : [b.grupoId]);
+    if(!novosGrupoIds.length || novosGrupoIds.some(id=>!isValidGroupJid(id))) return res.status(400).json({ok:false,msg:'Selecione pelo menos um grupo de envio válido.'});
+    const gruposEncontrados=novosGrupoIds.map(id=>groups.find(g=>String(g.id)===id));
+    if(gruposEncontrados.some(g=>!g)) return res.status(400).json({ok:false,msg:'Um ou mais grupos selecionados não estão disponíveis no cache atual. Atualize a lista de grupos e tente novamente.'});
+    const gruposAnteriores=normalizeScheduleGroupIds(item);
+    const mudou=JSON.stringify(gruposAnteriores)!==JSON.stringify(novosGrupoIds);
+    if(mudou){
       item.progressKey='';
       item.progressTargets=[];
       item.progressGroupIds=[];
       item.progressStartedAt='';
       item.lastRunKey='';
     }
-    item.grupoId=novoGrupoId;
-    item.grupoNome=String(grupoEncontrado.name||novoGrupoId);
+    item.grupoIds=novosGrupoIds;
+    item.grupoNomes=Object.fromEntries(gruposEncontrados.map(g=>[String(g.id),String(g.name||g.id)]));
+    item.grupoNome=novosGrupoIds.length===1?item.grupoNomes[novosGrupoIds[0]]:`${novosGrupoIds.length} grupos`;
+    delete item.grupoId;
   }
   item.data=String(b.data||item.data);
   item.horario=String(b.horario||item.horario);
