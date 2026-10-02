@@ -170,7 +170,8 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 <div id="groupsPanel" class="hidden" style="margin-top:12px">
   <div class="row" style="align-items:center">
     <input id="search" placeholder="🔎 Pesquisar grupo..." oninput="renderGroups()" style="flex:1">
-    <button onclick="updateGroups()">🔄 Pesquisar grupos</button>
+    <button id="searchGroupsBtn" onclick="updateGroups()">🔄 Pesquisar grupos</button>
+    <span id="groupSearchStatus" class="muted">Cache atual</span>
   </div>
   <div id="groups" class="groups" style="max-height:420px;overflow:auto;margin-top:10px">Carregando grupos...</div>
 </div>
@@ -291,7 +292,25 @@ function renderGroups(){
 async function toggleGroup(id,ativo){
  try{await jfetch('/api/grupos/config',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id,ativo})});const g=groups.find(x=>x.id===id);if(g)g.config.ativo=ativo;renderGroups()}catch(e){toast(e.message,true)}
 }
-async function updateGroups(){try{const d=await jfetch('/api/grupos/atualizar',{method:'POST'});groups=d.grupos||[];renderGroups();toast(d.msg)}catch(e){toast(e.message,true)}}
+async function updateGroups(){
+ const btn=document.getElementById('searchGroupsBtn');
+ const info=document.getElementById('groupSearchStatus');
+ if(btn) { btn.disabled=true; btn.textContent='⏳ Pesquisando...'; }
+ if(info) info.textContent='Consultando o WhatsApp...';
+ try{
+   const d=await jfetch('/api/grupos/atualizar',{method:'POST'});
+   groups=d.grupos||[];
+   renderGroups();
+   const hora=new Date().toLocaleTimeString('pt-BR');
+   if(info) info.textContent=(d.grupos?.length||0)+' grupo(s) encontrados às '+hora;
+   toast(d.msg);
+ }catch(e){
+   if(info) info.textContent='Pesquisa não concluída';
+   toast(e.message,true);
+ }finally{
+   if(btn) { btn.disabled=false; btn.textContent='🔄 Pesquisar grupos'; }
+ }
+}
 
 function toggleGroupsPanel(){
  const panel=document.getElementById('groupsPanel');
