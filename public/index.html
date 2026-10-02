@@ -661,9 +661,102 @@ async function loadAccount(){
         </div>
       </div>`;
   }
+  const accountUsers = u.admin ? (d?.usuarios||[]) : [{id:u.id,usuario:u.usuario,admin:u.admin}];
+  const selectedId = window.regulosWhatsAppUserId || u.id;
+  html += `
+    <div class="panel" style="margin-top:12px;padding:12px">
+      <div class="row" style="justify-content:space-between;align-items:center">
+        <div><b>📱 WhatsApp individual</b><div class="muted">Cada usuário terá seu próprio QR Code e sua própria sessão.</div></div>
+      </div>
+      <label style="margin-top:10px">Conta WhatsApp</label>
+      <select id="whatsappUserSelect" onchange="selectWhatsAppAccount(this.value)"></select>
+      <div id="whatsappAccountStatus" class="statusline" style="margin-top:8px">Carregando...</div>
+      <div class="row" style="margin-top:8px">
+        <button class="green" onclick="startWhatsAppAccount()">📱 Conectar / gerar QR</button>
+        <button onclick="newWhatsAppQR()">🔄 Novo QR</button>
+        <button class="red" onclick="disconnectWhatsAppAccount()">⛔ Desconectar</button>
+      </div>
+      <div id="whatsappAccountNumber" class="muted" style="margin-top:8px">Número: —</div>
+      <div id="whatsappAccountQr" class="qr hidden" style="margin-top:10px">
+        <p>Escaneie este QR com o WhatsApp da conta selecionada:</p>
+        <img id="whatsappAccountQrImg" alt="QR Code individual">
+      </div>
+    </div>`;
+  window.regulosWhatsAppUserId = selectedId;
+  window.regulosWhatsAppUsers = accountUsers;
   document.getElementById('accountPanel').innerHTML=html;
+  loadWhatsAppAccountPanel();
+
  }catch(e){document.getElementById('accountPanel').textContent=e.message}
 }
+
+async function loadWhatsAppAccountPanel(){
+  const select=document.getElementById('whatsappUserSelect');
+  const statusEl=document.getElementById('whatsappAccountStatus');
+  if(!select || !window.regulosWhatsAppUsers) return;
+  const users=Array.isArray(window.regulosWhatsAppUsers)?window.regulosWhatsAppUsers:[];
+  select.innerHTML='';
+  users.forEach(x=>{
+    const opt=document.createElement('option');
+    opt.value=String(x.id);
+    opt.textContent=(x.admin?'👑 ':'👤 ')+(x.usuario||x.id);
+    select.appendChild(opt);
+  });
+  if(!users.some(x=>String(x.id)===String(window.regulosWhatsAppUserId)) && users[0]) window.regulosWhatsAppUserId=String(users[0].id);
+  select.value=String(window.regulosWhatsAppUserId||'');
+  await refreshWhatsAppAccountPanel();
+}
+async function selectWhatsAppAccount(id){
+  window.regulosWhatsAppUserId=String(id||'');
+  await refreshWhatsAppAccountPanel();
+}
+async function refreshWhatsAppAccountPanel(){
+  const id=String(window.regulosWhatsAppUserId||'');
+  const statusEl=document.getElementById('whatsappAccountStatus');
+  const numberEl=document.getElementById('whatsappAccountNumber');
+  const qrBox=document.getElementById('whatsappAccountQr');
+  const qrImg=document.getElementById('whatsappAccountQrImg');
+  if(!id || !statusEl)return;
+  try{
+    const d=await jfetch('/api/whatsapp-contas/'+encodeURIComponent(id)+'/status');
+    const x=d.status||{};
+    statusEl.textContent=x.connected?'🟢 Conectado':(x.temQR?'🟡 QR disponível':'🔴 '+(x.status||'Não conectado'));
+    numberEl.textContent='Número: '+(x.numero||'—');
+    if(x.qr){qrImg.src=x.qr;qrBox.classList.remove('hidden')}else qrBox.classList.add('hidden');
+  }catch(e){
+    statusEl.textContent='⚠️ '+friendlyFetchError(e);
+    if(qrBox)qrBox.classList.add('hidden');
+  }
+}
+async function startWhatsAppAccount(){
+  const id=String(window.regulosWhatsAppUserId||'');
+  if(!id)return;
+  try{
+    const d=await jfetch('/api/whatsapp-contas/'+encodeURIComponent(id)+'/iniciar',{method:'POST'});
+    toast(d.msg||'Conexão iniciada.');
+    await refreshWhatsAppAccountPanel();
+  }catch(e){toast(e.message,true)}
+}
+async function newWhatsAppQR(){
+  const id=String(window.regulosWhatsAppUserId||'');
+  if(!id || !confirm('Isso limpa somente a sessão WhatsApp da conta selecionada e gera um novo QR. Continuar?'))return;
+  try{
+    const d=await jfetch('/api/whatsapp-contas/'+encodeURIComponent(id)+'/novo-qr',{method:'POST'});
+    toast(d.msg||'Novo QR iniciado.');
+    await refreshWhatsAppAccountPanel();
+  }catch(e){toast(e.message,true)}
+}
+async function disconnectWhatsAppAccount(){
+  const id=String(window.regulosWhatsAppUserId||'');
+  if(!id || !confirm('Desconectar somente o WhatsApp da conta selecionada?'))return;
+  try{
+    const d=await jfetch('/api/whatsapp-contas/'+encodeURIComponent(id)+'/desconectar',{method:'POST'});
+    toast(d.msg||'WhatsApp desconectado.');
+    await refreshWhatsAppAccountPanel();
+  }catch(e){toast(e.message,true)}
+}
+setInterval(()=>{if(document.getElementById('whatsappUserSelect'))refreshWhatsAppAccountPanel()},2500);
+
 async function refreshAccountPresence(){
   const list=document.getElementById('userList');
   if(!list)return;
