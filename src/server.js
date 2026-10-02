@@ -170,7 +170,7 @@ async function loadWhatsAppGroupsForUser(user){
   if(!socket||!isWhatsAppOnlineForUser(user))return {ok:false,msg:'WhatsApp desta conta não está conectado.',grupos:[]};
   try{
     const all=await socket.groupFetchAllParticipating();
-    const list=Object.values(all||{}).filter(g=>g&&typeof g.id==='string'&&/@g\\.us$/.test(g.id))
+    const list=Object.values(all||{}).filter(g=>g&&typeof g.id==='string'&&/@g\.us$/.test(g.id))
       .map(g=>({id:String(g.id),name:g.subject||String(g.id),members:Array.isArray(g.participants)?g.participants.length:0}))
       .sort((a,b)=>a.name.localeCompare(b.name,'pt-BR'));
     saveWhatsAppGroupsForUser(user.id,list);
