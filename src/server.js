@@ -1015,7 +1015,7 @@ async function loadGroups() {
     try {
       const all = await sock.groupFetchAllParticipating();
       groups = Object.values(all || {})
-        .filter(g => g && typeof g.id === 'string' && /@g\\.us$/.test(g.id))
+        .filter(g => g && typeof g.id === 'string' && /@g\.us$/.test(g.id))
         .map(g => {
           const id = String(g.id);
           return {
