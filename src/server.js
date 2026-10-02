@@ -1420,9 +1420,9 @@ async function start() {
           groupConfig[id].ativo = false;
         }
         saveGroupsConfig();
+        // A descoberta dos grupos acontece uma vez por conexão.
+        // Depois disso, o painel trabalha com o cache até uma pesquisa explícita.
         await loadGroups();
-        setTimeout(() => loadGroups(), 2500);
-        setTimeout(() => loadGroups(), 7000);
         armAutoLinkTimer();
         processLinkSchedules().catch(e => addLog(e.message));
       }
@@ -1571,11 +1571,8 @@ app.post('/api/deslogar', requireAdmin, async (req,res) => {
 });
 
 app.get('/api/grupos', async (req,res) => {
-  // O painel pode abrir antes do evento connection.update/open.
-  // A lista usa cache e o carregamento respeita o backoff do WhatsApp.
-  if (online && (!groups.length || Date.now() - lastGroupRefreshAt > 15000)) {
-    await loadGroups();
-  }
+  // Consulta somente o cache. A descoberta no WhatsApp ocorre na conexão
+  // ou quando o usuário solicita explicitamente "Pesquisar grupos".
   res.json({
     ok:true,
     grupos:groups.map(g => ({...g,config:getGroupConfig(g.id),allowed:allowed.includes(g.id)})),
