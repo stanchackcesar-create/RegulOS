@@ -312,6 +312,35 @@ app.use(requireAuth);
 // fazendo o navegador bloquear os scripts por MIME type text/html.
 app.use(express.static(PUBLIC, { index: false }));
 
+app.post('/api/auth/change-password',requireAuth,requireAdmin,(req,res)=>{
+  const senhaAtual=String(req.body?.senhaAtual||'');
+  const novaSenha=String(req.body?.novaSenha||'');
+  const confirmarSenha=String(req.body?.confirmarSenha||'');
+  if(!senhaAtual || !novaSenha || !confirmarSenha)
+    return res.status(400).json({ok:false,msg:'Preencha a senha atual, a nova senha e a confirmação.'});
+  if(novaSenha.length<6)
+    return res.status(400).json({ok:false,msg:'A nova senha deve ter pelo menos 6 caracteres.'});
+  if(novaSenha!==confirmarSenha)
+    return res.status(400).json({ok:false,msg:'A confirmação da nova senha não confere.'});
+  const users=readUsers();
+  const user=users.find(x=>x.id===req.user.id);
+  if(!user || !verifyPassword(senhaAtual,user))
+    return res.status(401).json({ok:false,msg:'A senha atual está incorreta.'});
+  const salt=crypto.randomBytes(16).toString('hex');
+  user.salt=salt;
+  user.hash=hashPassword(novaSenha,salt);
+  users.splice(users.findIndex(x=>x.id===user.id),1,user);
+  saveUsers(users);
+  const sessions=readSessions();
+  for(const [token,session] of Object.entries(sessions)){
+    if(session?.userId===user.id) delete sessions[token];
+  }
+  saveSessions(sessions);
+  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  res.setHeader('Set-Cookie',`regulos_session=; Path=/; HttpOnly; SameSite=Lax${secure}; Max-Age=0`);
+  res.json({ok:true,msg:'Senha do administrador alterada. Faça login novamente com a nova senha.'});
+});
+
 app.get('/api/usuarios',(req,res)=>{
   const usuarios=readUsers().map(u=>({...sanitizeUser(u),online:userHasActiveSession(u.id)}));
   res.json({ok:true,usuarios});
