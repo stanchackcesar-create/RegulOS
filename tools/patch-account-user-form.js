@@ -11,13 +11,22 @@ const newBlock = `  // Preserva os campos de criação de usuário durante atual
   // ainda estava digitando a senha.
   const __newUserLoginValue = document.getElementById('newUserLogin')?.value || '';
   const __newUserPassValue = document.getElementById('newUserPass')?.value || '';
+  const __adminCurrentPassValue = document.getElementById('adminCurrentPass')?.value || '';
+  const __adminNewPassValue = document.getElementById('adminNewPass')?.value || '';
+  const __adminConfirmPassValue = document.getElementById('adminConfirmPass')?.value || '';
   const __accountPanel = document.getElementById('accountPanel');
   __accountPanel.innerHTML=html;
   const __restoreNewUserFields = () => {
     const __login = document.getElementById('newUserLogin');
     const __pass = document.getElementById('newUserPass');
+    const __current = document.getElementById('adminCurrentPass');
+    const __adminNew = document.getElementById('adminNewPass');
+    const __adminConfirm = document.getElementById('adminConfirmPass');
     if(__login && __newUserLoginValue) __login.value = __newUserLoginValue;
     if(__pass && __newUserPassValue) __pass.value = __newUserPassValue;
+    if(__current && __adminCurrentPassValue) __current.value = __adminCurrentPassValue;
+    if(__adminNew && __adminNewPassValue) __adminNew.value = __adminNewPassValue;
+    if(__adminConfirm && __adminConfirmPassValue) __adminConfirm.value = __adminConfirmPassValue;
   };
   __restoreNewUserFields();
   requestAnimationFrame(__restoreNewUserFields);`;
