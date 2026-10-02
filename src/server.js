@@ -2216,6 +2216,33 @@ app.get('/api/dashboard',(req,res)=>{
   });
 });
 
+// O usuário controla explicitamente se o administrador pode gerenciar sua
+// sessão WhatsApp, grupos e recursos associados.
+app.get('/api/whatsapp-admin-access',requireAuth,(req,res)=>{
+  res.json({
+    ok:true,
+    autorizado:req.user.admin===true || req.user.whatsappAdminAccess===true
+  });
+});
+app.post('/api/whatsapp-admin-access',requireAuth,(req,res)=>{
+  if(req.user.admin===true) return res.json({ok:true,autorizado:true,msg:'A conta administradora já possui controle da própria sessão.'});
+  if(typeof req.body?.autorizado!=='boolean')
+    return res.status(400).json({ok:false,msg:'Informe autorizado como true ou false.'});
+  const users=readUsers();
+  const user=users.find(x=>String(x.id)===String(req.user.id));
+  if(!user) return res.status(404).json({ok:false,msg:'Usuário não encontrado.'});
+  user.whatsappAdminAccess=req.body.autorizado===true;
+  saveUsers(users);
+  req.user.whatsappAdminAccess=user.whatsappAdminAccess;
+  res.json({
+    ok:true,
+    autorizado:user.whatsappAdminAccess,
+    msg:user.whatsappAdminAccess
+      ? 'Autorização concedida ao administrador para gerenciar seu WhatsApp.'
+      : 'Autorização do administrador revogada.'
+  });
+});
+
 app.get('/grupos',(req,res)=>res.sendFile(path.join(PUBLIC,'grupos.html')));
 app.get('/',(req,res)=>res.sendFile(path.join(PUBLIC,'index.html')));
 app.get('*',(req,res)=>res.sendFile(path.join(PUBLIC,'index.html')));
@@ -2248,32 +2275,6 @@ function failureBelongsToUser(failure,user){
   return false;
 }
 
-// O usuário controla explicitamente se o administrador pode gerenciar sua
-// sessão WhatsApp, grupos e recursos associados.
-app.get('/api/whatsapp-admin-access',requireAuth,(req,res)=>{
-  res.json({
-    ok:true,
-    autorizado:req.user.admin===true || req.user.whatsappAdminAccess===true
-  });
-});
-app.post('/api/whatsapp-admin-access',requireAuth,(req,res)=>{
-  if(req.user.admin===true) return res.json({ok:true,autorizado:true,msg:'A conta administradora já possui controle da própria sessão.'});
-  if(typeof req.body?.autorizado!=='boolean')
-    return res.status(400).json({ok:false,msg:'Informe autorizado como true ou false.'});
-  const users=readUsers();
-  const user=users.find(x=>String(x.id)===String(req.user.id));
-  if(!user) return res.status(404).json({ok:false,msg:'Usuário não encontrado.'});
-  user.whatsappAdminAccess=req.body.autorizado===true;
-  saveUsers(users);
-  req.user.whatsappAdminAccess=user.whatsappAdminAccess;
-  res.json({
-    ok:true,
-    autorizado:user.whatsappAdminAccess,
-    msg:user.whatsappAdminAccess
-      ? 'Autorização concedida ao administrador para gerenciar seu WhatsApp.'
-      : 'Autorização do administrador revogada.'
-  });
-});
 
 // Filtra histórico enviado por proprietário.
 const regulosRouteStack = app._router?.stack || app.router?.stack || [];
@@ -2305,6 +2306,10 @@ for(const layer of (regulosRouteStack||[])){
         const failure=linkFailures.find(x=>String(x.id)===String(failureId));
         if(failure && !failureBelongsToUser(failure,req.user))
           return res.status(404).json({ok:false,msg:'Falha não encontrada.'});
+      }else if(p==='/api/link-falhas' && req.method==='GET'){
+        const falhas=Array.isArray(linkFailures)?linkFailures.filter(x=>failureBelongsToUser(x,req.user)):[];
+        res.set('Cache-Control','no-store');
+        return res.json({ok:true,falhas});
       }
       return original(req,res,next);
     };
@@ -2321,9 +2326,11 @@ for(const layer of (regulosRouteStack||[])){
       const mine=linkHistory.filter(x=>historyBelongsToUser(x,req.user));
       const before=linkHistory.length;
       if(req.user?.admin===true){
-        clearLinkHistory();
-        clearLinkFailures();
-        addLog(`Histórico de links limpo pelo painel: ${before} registro(s) removido(s).`);
+        linkHistory=linkHistory.filter(x=>!historyBelongsToUser(x,req.user));
+        saveLinkHistory();
+        linkFailures=linkFailures.filter(x=>!failureBelongsToUser(x,req.user));
+        saveLinkFailures();
+        addLog(`Histórico de links limpo pelo painel: ${mine.length} registro(s) removido(s).`);
       }else{
         linkHistory=linkHistory.filter(x=>!historyBelongsToUser(x,req.user));
         saveLinkHistory();
@@ -2333,6 +2340,19 @@ for(const layer of (regulosRouteStack||[])){
         addLog(`Histórico de links limpo pelo usuário ${req.user.usuario}: ${mine.length} registro(s) removido(s).`);
       }
       return res.json({ok:true,msg:`Histórico limpo. ${mine.length} registro(s) removido(s).`});
+    };
+  }
+}
+
+const deleteAllFailuresLayer=(regulosRouteStack||[]).find(l=>l.route?.path==='/api/link-falhas' && l.route?.methods?.delete);
+if(deleteAllFailuresLayer){
+  for(const entry of deleteAllFailuresLayer.route.stack){
+    const original=entry.handle;
+    entry.handle=async function(req,res,next){
+      const mine=linkFailures.filter(x=>failureBelongsToUser(x,req.user));
+      linkFailures=linkFailures.filter(x=>!failureBelongsToUser(x,req.user));
+      saveLinkFailures();
+      return res.json({ok:true,msg:`Links com falha limpos. ${mine.length} registro(s) removido(s).`});
     };
   }
 }
