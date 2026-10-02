@@ -1949,7 +1949,13 @@ app.get('/api/mensagem', (req,res)=>res.json({ok:true}));
 app.post('/api/mensagem', async (req,res) => {
   const message=String(req.body?.message||'').trim();
   if(!message) return res.status(400).json({ok:false,msg:'Digite uma mensagem.'});
-  const user=req.user;
+  const targetId=req.user?.admin===true
+    ? String(req.body?.whatsappUserId || req.user.id)
+    : String(req.user.id);
+  const user=readUsers().find(x=>String(x.id)===targetId);
+  if(!user) return res.status(404).json({ok:false,msg:'Conta WhatsApp selecionada não encontrada.'});
+  if(!canAdminAccessWhatsApp(req,targetId))
+    return res.status(403).json({ok:false,msg:whatsappAccessDeniedMessage()});
   const userSock=getWhatsAppSocketForUser(user);
   const userOnline=isWhatsAppOnlineForUser(user);
   if(!userOnline || !userSock) return res.status(409).json({ok:false,msg:'WhatsApp desta conta não está conectado.'});
@@ -2096,8 +2102,15 @@ app.post('/api/link-agendamentos',requireAuth,(req,res)=>{
   const min=Math.max(1,Number(b.intervaloMin||1)), max=Math.max(min,Number(b.intervaloMax||min));
   const grupoIds=normalizeScheduleGroupIds(b.grupoIds?.length ? b.grupoIds : b.grupoId ? [b.grupoId] : []);
   if(!grupoIds.length || grupoIds.some(id=>!isValidGroupJid(id))) return res.status(400).json({ok:false,msg:'Selecione pelo menos um grupo de envio válido.'});
-  const ownerId=String(req.user?.id||'');
-  const ownerGroups=req.user?.admin===true ? groups : (readWhatsAppGroups()[ownerId]||[]);
+  const requestedOwnerId=req.user?.admin===true
+    ? String(b.whatsappUserId || req.user.id)
+    : String(req.user.id);
+  if(!canAdminAccessWhatsApp(req,requestedOwnerId))
+    return res.status(403).json({ok:false,msg:whatsappAccessDeniedMessage()});
+  const ownerId=requestedOwnerId;
+  const ownerUser=readUsers().find(x=>String(x.id)===ownerId);
+  if(!ownerUser) return res.status(404).json({ok:false,msg:'Conta WhatsApp selecionada não encontrada.'});
+  const ownerGroups=ownerUser.admin ? groups : (readWhatsAppGroups()[ownerId]||[]);
   const gruposEncontrados=grupoIds.map(id=>ownerGroups.find(g=>String(g.id)===id));
   if(gruposEncontrados.some(g=>!g)) return res.status(400).json({ok:false,msg:'Um ou mais grupos não pertencem ao WhatsApp selecionado.'});
   if(gruposEncontrados.some(g=>!g)) return res.status(400).json({ok:false,msg:'Um ou mais grupos selecionados não estão disponíveis no cache atual. Atualize a lista de grupos e tente novamente.'});
