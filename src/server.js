@@ -49,7 +49,8 @@ const FILES = {
   linkHistory: path.join(DATA, 'historico_links_enviados.json'),
   linkFailures: path.join(DATA, 'links_com_falha.json'),
   botSchedule: path.join(DATA, 'programacao_bot.json'),
-  linkQueue: path.join(DATA, 'fila_links.json')
+  linkQueue: path.join(DATA, 'fila_links.json'),
+  whatsappAccounts: path.join(DATA, 'whatsapp_contas.json')
 };
 
 const app = express();
@@ -90,6 +91,44 @@ function readSessions(){
   return v && typeof v==='object' && !Array.isArray(v) ? v : {};
 }
 function saveSessions(v){ writeJson(SESSIONS_FILE,v); }
+function readWhatsAppAccounts(){
+  const v=readJson(FILES.whatsappAccounts,{});
+  return v && typeof v==='object' && !Array.isArray(v) ? v : {};
+}
+function saveWhatsAppAccounts(v){ writeJson(FILES.whatsappAccounts,v); }
+function ensureWhatsAppAccount(user){
+  if(!user?.id) return null;
+  const accounts=readWhatsAppAccounts();
+  const existing=accounts[user.id];
+  if(existing) return existing;
+  const account={
+    id:user.id,
+    userId:user.id,
+    usuario:user.usuario,
+    numero:'',
+    status:'Não conectado',
+    connected:false,
+    authDir:path.join(AUTH,'users',String(user.id)),
+    criadoEm:new Date().toISOString(),
+    atualizadoEm:new Date().toISOString()
+  };
+  accounts[user.id]=account;
+  saveWhatsAppAccounts(accounts);
+  return account;
+}
+function sanitizeWhatsAppAccount(account){
+  if(!account) return null;
+  return {
+    id:account.id,
+    userId:account.userId,
+    usuario:account.usuario,
+    numero:account.numero||'',
+    status:account.status||'Não conectado',
+    connected:account.connected===true,
+    criadoEm:account.criadoEm,
+    atualizadoEm:account.atualizadoEm
+  };
+}
 function hashPassword(password,salt){
   return crypto.scryptSync(String(password),salt,64).toString('hex');
 }
@@ -339,6 +378,27 @@ app.post('/api/auth/change-password',requireAuth,requireAdmin,(req,res)=>{
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
   res.setHeader('Set-Cookie',`regulos_session=; Path=/; HttpOnly; SameSite=Lax${secure}; Max-Age=0`);
   res.json({ok:true,msg:'Senha do administrador alterada. Faça login novamente com a nova senha.'});
+});
+
+app.get('/api/whatsapp-contas',(req,res)=>{
+  const accounts=readWhatsAppAccounts();
+  const users=readUsers();
+  if(req.user?.admin===true){
+    users.forEach(ensureWhatsAppAccount);
+    const current=readWhatsAppAccounts();
+    return res.json({ok:true,contas:Object.values(current).map(sanitizeWhatsAppAccount)});
+  }
+  const account=ensureWhatsAppAccount(req.user);
+  return res.json({ok:true,contas:account?[sanitizeWhatsAppAccount(account)]:[]});
+});
+
+app.get('/api/whatsapp-contas/:userId',(req,res)=>{
+  if(req.user?.admin!==true && req.user?.id!==req.params.userId)
+    return res.status(403).json({ok:false,msg:'Acesso restrito ao administrador ou ao próprio usuário.'});
+  const user=readUsers().find(x=>x.id===req.params.userId);
+  if(!user)return res.status(404).json({ok:false,msg:'Usuário não encontrado.'});
+  const account=ensureWhatsAppAccount(user);
+  res.json({ok:true,conta:sanitizeWhatsAppAccount(account)});
 });
 
 app.get('/api/usuarios',(req,res)=>{
