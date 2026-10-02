@@ -1287,7 +1287,7 @@ function activeGroups() {
   return groups
     .map(g => String(g?.id || '').trim())
     .filter(id => isValidGroupJid(id))
-    .filter(id => (owner?.admin ? getGroupConfig(id) : getWhatsAppGroupConfig(ownerId,id)).ativo !== false);
+    .filter(id => getGroupConfig(id).ativo !== false);
 }
 
 function stopSchedulers() {
@@ -1390,7 +1390,7 @@ async function sendScheduledLink(item) {
   const ownerGroups=owner?.admin ? groups : (readWhatsAppGroups()[ownerId]||[]);
   const selectedGroups=selectedGroupIds.map(id=>ownerGroups.find(g=>String(g.id)===id));
   if(selectedGroups.some(g=>!g)){
-    const missing=selectedGroupIds.filter(id=>!groups.some(g=>String(g.id)===id));
+    const missing=selectedGroupIds.filter(id=>!ownerGroups.some(g=>String(g.id)===id));
     const erro=`Grupo(s) de envio não estão no cache atual: ${missing.join(', ')}. Atualize os grupos antes de executar.`;
     item.status='erro';
     item.ativo=false;
@@ -1409,7 +1409,7 @@ async function sendScheduledLink(item) {
     targets = Array.isArray(item.progressTargets) ? [...item.progressTargets] : [...selectedGroupIds];
   } else {
     targets = [...selectedGroupIds];
-    const activeSelectedTargets = targets.filter(id => getGroupConfig(id).ativo !== false);
+    const activeSelectedTargets = targets.filter(id => (owner?.admin ? getGroupConfig(id) : getWhatsAppGroupConfig(ownerId,id)).ativo !== false);
     if (!activeSelectedTargets.length) {
       item.status = 'pausado';
       item.lastSkipKey = dateKey(now);
@@ -2239,7 +2239,8 @@ app.post('/api/whatsapp-admin-access',requireAuth,(req,res)=>{
 });
 
 // Filtra histórico enviado por proprietário.
-const originalLinkHistoryGet = app._router?.stack?.find(l=>l.route?.path==='/api/link-historico' && l.route?.methods?.get);
+const regulosRouteStack = regulosRouteStack || app.router?.stack || [];
+const originalLinkHistoryGet = regulosRouteStack.find(l=>l.route?.path==='/api/link-historico' && l.route?.methods?.get);
 if(originalLinkHistoryGet){
   const original=originalLinkHistoryGet.route.stack.map(x=>x.handle);
   originalLinkHistoryGet.route.stack=[{handle:async(req,res,next)=>{
@@ -2254,7 +2255,7 @@ if(originalLinkHistoryGet){
 
 // Filtra falhas por proprietário e impede alterações cruzadas.
 const failureRoutePaths=['/api/link-falhas','/api/link-falhas/:id','/api/link-falhas/:id/reenviar'];
-for(const layer of (app._router?.stack||[])){
+for(const layer of (regulosRouteStack||[])){
   const p=layer.route?.path;
   if(!failureRoutePaths.includes(p)) continue;
   for(const entry of layer.route.stack){
@@ -2273,7 +2274,7 @@ for(const layer of (app._router?.stack||[])){
 
 // Protege operações de histórico para que um usuário nunca limpe o histórico
 // de outra conta. Para o administrador, somente registros legados e autorizados.
-for(const layer of (app._router?.stack||[])){
+for(const layer of (regulosRouteStack||[])){
   if(layer.route?.path!=='/api/link-historico' || !layer.route.methods.delete) continue;
   for(const entry of layer.route.stack){
     const original=entry.handle;
@@ -2298,7 +2299,7 @@ for(const layer of (app._router?.stack||[])){
 }
 
 // Dashboard passa a refletir somente a conta autenticada.
-const dashboardLayer=(app._router?.stack||[]).find(l=>l.route?.path==='/api/dashboard' && l.route?.methods?.get);
+const dashboardLayer=(regulosRouteStack||[]).find(l=>l.route?.path==='/api/dashboard' && l.route?.methods?.get);
 if(dashboardLayer){
   for(const entry of dashboardLayer.route.stack){
     const original=entry.handle;
@@ -2320,7 +2321,7 @@ if(dashboardLayer){
 }
 
 // O endpoint de exclusão de agendamento também remove apenas falhas do mesmo proprietário.
-const deleteScheduleLayer=(app._router?.stack||[]).find(l=>l.route?.path==='/api/link-agendamentos/:id' && l.route?.methods?.delete);
+const deleteScheduleLayer=(regulosRouteStack||[]).find(l=>l.route?.path==='/api/link-agendamentos/:id' && l.route?.methods?.delete);
 if(deleteScheduleLayer){
   for(const entry of deleteScheduleLayer.route.stack){
     const original=entry.handle;
