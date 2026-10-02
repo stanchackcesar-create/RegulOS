@@ -1584,13 +1584,13 @@ app.get('/api/grupos', async (req,res) => {
 app.post('/api/grupos/atualizar', async (req,res) => {
   if(!online) return res.status(503).json({ok:false,msg:'WhatsApp não conectado.'});
   const ok=await loadGroups();
-  if (ok) return res.status(200).json({ok:true,msg:groups.length+' grupo(s) carregado(s).',grupos,permitidos:allowed});
+  if (ok) return res.status(200).json({ok:true,msg:groups.length+' grupo(s) carregado(s).',grupos:groups,permitidos:allowed});
   const retryAfterMs=Math.max(0,groupRateLimitUntil-Date.now());
   const statusCode=retryAfterMs>0?429:500;
   return res.status(statusCode).json({
     ok:false,
     msg:retryAfterMs>0?'Atualização dos grupos em espera. Tente novamente em ~'+Math.ceil(retryAfterMs/1000)+'s.':'Não foi possível atualizar os grupos.',
-    retryAfterMs,grupos,permitidos:allowed
+    retryAfterMs,grupos:groups,permitidos:allowed
   });
 });
 app.post('/api/grupos/config', (req,res) => {
