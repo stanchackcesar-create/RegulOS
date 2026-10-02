@@ -201,7 +201,9 @@ function createWhatsAppSessionManager({ onUpdate, onLog } = {}) {
     start,
     stop,
     status: snapshot,
-    has: (id) => sessions.has(String(id))
+    has: (id) => sessions.has(String(id)),
+    socket: (id) => sessions.get(String(id))?.sock || null,
+    online: (id) => sessions.get(String(id))?.online === true
   };
 }
 
