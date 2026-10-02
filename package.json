@@ -4,7 +4,7 @@
   "description": "RegulOS - versão Cloud para Railway, com sessão WhatsApp persistente.",
   "main": "src/server.js",
   "scripts": {
-    "start": "node tools/apply-mobile-ui.js && node tools/preboot-regulos.js"
+    "start": "node tools/cloud-start.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",
