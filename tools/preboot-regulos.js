@@ -18,3 +18,7 @@ require(path.join(ROOT, 'tools', 'fix-auto-offer-image.js'));
 // A lógica atual de agendamento por múltiplos grupos já está integrada em
 // server.js/index.html. Não executar o patch legado, pois ele reintroduz a
 // validação antiga de grupo único (grupoId) no formulário.
+
+// O boot moderno não usa o patch legado de grupo único, mas ainda precisa
+// executar o inicializador/runtime consolidado para manter o servidor ativo.
+require(path.join(ROOT, 'tools', 'boot-regulos.js'));
