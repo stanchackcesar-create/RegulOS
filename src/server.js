@@ -1014,16 +1014,18 @@ async function loadGroups() {
   groupRefreshInFlight = (async () => {
     try {
       const all = await sock.groupFetchAllParticipating();
-      groups = Object.values(all || {}).map(g => {
-        const id = String(g.id);
-        return {
-          id,
-          name: g.subject || id,
-          members: Array.isArray(g.participants) ? g.participants.length : 0,
-          allowed: allowed.includes(id),
-          config: getGroupConfig(id)
-        };
-      }).sort((a,b) => a.name.localeCompare(b.name, 'pt-BR'));
+      groups = Object.values(all || {})
+        .filter(g => g && typeof g.id === 'string' && /@g\\.us$/.test(g.id))
+        .map(g => {
+          const id = String(g.id);
+          return {
+            id,
+            name: g.subject || id,
+            members: Array.isArray(g.participants) ? g.participants.length : 0,
+            allowed: allowed.includes(id),
+            config: getGroupConfig(id)
+          };
+        }).sort((a,b) => a.name.localeCompare(b.name, 'pt-BR'));
 
       lastGroupRefreshAt = Date.now();
       groupRateLimitUntil = 0;
@@ -1050,7 +1052,9 @@ async function loadGroups() {
 }
 
 function activeGroups() {
-  return groups.map(g => String(g.id)).filter(Boolean)
+  return groups
+    .map(g => String(g?.id || '').trim())
+    .filter(id => id && id !== 'undefined' && id !== 'null' && /@g\\.us$/.test(id))
     .filter(id => getGroupConfig(id).ativo !== false);
 }
 
