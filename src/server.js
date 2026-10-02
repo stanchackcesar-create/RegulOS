@@ -1,3 +1,5 @@
+// REGULOS_MULTI_GROUP_SCHEDULE_V1
+// Cada agendamento pode apontar para um ou mais grupos selecionados no painel.
 // REGULOS_IMAGE_REQUIRED_ALL_SCHEDULES_V1
 // Todo agendamento de link tenta obter uma imagem válida.
 // Com ou sem montagem automática de oferta, não enviamos link sem imagem.
@@ -305,6 +307,11 @@ app.get('/api/oferta-preview', requireAuth, async (req,res)=>{
 
 app.use(requireAuth);
 
+// Arquivos estáticos do painel (JS/CSS/imagens) são servidos somente após autenticação.
+// Sem este middleware, o fallback "*" abaixo devolve index.html para arquivos .js,
+// fazendo o navegador bloquear os scripts por MIME type text/html.
+app.use(express.static(PUBLIC, { index: false }));
+
 app.get('/api/usuarios',(req,res)=>{
   const usuarios=readUsers().map(u=>({...sanitizeUser(u),online:userHasActiveSession(u.id)}));
   res.json({ok:true,usuarios});
@@ -342,6 +349,20 @@ let reconnectTimer = null;
 let scheduleTimer = null;
 let linkScheduleTimer = null;
 let lastGroupRefreshAt = 0;
+let lastGroupAttemptAt = 0;
+let groupRefreshInFlight = null;
+let groupRateLimitUntil = 0;
+let groupRateLimitLevel = 0;
+
+function groupRefreshBackoffMs(level) {
+  // Em caso de rate-limit, aumenta gradualmente o intervalo entre tentativas.
+  return Math.min(5 * 60 * 1000, Math.max(30 * 1000, (2 ** Math.max(0, level - 1)) * 30 * 1000));
+}
+
+function isGroupRateLimitError(error) {
+  const msg = String(error?.message || error || '').toLowerCase();
+  return msg.includes('rate-overlimit') || msg.includes('rate limit') || msg.includes('429') || msg.includes('too many requests');
+}
 
 function readJson(file, fallback) {
   try {
@@ -427,7 +448,7 @@ function clearLinkFailures() { linkFailures = []; writeJson(FILES.linkFailures, 
 function upsertLinkFailure(item, grupoId, erro, extra={}) {
   const key = `${item.id}:${String(grupoId)}`;
   const record = {
-    id: key, agendamentoId: item.id, grupoId: String(grupoId || ''), nome: item.nome, url: item.url,
+    id: key, agendamentoId: item.id, grupoId: String(grupoId || ''), grupoNome: groupNameForId(grupoId) || item.grupoNomes?.[String(grupoId)] || item.grupoNome || '', nome: item.nome, url: item.url,
     mensagem: item.mensagem || '', data: item.data, horario: item.horario, repeticao: item.repeticao,
     intervaloMin: item.intervaloMin, intervaloMax: item.intervaloMax, ativo: false,
     imagemAutomatica: item.imagemAutomatica !== false, imagemUrl: item.imagemUrl || '',
@@ -451,7 +472,7 @@ function archiveSentFailureAsHistory(item, failure, grupoId) {
     tituloProduto: item.tituloProduto || '', repeticao: item.repeticao, data: item.data, horario: item.horario,
     intervaloMin: item.intervaloMin, intervaloMax: item.intervaloMax, imagemAutomatica: item.imagemAutomatica !== false,
     imagemUrl: item.imagemUrl || '', imagemStatus: item.imagemStatus || '', enviados: 1, sucessos: 1, erros: 0,
-    grupoId: String(grupoId || failure?.grupoId || ''), lastRunAt: new Date().toISOString(),
+    grupoId: String(grupoId || failure?.grupoId || ''), grupoNome: groupNameForId(grupoId || failure?.grupoId) || item.grupoNome || groupNameForId(failure?.grupoId), lastRunAt: new Date().toISOString(),
     concluidoAt: new Date().toISOString(), motivo: 'reenvio realizado com sucesso'
   };
   linkHistory.unshift(snapshot); saveLinkHistory();
@@ -985,29 +1006,74 @@ function chooseRandomMessage(item) {
 
 async function loadGroups() {
   if (!sock || !online) return false;
-  try {
-    const all = await sock.groupFetchAllParticipating();
-    groups = Object.values(all || {}).map(g => {
-      const id = String(g.id);
-      return {
-        id,
-        name: g.subject || id,
-        members: Array.isArray(g.participants) ? g.participants.length : 0,
-        allowed: allowed.includes(id),
-        config: getGroupConfig(id)
-      };
-    }).sort((a,b) => a.name.localeCompare(b.name, 'pt-BR'));
-    lastGroupRefreshAt = Date.now();
-    addLog(`Grupos carregados: ${groups.length}`);
-    return true;
-  } catch (e) {
-    addLog(`Erro nos grupos: ${e.message}`);
-    return false;
-  }
+
+  const now = Date.now();
+  if (groupRefreshInFlight) return groupRefreshInFlight;
+  if (now < groupRateLimitUntil) return false;
+  if (lastGroupAttemptAt && now - lastGroupAttemptAt < 15000) return false;
+
+  lastGroupAttemptAt = now;
+  groupRefreshInFlight = (async () => {
+    try {
+      const all = await sock.groupFetchAllParticipating();
+      groups = Object.values(all || {})
+        .filter(g => g && typeof g.id === 'string' && /@g\.us$/.test(g.id))
+        .map(g => {
+          const id = String(g.id);
+          return {
+            id,
+            name: g.subject || id,
+            members: Array.isArray(g.participants) ? g.participants.length : 0,
+            allowed: allowed.includes(id),
+            config: getGroupConfig(id)
+          };
+        }).sort((a,b) => a.name.localeCompare(b.name, 'pt-BR'));
+
+      lastGroupRefreshAt = Date.now();
+      groupRateLimitUntil = 0;
+      groupRateLimitLevel = 0;
+      addLog('Grupos carregados: ' + groups.length);
+      return true;
+    } catch (e) {
+      if (isGroupRateLimitError(e)) {
+        groupRateLimitLevel = Math.min(groupRateLimitLevel + 1, 4);
+        const waitMs = groupRefreshBackoffMs(groupRateLimitLevel);
+        groupRateLimitUntil = Date.now() + waitMs;
+        addLog('Rate-limit nos grupos; próxima tentativa em ~' + Math.ceil(waitMs / 1000) + 's.');
+      } else {
+        groupRateLimitUntil = Date.now() + 15000;
+        addLog('Erro nos grupos: ' + e.message);
+      }
+      return false;
+    } finally {
+      groupRefreshInFlight = null;
+    }
+  })();
+
+  return groupRefreshInFlight;
 }
 
+function isValidGroupJid(id) {
+  const value = String(id || '').trim();
+  return Boolean(value) && value !== 'undefined' && value !== 'null' && /^[^@\s]+@g\.us$/.test(value);
+}
+function normalizeScheduleGroupIds(itemOrIds) {
+  const raw = Array.isArray(itemOrIds)
+    ? itemOrIds
+    : (Array.isArray(itemOrIds?.grupoIds) ? itemOrIds.grupoIds : (itemOrIds?.grupoId ? [itemOrIds.grupoId] : []));
+  return [...new Set(raw.map(v => String(v || '').trim()).filter(Boolean))];
+}
+function groupNameForId(id) {
+  const value = String(id || '').trim();
+  return groups.find(g => String(g?.id || '') === value)?.name || value || '';
+}
+function groupNamesForIds(ids) {
+  return normalizeScheduleGroupIds(ids).map(groupNameForId).filter(Boolean);
+}
 function activeGroups() {
-  return groups.map(g => String(g.id)).filter(Boolean)
+  return groups
+    .map(g => String(g?.id || '').trim())
+    .filter(id => isValidGroupJid(id))
     .filter(id => getGroupConfig(id).ativo !== false);
 }
 
@@ -1055,6 +1121,67 @@ async function sendLegacyAutoLink() {
 }
 
 const runningLinkSchedules = new Set();
+const scheduledGroupRevalidationAt = new Map();
+const SCHEDULED_GROUP_REVALIDATE_COOLDOWN_MS = 30 * 1000;
+
+async function ensureScheduledGroupsAvailable(selectedGroupIds) {
+  const ids = normalizeScheduleGroupIds(selectedGroupIds);
+  if (!ids.length || !online || !sock) return false;
+
+  // Primeiro tentamos atualizar o cache completo, respeitando o rate-limit/backoff
+  // já existente em loadGroups(). Isso resolve a maioria dos casos de cache antigo.
+  await loadGroups();
+
+  let missing = ids.filter(id => !groups.some(g => String(g?.id || '') === id));
+  if (!missing.length) return true;
+
+  // Se o refresh geral ainda não encontrou um grupo específico, consultamos
+  // somente esse JID diretamente. Há um cooldown para não repetir a consulta
+  // a cada ciclo de 10s do scheduler.
+  for (const id of missing) {
+    const now = Date.now();
+    const lastAttempt = Number(scheduledGroupRevalidationAt.get(id) || 0);
+    if (now - lastAttempt < SCHEDULED_GROUP_REVALIDATE_COOLDOWN_MS) continue;
+
+    scheduledGroupRevalidationAt.set(id, now);
+    try {
+      const meta = await sock.groupMetadata(id);
+      const metaId = String(meta?.id || id).trim();
+      if (metaId !== id || !isValidGroupJid(metaId)) continue;
+
+      const refreshedGroup = {
+        id: metaId,
+        name: meta.subject || metaId,
+        members: Array.isArray(meta.participants)
+          ? meta.participants.length
+          : Number(meta.size || 0),
+        allowed: allowed.includes(metaId),
+        config: getGroupConfig(metaId)
+      };
+
+      const existingIndex = groups.findIndex(g => String(g?.id || '') === metaId);
+      if (existingIndex >= 0) {
+        groups[existingIndex] = refreshedGroup;
+      } else {
+        groups.push(refreshedGroup);
+      }
+      groups.sort((a,b) => String(a.name || a.id).localeCompare(String(b.name || b.id), 'pt-BR'));
+      addLog(`Grupo revalidado para o agendamento: ${metaId} — ${refreshedGroup.name}`);
+    } catch (e) {
+      // O grupo pode ter sido removido, a sessão pode não ter acesso a ele,
+      // ou a consulta pode ter sido recusada. Neste ponto não transformamos
+      // uma falha temporária de cache em falha permanente do agendamento.
+      if (isGroupRateLimitError(e)) {
+        addLog(`Revalidação do grupo ${id} limitada por rate-limit; aguardando nova tentativa.`);
+      } else {
+        addLog(`Grupo ${id} ainda não foi revalidado: ${e.message}`);
+      }
+    }
+  }
+
+  missing = ids.filter(id => !groups.some(g => String(g?.id || '') === id));
+  return missing.length === 0;
+}
 function isoWeekKey(d) {
   const x = new Date(d.getFullYear(), d.getMonth(), d.getDate());
   const day = x.getDay() || 7;
@@ -1092,27 +1219,54 @@ async function sendScheduledLink(item) {
   let targets;
   const now = new Date();
 
+  // Cada agendamento pode ter vários destinos explícitos. Nunca usamos a lista
+  // global de grupos como fallback, evitando broadcast acidental e JIDs inválidos.
+  const selectedGroupIds=normalizeScheduleGroupIds(item);
+  if(!selectedGroupIds.length || selectedGroupIds.some(id=>!isValidGroupJid(id))){
+    const erro='Grupos de envio não definidos ou inválidos. Edite o agendamento e selecione pelo menos um grupo válido.';
+    item.status='erro';
+    item.ativo=false;
+    upsertLinkFailure(item,selectedGroupIds[0]||'',erro);
+    writeJson(FILES.schedules,linkSchedules);
+    addLog(`Agendamento "${item.nome}" bloqueado: ${erro}`);
+    return;
+  }
+  const groupsAvailable = await ensureScheduledGroupsAvailable(selectedGroupIds);
+  if(!groupsAvailable){
+    const missing=selectedGroupIds.filter(id=>!groups.some(g=>String(g?.id||'')===id));
+    item.status='aguardando_grupo';
+    item.lastGroupCheckAt=new Date().toISOString();
+    writeJson(FILES.schedules,linkSchedules);
+    addLog(`Agendamento "${item.nome}" aguardando revalidação do grupo: ${missing.join(', ')}`);
+    return;
+  }
+
+  const selectedGroups=selectedGroupIds.map(id=>groups.find(g=>String(g.id)===id)).filter(Boolean);
+  item.grupoNomes=Object.fromEntries(selectedGroups.map(g=>[String(g.id),String(g.name||g.id)]));
+  item.grupoNome=selectedGroupIds.length===1?item.grupoNomes[selectedGroupIds[0]]:`${selectedGroupIds.length} grupos`;
+
   // Mantém a mesma ocorrência entre reinícios. O progresso fica gravado em
   // disco depois de cada grupo, então o próximo processo continua do ponto
   // exato em que o anterior parou.
   if (hasPendingProgress(item)) {
-    targets = Array.isArray(item.progressTargets) ? [...item.progressTargets] : [];
+    targets = Array.isArray(item.progressTargets) ? [...item.progressTargets] : [...selectedGroupIds];
   } else {
-    targets = activeGroups();
-    if (!targets.length) {
+    targets = [...selectedGroupIds];
+    const activeSelectedTargets = targets.filter(id => getGroupConfig(id).ativo !== false);
+    if (!activeSelectedTargets.length) {
       item.status = 'pausado';
       item.lastSkipKey = dateKey(now);
       writeJson(FILES.schedules, linkSchedules);
-      addLog(`Agendamento "${item.nome}" aguardando: nenhum grupo Ligado.`);
+      addLog(`Agendamento "${item.nome}" aguardando: todos os grupos selecionados estão desligados.`);
       return;
     }
     item.progressKey = occurrenceKey(item, now);
-    item.progressTargets = [...new Set(targets.map(String))];
+    item.progressTargets = [...selectedGroupIds];
     item.progressGroupIds = [];
     item.progressStartedAt = now.toISOString();
     item.status = 'enviando';
     writeJson(FILES.schedules, linkSchedules);
-    addLog(`Agendamento "${item.nome}" iniciado. Progresso salvo em disco.`);
+    addLog(`Agendamento "${item.nome}" iniciado para ${selectedGroupIds.length} grupo(s). Progresso salvo em disco.`);
   }
 
   // Grupos já concluídos nesta ocorrência nunca recebem a mesma execução de novo.
@@ -1190,6 +1344,9 @@ async function sendScheduledLink(item) {
       if (getGroupConfig(id).ativo === false) continue;
 
       try {
+        if(!isValidGroupJid(id)){
+          throw new Error('JID do grupo de destino inválido.');
+        }
         // Registramos a intenção antes do envio. Isso privilegia a regra do
         // RegulOS de nunca duplicar um envio após uma queda/reinício.
         // Em caso de erro, removemos a marca para permitir nova tentativa.
@@ -1372,10 +1529,14 @@ async function start() {
         for (const id of Object.keys(groupConfig)) {
           groupConfig[id].ativo = false;
         }
+        // "Ligado" é a única seleção operacional do grupo.
+        // Ao iniciar uma nova conexão, nenhum grupo fica selecionado.
+        allowed = [];
+        writeJson(FILES.groups, allowed);
         saveGroupsConfig();
+        // A descoberta dos grupos acontece uma vez por conexão.
+        // Depois disso, o painel trabalha com o cache até uma pesquisa explícita.
         await loadGroups();
-        setTimeout(() => loadGroups(), 2500);
-        setTimeout(() => loadGroups(), 7000);
         armAutoLinkTimer();
         processLinkSchedules().catch(e => addLog(e.message));
       }
@@ -1524,21 +1685,27 @@ app.post('/api/deslogar', requireAdmin, async (req,res) => {
 });
 
 app.get('/api/grupos', async (req,res) => {
-  // O painel pode abrir antes do evento connection.update/open.
-  // Nesse caso a lista ficava vazia até o usuário clicar manualmente.
-  // Quando o WhatsApp já está conectado, atualizamos automaticamente se
-  // ainda não houver grupos ou se o cache estiver antigo.
-  if (online && (!groups.length || Date.now() - lastGroupRefreshAt > 15000)) {
-    await loadGroups();
-  }
+  // Consulta somente o cache. A descoberta no WhatsApp ocorre na conexão
+  // ou quando o usuário solicita explicitamente "Pesquisar grupos".
   res.json({
-    ok:true, grupos:groups.map(g=>({...g,config:getGroupConfig(g.id),allowed:allowed.includes(g.id)})), permitidos:allowed
+    ok:true,
+    grupos:groups.map(g => ({...g,config:getGroupConfig(g.id),allowed:allowed.includes(g.id)})),
+    permitidos:allowed,
+    gruposCacheAt:lastGroupRefreshAt || null,
+    gruposRateLimitUntil:groupRateLimitUntil || null
   });
 });
 app.post('/api/grupos/atualizar', async (req,res) => {
   if(!online) return res.status(503).json({ok:false,msg:'WhatsApp não conectado.'});
   const ok=await loadGroups();
-  res.status(ok?200:500).json({ok,msg:ok?`${groups.length} grupo(s) carregado(s).`:'Não foi possível atualizar os grupos.',grupos,permitidos:allowed});
+  if (ok) return res.status(200).json({ok:true,msg:groups.length+' grupo(s) carregado(s).',grupos:groups,permitidos:allowed});
+  const retryAfterMs=Math.max(0,groupRateLimitUntil-Date.now());
+  const statusCode=retryAfterMs>0?429:500;
+  return res.status(statusCode).json({
+    ok:false,
+    msg:retryAfterMs>0?'Atualização dos grupos em espera. Tente novamente em ~'+Math.ceil(retryAfterMs/1000)+'s.':'Não foi possível atualizar os grupos.',
+    retryAfterMs,grupos:groups,permitidos:allowed
+  });
 });
 app.post('/api/grupos/config', (req,res) => {
   const id=String(req.body?.id||'');
@@ -1546,9 +1713,15 @@ app.post('/api/grupos/config', (req,res) => {
   const c=getGroupConfig(id);
 const grupoAtual=groups.find(g=>String(g.id)===id);
 if(grupoAtual?.name) c.nome=grupoAtual.name;
-if(typeof req.body.ativo==='boolean') c.ativo=req.body.ativo;
+if(typeof req.body.ativo==='boolean') {
+  c.ativo=req.body.ativo;
+  // Mantém "Permitidos" sincronizado com "Ligados" para evitar dois estados diferentes.
+  if(c.ativo) allowed=[...new Set([...allowed,id])];
+  else allowed=allowed.filter(x=>String(x)!==id);
+  writeJson(FILES.groups, allowed);
+}
   saveGroupsConfig();
-  res.json({ok:true,config:c,msg:c.ativo?'Envio ligado.':'Envio desligado.'});
+  res.json({ok:true,config:c,permitidos:allowed,msg:c.ativo?'Envio ligado.':'Envio desligado.'});
 });
 app.post('/api/grupos/salvar', (req,res) => {
   if(!Array.isArray(req.body?.ids)) return res.status(400).json({ok:false,msg:'IDs inválidos.'});
@@ -1696,9 +1869,14 @@ app.post('/api/link-agendamentos',(req,res)=>{
   const data=String(b.data||''), horario=String(b.horario||'');
   if(!nome||!url||!data||!horario) return res.status(400).json({ok:false,msg:'Nome, link, data e horário são obrigatórios.'});
   const min=Math.max(1,Number(b.intervaloMin||1)), max=Math.max(min,Number(b.intervaloMax||min));
+  const grupoIds=normalizeScheduleGroupIds(b.grupoIds?.length ? b.grupoIds : b.grupoId ? [b.grupoId] : []);
+  if(!grupoIds.length || grupoIds.some(id=>!isValidGroupJid(id))) return res.status(400).json({ok:false,msg:'Selecione pelo menos um grupo de envio válido.'});
+  const gruposEncontrados=grupoIds.map(id=>groups.find(g=>String(g.id)===id));
+  if(gruposEncontrados.some(g=>!g)) return res.status(400).json({ok:false,msg:'Um ou mais grupos selecionados não estão disponíveis no cache atual. Atualize a lista de grupos e tente novamente.'});
+  const grupoNomes=Object.fromEntries(gruposEncontrados.map(g=>[String(g.id),String(g.name||g.id)]));
   const item={
     id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),
-    nome,url,mensagem:String(b.mensagem||''),tituloProduto:'',tituloUltimaTentativa:'',data,horario,
+    nome,url,mensagem:String(b.mensagem||''),grupoIds,grupoNomes,grupoNome:grupoIds.length===1?grupoNomes[grupoIds[0]]:`${grupoIds.length} grupos`,tituloProduto:'',tituloUltimaTentativa:'',data,horario,
     repeticao:['uma_vez','diariamente','semanalmente'].includes(b.repeticao)?b.repeticao:'uma_vez',
     intervaloMin:min,intervaloMax:max,ativo:b.ativo!==false,status:b.ativo===false?'pausado':'agendado',
     imagemAutomatica:b.imagemAutomatica!==false, imagemUrl:String(b.imagemUrl||'').trim(),
@@ -1728,6 +1906,25 @@ app.put('/api/link-agendamentos/:id',(req,res)=>{
   item.url=String(b.url||item.url).trim();
   if (item.url !== oldUrl) { item.tituloProduto=''; item.tituloUltimaTentativa=''; item.imagemStatus='pendente'; }
   item.mensagem=String(b.mensagem??item.mensagem);
+  if(Object.prototype.hasOwnProperty.call(b,'grupoIds') || Object.prototype.hasOwnProperty.call(b,'grupoId')){
+    const novosGrupoIds=normalizeScheduleGroupIds(Array.isArray(b.grupoIds) ? b.grupoIds : [b.grupoId]);
+    if(!novosGrupoIds.length || novosGrupoIds.some(id=>!isValidGroupJid(id))) return res.status(400).json({ok:false,msg:'Selecione pelo menos um grupo de envio válido.'});
+    const gruposEncontrados=novosGrupoIds.map(id=>groups.find(g=>String(g.id)===id));
+    if(gruposEncontrados.some(g=>!g)) return res.status(400).json({ok:false,msg:'Um ou mais grupos selecionados não estão disponíveis no cache atual. Atualize a lista de grupos e tente novamente.'});
+    const gruposAnteriores=normalizeScheduleGroupIds(item);
+    const mudou=JSON.stringify(gruposAnteriores)!==JSON.stringify(novosGrupoIds);
+    if(mudou){
+      item.progressKey='';
+      item.progressTargets=[];
+      item.progressGroupIds=[];
+      item.progressStartedAt='';
+      item.lastRunKey='';
+    }
+    item.grupoIds=novosGrupoIds;
+    item.grupoNomes=Object.fromEntries(gruposEncontrados.map(g=>[String(g.id),String(g.name||g.id)]));
+    item.grupoNome=novosGrupoIds.length===1?item.grupoNomes[novosGrupoIds[0]]:`${novosGrupoIds.length} grupos`;
+    delete item.grupoId;
+  }
   item.data=String(b.data||item.data);
   item.horario=String(b.horario||item.horario);
   item.repeticao=['uma_vez','diariamente','semanalmente'].includes(b.repeticao)?b.repeticao:item.repeticao;

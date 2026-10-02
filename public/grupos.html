@@ -12,10 +12,10 @@
 <div class="wrap">
   <div class="head">
     <div class="title">👥 Todos os grupos</div>
-    <div class="muted">Painel separado do Gerenciador de grupos. Aqui você pode visualizar e controlar todos os grupos.</div>
+    <div class="muted">Painel separado do Gerenciador de grupos. A lista usa o cache; a consulta ao WhatsApp só acontece quando você pesquisar explicitamente.</div>
     <div class="row">
       <input id="search" placeholder="🔎 Pesquisar grupo..." oninput="render()">
-      <button class="primary" onclick="load()">🔄 Atualizar grupos</button>
+      <button class="primary" onclick="pesquisarGrupos()">🔄 Pesquisar grupos</button>
       <button type="button" onclick="closeGroupsPanel()">✖ Fechar aba</button>
     </div>
     <div id="summary" class="muted" style="margin-top:10px">Carregando...</div>
@@ -28,9 +28,13 @@ let groups=[];
 function friendlyFetchError(e){const m=String(e?.message||e||'');if(/Failed to fetch|NetworkError|Load failed|fetch failed|ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_NETWORK/i.test(m))return 'Servidor do RegulOS indisponível. Verifique se o programa está em execução e tente novamente.';return m||'Falha de comunicação com o servidor.';}
 async function api(url,opt={}){let e;for(let i=0;i<4;i++){try{const r=await fetch(url,{cache:'no-store',credentials:'same-origin',...opt});let d={};try{d=await r.json()}catch{};if(!r.ok)throw Error(d.msg||`HTTP ${r.status}`);return d}catch(x){e=new Error(friendlyFetchError(x));if(i<3)await new Promise(r=>setTimeout(r,600*(i+1)))}}throw e||new Error('Falha de comunicação com o servidor.')}
 async function load(){
- const box=document.getElementById('groups');box.textContent='Carregando grupos...';
  try{const d=await api('/api/grupos');groups=d.grupos||[];render();notice('');}
- catch(e){notice(friendlyFetchError(e),true);box.textContent='Não foi possível carregar os grupos.'}
+ catch(e){notice(friendlyFetchError(e),true)}
+}
+async function pesquisarGrupos(){
+ const box=document.getElementById('groups');box.textContent='Pesquisando grupos no WhatsApp...';
+ try{const d=await api('/api/grupos/atualizar',{method:'POST'});groups=d.grupos||[];render();notice(d.msg||'Grupos pesquisados.');}
+ catch(e){notice(friendlyFetchError(e),true);box.textContent='Não foi possível pesquisar os grupos.'}
 }
 function notice(t,err=false){const n=document.getElementById('notice');n.className=err?'notice error':'notice';n.textContent=t;n.style.display=t?'block':'none'}
 function render(){

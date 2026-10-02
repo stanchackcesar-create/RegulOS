@@ -15,5 +15,6 @@ require(path.join(ROOT, 'tools', 'fix-auto-offer-schedule.js'));
 require(path.join(ROOT, 'tools', 'fix-auto-offer-title.js'));
 require(path.join(ROOT, 'tools', 'fix-auto-offer-image.js'));
 
-// Mantém as correções de grupos, agendamentos, imagens e reconexão.
-require(path.join(ROOT, 'tools', 'patch_scheduled_group.js'));
+// A lógica atual de agendamento por múltiplos grupos já está integrada em
+// server.js/index.html. Não executar o patch legado, pois ele reintroduz a
+// validação antiga de grupo único (grupoId) no formulário.
