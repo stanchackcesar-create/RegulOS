@@ -1839,7 +1839,12 @@ app.post('/api/grupos/atualizar', async (req,res) => {
   const ok=await loadGroups();
   if(ok)return res.status(200).json({ok:true,msg:groups.length+' grupo(s) carregado(s).',grupos:groups,permitidos:allowed});
   const retryAfterMs=Math.max(0,groupRateLimitUntil-Date.now());
-  return res.status(retryAfterMs>0?429:500,{});
+  const statusCode=retryAfterMs>0?429:500;
+  return res.status(statusCode).json({
+    ok:false,
+    msg:retryAfterMs>0?'Atualização dos grupos em espera. Tente novamente em ~'+Math.ceil(retryAfterMs/1000)+'s.':'Não foi possível atualizar os grupos.',
+    retryAfterMs,grupos:groups,permitidos:allowed
+  });
 });
 app.post('/api/grupos/config',(req,res)=>{
   const id=String(req.body?.id||'');if(!id)return res.status(400).json({ok:false,msg:'Grupo inválido.'});
@@ -1866,6 +1871,23 @@ app.post('/api/grupos/salvar',(req,res)=>{
     saveWhatsAppGroupConfig(cfg);return res.json({ok:true,msg:ids.length+' grupo(s) permitido(s).'});
   }
   allowed=[...new Set(req.body.ids.map(String))];writeJson(FILES.groups,allowed);res.json({ok:true,msg:allowed.length+' grupo(s) permitido(s).'});
+});
+
+app.get('/api/whatsapp-contas/:userId/grupos',requireAuth,async(req,res)=>{
+  const target=whatsappTargetUser(req,req.params.userId);
+  if(!target)return res.status(403).json({ok:false,msg:'Acesso restrito ao administrador ou ao próprio usuário.'});
+  const list=readWhatsAppGroups()[String(target.id)]||[];
+  const permitidos=list.filter(g=>getWhatsAppGroupConfig(target.id,g.id).ativo).map(g=>String(g.id));
+  res.json({ok:true,usuario:target.usuario,grupos:list.map(g=>({...g,config:getWhatsAppGroupConfig(target.id,g.id),allowed:permitidos.includes(String(g.id))})),permitidos});
+});
+app.post('/api/whatsapp-contas/:userId/grupos/atualizar',requireAuth,async(req,res)=>{
+  const target=whatsappTargetUser(req,req.params.userId);
+  if(!target)return res.status(403).json({ok:false,msg:'Acesso restrito ao administrador ou ao próprio usuário.'});
+  const result=await loadWhatsAppGroupsForUser(target);
+  const list=result.grupos||[];
+  const permitidos=list.filter(g=>getWhatsAppGroupConfig(target.id,g.id).ativo).map(g=>String(g.id));
+  if(!result.ok)return res.status(503).json({...result,permitidos});
+  res.json({ok:true,usuario:target.usuario,msg:list.length+' grupo(s) carregado(s).',grupos:list.map(g=>({...g,config:getWhatsAppGroupConfig(target.id,g.id),allowed:permitidos.includes(String(g.id))})),permitidos});
 });
 app.get('/api/mensagem', (req,res)=>res.json({ok:true}));
 app.post('/api/mensagem', async (req,res) => {
