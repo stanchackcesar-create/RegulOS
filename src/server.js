@@ -219,7 +219,7 @@ app.post('/api/auth/setup',(req,res)=>{
   const nome=usuario;
   const salt=crypto.randomBytes(16).toString('hex');
   const user={id:crypto.randomUUID(),nome,usuario,salt,hash:hashPassword(senha,salt),admin:true,criadoEm:new Date().toISOString()};
-  saveUsers([user]); saveSessions({}); setSession(res,user);
+  saveUsers([user]); saveSessions({}); ensureWhatsAppAccount(user); setSession(res,user);
   res.json({ok:true,msg:'Conta administradora criada.',usuario:sanitizeUser(user)});
 });
 const loginAttempts = new Map();
@@ -414,7 +414,7 @@ app.post('/api/usuarios',requireAdmin,(req,res)=>{
   const users=readUsers(); if(users.some(x=>x.usuario===usuario))return res.status(409).json({ok:false,msg:'Esse usuário já existe.'});
   const salt=crypto.randomBytes(16).toString('hex');
   const u={id:crypto.randomUUID(),nome:usuario,usuario,salt,hash:hashPassword(senha,salt),admin:false,criadoEm:new Date().toISOString()};
-  users.push(u);saveUsers(users);res.json({ok:true,usuario:sanitizeUser(u)});
+  users.push(u);saveUsers(users); ensureWhatsAppAccount(u); res.json({ok:true,usuario:sanitizeUser(u)});
 });
 app.delete('/api/usuarios/:id',requireAdmin,(req,res)=>{
   const users=readUsers(); const target=users.find(x=>x.id===req.params.id);
