@@ -98,8 +98,8 @@ app.use((req,res,next)=>{
 });
 
 // ========================= AUTENTICAÇÃO MULTIUSUÁRIO =========================
-// As contas controlam apenas o acesso ao painel. A sessão do WhatsApp e todos
-// os dados do RegulOS continuam compartilhados, conforme a arquitetura escolhida.
+// As contas controlam o acesso ao painel. A autenticação WhatsApp é individual
+// por usuário; os grupos/agendamentos ainda serão separados nas próximas etapas.
 function readUsers(){
   const v=readJson(USERS_FILE,[]);
   return Array.isArray(v)?v:[];
