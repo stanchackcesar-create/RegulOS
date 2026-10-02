@@ -36,7 +36,7 @@ function createWhatsAppSessionManager({ onUpdate, onLog } = {}) {
   async function start(account, options = {}) {
     const id = String(account.id);
     let s = sessions.get(id);
-    if (s?.starting || s?.online) return snapshot(id);
+    if (s?.starting || s?.online || s?.sock) return snapshot(id);
 
     if (s?.reconnectTimer) clearTimeout(s.reconnectTimer);
     s = {
@@ -168,6 +168,7 @@ function createWhatsAppSessionManager({ onUpdate, onLog } = {}) {
         try { fs.rmSync(account.authDir, { recursive: true, force: true }); } catch {}
       }
       notify(id, { status: 'Desconectado', connected: false, numero: '' });
+      if (options.newQr) return start(account, { noRetry: true });
       return snapshot(id);
     }
     if (s.reconnectTimer) clearTimeout(s.reconnectTimer);
