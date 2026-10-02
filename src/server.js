@@ -2195,10 +2195,13 @@ app.get('*',(req,res)=>res.sendFile(path.join(PUBLIC,'index.html')));
 // ================= MULTI-ESTÂNCIA — ISOLAMENTO E AUTORIZAÇÃO =================
 function historyBelongsToUser(entry,user){
   const ownerId=String(entry?.whatsappUserId||'');
-  if(ownerId) return ownerId===String(user?.id||'');
-  // Registros antigos sem proprietário pertencem somente ao administrador,
-  // preservando compatibilidade sem expor histórico legado a usuários comuns.
-  return user?.admin===true;
+  if(!ownerId) return user?.admin===true;
+  if(String(ownerId)===String(user?.id||'')) return true;
+  if(user?.admin===true){
+    const owner=readUsers().find(x=>String(x.id)===ownerId);
+    return owner?.whatsappAdminAccess===true;
+  }
+  return false;
 }
 function failureOwnerId(failure){
   if(failure?.whatsappUserId) return String(failure.whatsappUserId);
@@ -2207,8 +2210,13 @@ function failureOwnerId(failure){
 }
 function failureBelongsToUser(failure,user){
   const ownerId=failureOwnerId(failure);
-  if(ownerId) return ownerId===String(user?.id||'');
-  return user?.admin===true;
+  if(!ownerId) return user?.admin===true;
+  if(ownerId===String(user?.id||'')) return true;
+  if(user?.admin===true){
+    const owner=readUsers().find(x=>String(x.id)===ownerId);
+    return owner?.whatsappAdminAccess===true;
+  }
+  return false;
 }
 
 // O usuário controla explicitamente se o administrador pode gerenciar sua
@@ -2239,18 +2247,20 @@ app.post('/api/whatsapp-admin-access',requireAuth,(req,res)=>{
 });
 
 // Filtra histórico enviado por proprietário.
-const regulosRouteStack = regulosRouteStack || app.router?.stack || [];
+const regulosRouteStack = app._router?.stack || app.router?.stack || [];
 const originalLinkHistoryGet = regulosRouteStack.find(l=>l.route?.path==='/api/link-historico' && l.route?.methods?.get);
 if(originalLinkHistoryGet){
-  const original=originalLinkHistoryGet.route.stack.map(x=>x.handle);
-  originalLinkHistoryGet.route.stack=[{handle:async(req,res,next)=>{
-    try{
-      const historico=Array.isArray(linkHistory)?linkHistory.filter(x=>historyBelongsToUser(x,req.user)):[];
-      res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
-      res.set('Pragma','no-cache'); res.set('Expires','0');
-      return res.json({ok:true,historico});
-    }catch(e){ return res.status(500).json({ok:false,msg:'Não foi possível carregar o histórico de links.'}); }
-  }}];
+  const historyLayer=originalLinkHistoryGet.route.stack[originalLinkHistoryGet.route.stack.length-1];
+  if(historyLayer){
+    historyLayer.handle=async(req,res,next)=>{
+      try{
+        const historico=Array.isArray(linkHistory)?linkHistory.filter(x=>historyBelongsToUser(x,req.user)):[];
+        res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.set('Pragma','no-cache'); res.set('Expires','0');
+        return res.json({ok:true,historico});
+      }catch(e){ return res.status(500).json({ok:false,msg:'Não foi possível carregar o histórico de links.'}); }
+    };
+  }
 }
 
 // Filtra falhas por proprietário e impede alterações cruzadas.
