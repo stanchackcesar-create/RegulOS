@@ -708,7 +708,6 @@ async function accountHeartbeat(){
 }
 setInterval(accountHeartbeat,5000);
 setInterval(()=>{refreshAccountPresence();},2000);
-setInterval(()=>{loadAccount();},7000);
 setTimeout(()=>{refreshAccountPresence();},1000);
 function markPresenceOffline(){
   try{
