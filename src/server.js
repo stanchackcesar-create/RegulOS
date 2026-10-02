@@ -342,6 +342,20 @@ let reconnectTimer = null;
 let scheduleTimer = null;
 let linkScheduleTimer = null;
 let lastGroupRefreshAt = 0;
+let lastGroupAttemptAt = 0;
+let groupRefreshInFlight = null;
+let groupRateLimitUntil = 0;
+let groupRateLimitLevel = 0;
+
+function groupRefreshBackoffMs(level) {
+  // Em caso de rate-limit, aumenta gradualmente o intervalo entre tentativas.
+  return Math.min(5 * 60 * 1000, Math.max(30 * 1000, (2 ** Math.max(0, level - 1)) * 30 * 1000));
+}
+
+function isGroupRateLimitError(error) {
+  const msg = String(error?.message || error || '').toLowerCase();
+  return msg.includes('rate-overlimit') || msg.includes('rate limit') || msg.includes('429') || msg.includes('too many requests');
+}
 
 function readJson(file, fallback) {
   try {
@@ -985,25 +999,49 @@ function chooseRandomMessage(item) {
 
 async function loadGroups() {
   if (!sock || !online) return false;
-  try {
-    const all = await sock.groupFetchAllParticipating();
-    groups = Object.values(all || {}).map(g => {
-      const id = String(g.id);
-      return {
-        id,
-        name: g.subject || id,
-        members: Array.isArray(g.participants) ? g.participants.length : 0,
-        allowed: allowed.includes(id),
-        config: getGroupConfig(id)
-      };
-    }).sort((a,b) => a.name.localeCompare(b.name, 'pt-BR'));
-    lastGroupRefreshAt = Date.now();
-    addLog(`Grupos carregados: ${groups.length}`);
-    return true;
-  } catch (e) {
-    addLog(`Erro nos grupos: ${e.message}`);
-    return false;
-  }
+
+  const now = Date.now();
+  if (groupRefreshInFlight) return groupRefreshInFlight;
+  if (now < groupRateLimitUntil) return false;
+  if (lastGroupAttemptAt && now - lastGroupAttemptAt < 15000) return false;
+
+  lastGroupAttemptAt = now;
+  groupRefreshInFlight = (async () => {
+    try {
+      const all = await sock.groupFetchAllParticipating();
+      groups = Object.values(all || {}).map(g => {
+        const id = String(g.id);
+        return {
+          id,
+          name: g.subject || id,
+          members: Array.isArray(g.participants) ? g.participants.length : 0,
+          allowed: allowed.includes(id),
+          config: getGroupConfig(id)
+        };
+      }).sort((a,b) => a.name.localeCompare(b.name, 'pt-BR'));
+
+      lastGroupRefreshAt = Date.now();
+      groupRateLimitUntil = 0;
+      groupRateLimitLevel = 0;
+      addLog('Grupos carregados: ' + groups.length);
+      return true;
+    } catch (e) {
+      if (isGroupRateLimitError(e)) {
+        groupRateLimitLevel = Math.min(groupRateLimitLevel + 1, 4);
+        const waitMs = groupRefreshBackoffMs(groupRateLimitLevel);
+        groupRateLimitUntil = Date.now() + waitMs;
+        addLog('Rate-limit nos grupos; próxima tentativa em ~' + Math.ceil(waitMs / 1000) + 's.');
+      } else {
+        groupRateLimitUntil = Date.now() + 15000;
+        addLog('Erro nos grupos: ' + e.message);
+      }
+      return false;
+    } finally {
+      groupRefreshInFlight = null;
+    }
+  })();
+
+  return groupRefreshInFlight;
 }
 
 function activeGroups() {
@@ -1525,20 +1563,29 @@ app.post('/api/deslogar', requireAdmin, async (req,res) => {
 
 app.get('/api/grupos', async (req,res) => {
   // O painel pode abrir antes do evento connection.update/open.
-  // Nesse caso a lista ficava vazia até o usuário clicar manualmente.
-  // Quando o WhatsApp já está conectado, atualizamos automaticamente se
-  // ainda não houver grupos ou se o cache estiver antigo.
+  // A lista usa cache e o carregamento respeita o backoff do WhatsApp.
   if (online && (!groups.length || Date.now() - lastGroupRefreshAt > 15000)) {
     await loadGroups();
   }
   res.json({
-    ok:true, grupos:groups.map(g=>({...g,config:getGroupConfig(g.id),allowed:allowed.includes(g.id)})), permitidos:allowed
+    ok:true,
+    grupos:groups.map(g => ({...g,config:getGroupConfig(g.id),allowed:allowed.includes(g.id)})),
+    permitidos:allowed,
+    gruposCacheAt:lastGroupRefreshAt || null,
+    gruposRateLimitUntil:groupRateLimitUntil || null
   });
 });
 app.post('/api/grupos/atualizar', async (req,res) => {
   if(!online) return res.status(503).json({ok:false,msg:'WhatsApp não conectado.'});
   const ok=await loadGroups();
-  res.status(ok?200:500).json({ok,msg:ok?`${groups.length} grupo(s) carregado(s).`:'Não foi possível atualizar os grupos.',grupos,permitidos:allowed});
+  if (ok) return res.status(200).json({ok:true,msg:groups.length+' grupo(s) carregado(s).',grupos,permitidos:allowed});
+  const retryAfterMs=Math.max(0,groupRateLimitUntil-Date.now());
+  const statusCode=retryAfterMs>0?429:500;
+  return res.status(statusCode).json({
+    ok:false,
+    msg:retryAfterMs>0?'Atualização dos grupos em espera. Tente novamente em ~'+Math.ceil(retryAfterMs/1000)+'s.':'Não foi possível atualizar os grupos.',
+    retryAfterMs,grupos,permitidos:allowed
+  });
 });
 app.post('/api/grupos/config', (req,res) => {
   const id=String(req.body?.id||'');
