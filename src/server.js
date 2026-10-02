@@ -472,7 +472,7 @@ function archiveSentFailureAsHistory(item, failure, grupoId) {
     tituloProduto: item.tituloProduto || '', repeticao: item.repeticao, data: item.data, horario: item.horario,
     intervaloMin: item.intervaloMin, intervaloMax: item.intervaloMax, imagemAutomatica: item.imagemAutomatica !== false,
     imagemUrl: item.imagemUrl || '', imagemStatus: item.imagemStatus || '', enviados: 1, sucessos: 1, erros: 0,
-    grupoId: String(grupoId || failure?.grupoId || ''), grupoNome: item.grupoNome || groupNameForId(grupoId || failure?.grupoId), lastRunAt: new Date().toISOString(),
+    grupoId: String(grupoId || failure?.grupoId || ''), grupoNome: groupNameForId(grupoId || failure?.grupoId) || item.grupoNome || groupNameForId(failure?.grupoId), lastRunAt: new Date().toISOString(),
     concluidoAt: new Date().toISOString(), motivo: 'reenvio realizado com sucesso'
   };
   linkHistory.unshift(snapshot); saveLinkHistory();
