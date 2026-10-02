@@ -1915,7 +1915,7 @@ app.post('/api/mensagem', async (req,res) => {
 
 app.get('/api/link-agendamentos',(req,res)=>{
   try {
-    const agendamentos=Array.isArray(linkSchedules)?linkSchedules:[];
+    const agendamentos=(Array.isArray(linkSchedules)?linkSchedules:[]).filter(x=>req.user?.admin===true || String(x.whatsappUserId||'')===String(req.user?.id||''));
     res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma','no-cache');
     res.set('Expires','0');
@@ -1927,7 +1927,7 @@ app.get('/api/link-agendamentos',(req,res)=>{
 });
 app.get('/api/links',(req,res)=>{
   try {
-    const agendamentos=Array.isArray(linkSchedules)?linkSchedules:[];
+    const agendamentos=(Array.isArray(linkSchedules)?linkSchedules:[]).filter(x=>req.user?.admin===true || String(x.whatsappUserId||'')===String(req.user?.id||''));
     res.set('Cache-Control','no-store');
     res.json({ok:true,links:agendamentos,agendamentos});
   } catch(e) { res.status(500).json({ok:false,msg:'Não foi possível carregar os links.'}); }
@@ -2023,18 +2023,22 @@ app.get('/api/link-imagem-preview', async (req,res)=>{
   }catch(e){return res.status(502).json({ok:false,msg:e.message||'Não foi possível obter a imagem.'});}
 });
 
-app.post('/api/link-agendamentos',(req,res)=>{
+app.post('/api/link-agendamentos',requireAuth,(req,res)=>{
   const b=req.body||{}, nome=String(b.nome||'').trim(), url=String(b.url||'').trim();
   const data=String(b.data||''), horario=String(b.horario||'');
   if(!nome||!url||!data||!horario) return res.status(400).json({ok:false,msg:'Nome, link, data e horário são obrigatórios.'});
   const min=Math.max(1,Number(b.intervaloMin||1)), max=Math.max(min,Number(b.intervaloMax||min));
   const grupoIds=normalizeScheduleGroupIds(b.grupoIds?.length ? b.grupoIds : b.grupoId ? [b.grupoId] : []);
   if(!grupoIds.length || grupoIds.some(id=>!isValidGroupJid(id))) return res.status(400).json({ok:false,msg:'Selecione pelo menos um grupo de envio válido.'});
-  const gruposEncontrados=grupoIds.map(id=>groups.find(g=>String(g.id)===id));
+  const ownerId=String(req.user?.id||'');
+  const ownerGroups=req.user?.admin===true ? groups : (readWhatsAppGroups()[ownerId]||[]);
+  const gruposEncontrados=grupoIds.map(id=>ownerGroups.find(g=>String(g.id)===id));
+  if(gruposEncontrados.some(g=>!g)) return res.status(400).json({ok:false,msg:'Um ou mais grupos não pertencem ao WhatsApp selecionado.'});
   if(gruposEncontrados.some(g=>!g)) return res.status(400).json({ok:false,msg:'Um ou mais grupos selecionados não estão disponíveis no cache atual. Atualize a lista de grupos e tente novamente.'});
   const grupoNomes=Object.fromEntries(gruposEncontrados.map(g=>[String(g.id),String(g.name||g.id)]));
   const item={
     id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),
+    whatsappUserId:ownerId,
     nome,url,mensagem:String(b.mensagem||''),grupoIds,grupoNomes,grupoNome:grupoIds.length===1?grupoNomes[grupoIds[0]]:`${grupoIds.length} grupos`,tituloProduto:'',tituloUltimaTentativa:'',data,horario,
     repeticao:['uma_vez','diariamente','semanalmente'].includes(b.repeticao)?b.repeticao:'uma_vez',
     intervaloMin:min,intervaloMax:max,ativo:b.ativo!==false,status:b.ativo===false?'pausado':'agendado',
@@ -2056,8 +2060,8 @@ app.post('/api/link-agendamentos',(req,res)=>{
   res.set('Cache-Control','no-store');
   res.json({ok:true,agendamento:item});
 });
-app.put('/api/link-agendamentos/:id',(req,res)=>{
-  const item=linkSchedules.find(x=>x.id===req.params.id);
+app.put('/api/link-agendamentos/:id',requireAuth,(req,res)=>{
+  const item=linkSchedules.find(x=>x.id===req.params.id && (req.user?.admin===true || String(x.whatsappUserId||'')===String(req.user?.id||'')));
   if(!item) return res.status(404).json({ok:false,msg:'Agendamento não encontrado.'});
   const b=req.body||{};
   item.nome=String(b.nome||item.nome).trim();
@@ -2068,7 +2072,8 @@ app.put('/api/link-agendamentos/:id',(req,res)=>{
   if(Object.prototype.hasOwnProperty.call(b,'grupoIds') || Object.prototype.hasOwnProperty.call(b,'grupoId')){
     const novosGrupoIds=normalizeScheduleGroupIds(Array.isArray(b.grupoIds) ? b.grupoIds : [b.grupoId]);
     if(!novosGrupoIds.length || novosGrupoIds.some(id=>!isValidGroupJid(id))) return res.status(400).json({ok:false,msg:'Selecione pelo menos um grupo de envio válido.'});
-    const gruposEncontrados=novosGrupoIds.map(id=>groups.find(g=>String(g.id)===id));
+    const ownerGroups=req.user?.admin===true ? groups : (readWhatsAppGroups()[String(req.user.id)]||[]);
+    const gruposEncontrados=novosGrupoIds.map(id=>ownerGroups.find(g=>String(g.id)===id));
     if(gruposEncontrados.some(g=>!g)) return res.status(400).json({ok:false,msg:'Um ou mais grupos selecionados não estão disponíveis no cache atual. Atualize a lista de grupos e tente novamente.'});
     const gruposAnteriores=normalizeScheduleGroupIds(item);
     const mudou=JSON.stringify(gruposAnteriores)!==JSON.stringify(novosGrupoIds);
@@ -2100,8 +2105,8 @@ app.put('/api/link-agendamentos/:id',(req,res)=>{
   writeJson(FILES.schedules,linkSchedules); syncLinkQueue();
   res.json({ok:true,agendamento:item});
 });
-app.post('/api/link-agendamentos/:id/toggle',(req,res)=>{
-  const item=linkSchedules.find(x=>x.id===req.params.id);
+app.post('/api/link-agendamentos/:id/toggle',requireAuth,(req,res)=>{
+  const item=linkSchedules.find(x=>x.id===req.params.id && (req.user?.admin===true || String(x.whatsappUserId||'')===String(req.user?.id||'')));
   if(!item) return res.status(404).json({ok:false,msg:'Agendamento não encontrado.'});
   item.ativo=!item.ativo;
   item.status=item.ativo?'agendado':'pausado';
@@ -2109,15 +2114,15 @@ app.post('/api/link-agendamentos/:id/toggle',(req,res)=>{
   writeJson(FILES.schedules,linkSchedules); syncLinkQueue();
   res.json({ok:true,agendamento:item});
 });
-app.post('/api/link-agendamentos/:id/enviar-agora',async(req,res)=>{
-  const item=linkSchedules.find(x=>x.id===req.params.id);
+app.post('/api/link-agendamentos/:id/enviar-agora',requireAuth,async(req,res)=>{
+  const item=linkSchedules.find(x=>x.id===req.params.id && (req.user?.admin===true || String(x.whatsappUserId||'')===String(req.user?.id||'')));
   if(!item) return res.status(404).json({ok:false,msg:'Agendamento não encontrado.'});
   if(!online) return res.status(503).json({ok:false,msg:'WhatsApp não conectado.'});
   if(!botWindowActive()) return res.status(409).json({ok:false,msg:'Fora do horário programado do bot.'});
   await sendScheduledLink(item);
   res.json({ok:true,msg:'Envio solicitado.'});
 });
-app.delete('/api/link-agendamentos/:id',(req,res)=>{
+app.delete('/api/link-agendamentos/:id',requireAuth,(req,res)=>{
   const i=linkSchedules.findIndex(x=>x.id===req.params.id);
   if(i<0) return res.status(404).json({ok:false,msg:'Agendamento não encontrado.'});
   const removedId = linkSchedules[i].id;
