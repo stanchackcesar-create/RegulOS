@@ -223,6 +223,12 @@ function canAdminAccessWhatsApp(req,targetId){
 function whatsappAccessDeniedMessage(){
   return 'O usuário ainda não autorizou o administrador a gerenciar o WhatsApp desta conta.';
 }
+function scheduleOwnerId(item){
+  const explicit=String(item?.whatsappUserId||'').trim();
+  if(explicit) return explicit;
+  const admin=readUsers().find(x=>x.admin===true);
+  return String(admin?.id||'');
+}
 function currentUser(req){
   const token=String(req.headers.cookie||'').match(/(?:^|;\s*)regulos_session=([^;]+)/)?.[1];
   if(!token) return null;
@@ -1370,7 +1376,7 @@ function scheduleDue(item, now) {
   return !item.lastRunKey;
 }
 async function sendScheduledLink(item) {
-  const ownerId=String(item.whatsappUserId || '');
+  const ownerId=scheduleOwnerId(item);
   const owner=readUsers().find(x=>String(x.id)===ownerId);
   const ownerSock=owner ? getWhatsAppSocketForUser(owner) : null;
   const ownerOnline=owner ? isWhatsAppOnlineForUser(owner) : false;
@@ -1972,7 +1978,7 @@ app.post('/api/mensagem', async (req,res) => {
 app.get('/api/link-agendamentos',(req,res)=>{
   try {
     const requestedUserId=String(req.query?.userId||'');
-    const agendamentos=(Array.isArray(linkSchedules)?linkSchedules:[]).filter(x=>String(x.whatsappUserId||'')===String(req.user?.id||'') || (req.user?.admin===true && canAdminAccessWhatsApp(req,String(x.whatsappUserId||req.user.id))));
+    const agendamentos=(Array.isArray(linkSchedules)?linkSchedules:[]).filter(x=>scheduleOwnerId(x)===String(req.user?.id||'') || (req.user?.admin===true && canAdminAccessWhatsApp(req,scheduleOwnerId(x))));
     res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma','no-cache');
     res.set('Expires','0');
@@ -2121,7 +2127,7 @@ app.post('/api/link-agendamentos',requireAuth,(req,res)=>{
   res.json({ok:true,agendamento:item});
 });
 app.put('/api/link-agendamentos/:id',requireAuth,(req,res)=>{
-  const item=linkSchedules.find(x=>x.id===req.params.id && (String(x.whatsappUserId||'')===String(req.user?.id||'') || (req.user?.admin===true && canAdminAccessWhatsApp(req,String(x.whatsappUserId||req.user.id)))));
+  const item=linkSchedules.find(x=>x.id===req.params.id && (scheduleOwnerId(x)===String(req.user?.id||'') || (req.user?.admin===true && canAdminAccessWhatsApp(req,scheduleOwnerId(x)))));
   if(!item) return res.status(404).json({ok:false,msg:'Agendamento não encontrado.'});
   const b=req.body||{};
   item.nome=String(b.nome||item.nome).trim();
@@ -2177,14 +2183,14 @@ app.post('/api/link-agendamentos/:id/toggle',requireAuth,(req,res)=>{
 app.post('/api/link-agendamentos/:id/enviar-agora',requireAuth,async(req,res)=>{
   const item=linkSchedules.find(x=>x.id===req.params.id && (String(x.whatsappUserId||'')===String(req.user?.id||'') || (req.user?.admin===true && canAdminAccessWhatsApp(req,x.whatsappUserId||req.user.id))));
   if(!item) return res.status(404).json({ok:false,msg:'Agendamento não encontrado.'});
-  const owner=readUsers().find(x=>String(x.id)===String(item.whatsappUserId||''));
+  const owner=readUsers().find(x=>String(x.id)===scheduleOwnerId(item));
   if(!owner || !isWhatsAppOnlineForUser(owner)) return res.status(503).json({ok:false,msg:'WhatsApp da conta do agendamento não está conectado.'});
   if(!botWindowActive()) return res.status(409).json({ok:false,msg:'Fora do horário programado do bot.'});
   await sendScheduledLink(item);
   res.json({ok:true,msg:'Envio solicitado.'});
 });
 app.delete('/api/link-agendamentos/:id',requireAuth,(req,res)=>{
-  const i=linkSchedules.findIndex(x=>x.id===req.params.id && (String(x.whatsappUserId||'')===String(req.user?.id||'') || (req.user?.admin===true && canAdminAccessWhatsApp(req,String(x.whatsappUserId||req.user.id)))));
+  const i=linkSchedules.findIndex(x=>x.id===req.params.id && (scheduleOwnerId(x)===String(req.user?.id||'') || (req.user?.admin===true && canAdminAccessWhatsApp(req,scheduleOwnerId(x)))));
   if(i<0) return res.status(404).json({ok:false,msg:'Agendamento não encontrado.'});
   const removedId = linkSchedules[i].id;
   linkSchedules.splice(i,1); writeJson(FILES.schedules,linkSchedules); syncLinkQueue();
@@ -2262,7 +2268,7 @@ function historyBelongsToUser(entry,user){
 function failureOwnerId(failure){
   if(failure?.whatsappUserId) return String(failure.whatsappUserId);
   const item=linkSchedules.find(x=>String(x.id)===String(failure?.agendamentoId||''));
-  return String(item?.whatsappUserId||'');
+  return scheduleOwnerId(item);
 }
 function failureBelongsToUser(failure,user){
   const ownerId=failureOwnerId(failure);
@@ -2378,7 +2384,7 @@ if(dashboardLayer){
     const original=entry.handle;
     entry.handle=function(req,res,next){
       const ownedHistory=history.filter(x=>historyBelongsToUser(x,req.user));
-      const ownedSchedules=linkSchedules.filter(x=>String(x.whatsappUserId||'')===String(req.user?.id||'') || (req.user?.admin===true && canAdminAccessWhatsApp(req,String(x.whatsappUserId||''))));
+      const ownedSchedules=linkSchedules.filter(x=>scheduleOwnerId(x)===String(req.user?.id||'') || (req.user?.admin===true && canAdminAccessWhatsApp(req,scheduleOwnerId(x))));
       const now=new Date(),today=dateKey(now);
       const sucesso=ownedHistory.filter(x=>x.status==='sucesso');
       const erros=ownedHistory.filter(x=>x.status==='erro');
@@ -2400,7 +2406,7 @@ if(deleteScheduleLayer){
     const original=entry.handle;
     entry.handle=async function(req,res,next){
       const item=linkSchedules.find(x=>String(x.id)===String(req.params.id));
-      if(item && req.user?.admin===true && !canAdminAccessWhatsApp(req,String(item.whatsappUserId||'')))
+      if(item && req.user?.admin===true && !canAdminAccessWhatsApp(req,scheduleOwnerId(item)))
         return res.status(404).json({ok:false,msg:'Agendamento não encontrado.'});
       return original(req,res,next);
     };
