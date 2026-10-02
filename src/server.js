@@ -1419,6 +1419,10 @@ async function start() {
         for (const id of Object.keys(groupConfig)) {
           groupConfig[id].ativo = false;
         }
+        // "Ligado" é a única seleção operacional do grupo.
+        // Ao iniciar uma nova conexão, nenhum grupo fica selecionado.
+        allowed = [];
+        writeJson(FILES.groups, allowed);
         saveGroupsConfig();
         // A descoberta dos grupos acontece uma vez por conexão.
         // Depois disso, o painel trabalha com o cache até uma pesquisa explícita.
@@ -1599,9 +1603,15 @@ app.post('/api/grupos/config', (req,res) => {
   const c=getGroupConfig(id);
 const grupoAtual=groups.find(g=>String(g.id)===id);
 if(grupoAtual?.name) c.nome=grupoAtual.name;
-if(typeof req.body.ativo==='boolean') c.ativo=req.body.ativo;
+if(typeof req.body.ativo==='boolean') {
+  c.ativo=req.body.ativo;
+  // Mantém "Permitidos" sincronizado com "Ligados" para evitar dois estados diferentes.
+  if(c.ativo) allowed=[...new Set([...allowed,id])];
+  else allowed=allowed.filter(x=>String(x)!==id);
+  writeJson(FILES.groups, allowed);
+}
   saveGroupsConfig();
-  res.json({ok:true,config:c,msg:c.ativo?'Envio ligado.':'Envio desligado.'});
+  res.json({ok:true,config:c,permitidos:allowed,msg:c.ativo?'Envio ligado.':'Envio desligado.'});
 });
 app.post('/api/grupos/salvar', (req,res) => {
   if(!Array.isArray(req.body?.ids)) return res.status(400).json({ok:false,msg:'IDs inválidos.'});
