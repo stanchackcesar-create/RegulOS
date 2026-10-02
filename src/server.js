@@ -1915,7 +1915,8 @@ app.post('/api/mensagem', async (req,res) => {
 
 app.get('/api/link-agendamentos',(req,res)=>{
   try {
-    const agendamentos=(Array.isArray(linkSchedules)?linkSchedules:[]).filter(x=>req.user?.admin===true || String(x.whatsappUserId||'')===String(req.user?.id||''));
+    const requestedUserId=String(req.query?.userId||'');
+    const agendamentos=(Array.isArray(linkSchedules)?linkSchedules:[]).filter(x=>req.user?.admin===true ? (!requestedUserId || String(x.whatsappUserId||'')===requestedUserId || (!x.whatsappUserId && requestedUserId===String(req.user?.id||''))) : String(x.whatsappUserId||'')===String(req.user?.id||''));
     res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma','no-cache');
     res.set('Expires','0');
@@ -1927,7 +1928,8 @@ app.get('/api/link-agendamentos',(req,res)=>{
 });
 app.get('/api/links',(req,res)=>{
   try {
-    const agendamentos=(Array.isArray(linkSchedules)?linkSchedules:[]).filter(x=>req.user?.admin===true || String(x.whatsappUserId||'')===String(req.user?.id||''));
+    const requestedUserId=String(req.query?.userId||'');
+    const agendamentos=(Array.isArray(linkSchedules)?linkSchedules:[]).filter(x=>req.user?.admin===true ? (!requestedUserId || String(x.whatsappUserId||'')===requestedUserId || (!x.whatsappUserId && requestedUserId===String(req.user?.id||''))) : String(x.whatsappUserId||'')===String(req.user?.id||''));
     res.set('Cache-Control','no-store');
     res.json({ok:true,links:agendamentos,agendamentos});
   } catch(e) { res.status(500).json({ok:false,msg:'Não foi possível carregar os links.'}); }
@@ -2123,7 +2125,7 @@ app.post('/api/link-agendamentos/:id/enviar-agora',requireAuth,async(req,res)=>{
   res.json({ok:true,msg:'Envio solicitado.'});
 });
 app.delete('/api/link-agendamentos/:id',requireAuth,(req,res)=>{
-  const i=linkSchedules.findIndex(x=>x.id===req.params.id);
+  const i=linkSchedules.findIndex(x=>x.id===req.params.id && (req.user?.admin===true || String(x.whatsappUserId||'')===String(req.user?.id||'')));
   if(i<0) return res.status(404).json({ok:false,msg:'Agendamento não encontrado.'});
   const removedId = linkSchedules[i].id;
   linkSchedules.splice(i,1); writeJson(FILES.schedules,linkSchedules); syncLinkQueue();
