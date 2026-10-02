@@ -110,8 +110,9 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 <div id="linkForm" class="hidden">
 <label>Nome do link <span class="muted">(somente para registro no painel)</span></label><input id="lnome" placeholder="Ex.: Impressora Epson L3250">
 <label>Link do produto</label><input id="lurl" placeholder="https://...">
-<label>Grupo de envio</label><select id="lgrupo"><option value="">Selecione o grupo de envio...</option></select>
-<div class="muted" style="margin:6px 0 10px">📌 Este agendamento será enviado somente para o grupo escolhido.</div>
+<label>Grupos de envio</label>
+<div id="lgrupos" class="checks" style="max-height:180px;overflow:auto;border:1px solid #ddd;border-radius:8px;padding:8px"></div>
+<div class="muted" style="margin:6px 0 10px">📌 Selecione um ou mais grupos. Este agendamento será enviado somente para os grupos marcados.</div>
 <label>URL da imagem <span class="muted">(opcional)</span></label><input id="limagemUrl" placeholder="https://site.com/imagem.jpg">
 <div class="muted" style="margin:6px 0 10px">🖼️ Escolha: imagem automática ou informe uma URL manual. Se a imagem obrigatória não puder ser obtida, o envio irá para <b>Links com falha</b>.</div>
 <label>Mensagem personalizada <span class="muted">(opcional)</span></label><textarea id="lmensagem" placeholder="Texto que acompanhará a oferta"></textarea>
@@ -278,20 +279,24 @@ async function refreshAll(){
 }
 let poll=null;let lastLinksUiRefresh=0;function startPolling(fast=false){if(poll)clearInterval(poll);poll=setInterval(async()=>{await status();const now=Date.now();if(now-lastGroupUiRefresh>5000)await loadGroups();if(now-lastLinksUiRefresh>3500 && document.getElementById('linkForm')?.classList.contains('hidden')){lastLinksUiRefresh=now;await loadLinks();await loadSchedules();await loadLinkHistory();}},fast?1200:3000);status()}
 async function loadGroups(){try{const d=await jfetch('/api/grupos');groups=d.grupos||[];lastGroupUiRefresh=Date.now();renderGroups();populateScheduleGroupSelect();}catch(e){const box=document.getElementById('groups');if(!groups.length)box.innerHTML='<div class="muted errorText">'+esc(friendlyFetchError(e))+'</div>'}}
-function populateScheduleGroupSelect(selectedId=''){
- const select=document.getElementById('lgrupo');
- if(!select)return;
- const current=selectedId || select.value || '';
- select.innerHTML='<option value="">Selecione o grupo de envio...</option>';
- groups.slice().sort((a,b)=>String(a.name||a.id).localeCompare(String(b.name||b.id),'pt-BR')).forEach(g=>{
-   const id=String(g.id||'').trim();
-   if(!id)return;
-   const opt=document.createElement('option');
-   opt.value=id;
-   opt.textContent=String(g.name||id);
-   if(id===current)opt.selected=true;
-   select.appendChild(opt);
- });
+function populateScheduleGroupSelect(selectedIds=[]){
+  const box=document.getElementById('lgrupos');
+  if(!box)return;
+  const explicit=Array.isArray(selectedIds)?selectedIds.map(String).filter(Boolean):[];
+  const current=explicit.length?explicit:[...document.querySelectorAll('.schedule-group-check:checked')].map(c=>String(c.value));
+  box.innerHTML='';
+  const sorted=groups.slice().sort((a,b)=>String(a.name||a.id).localeCompare(String(b.name||b.id),'pt-BR'));
+  sorted.forEach(g=>{
+    const id=String(g.id||'').trim();
+    if(!id)return;
+    const label=document.createElement('label');
+    label.style.margin='0 0 6px';
+    label.innerHTML='<input class="schedule-group-check" type="checkbox" value="'+esc(id)+'" style="width:auto"> '+esc(String(g.name||id));
+    const check=label.querySelector('input');
+    check.checked=current.includes(id);
+    box.appendChild(label);
+  });
+  if(!box.children.length)box.innerHTML='<div class="muted">Nenhum grupo disponível. Pesquise os grupos primeiro.</div>';
 }
 function renderGroups(){
  const q=document.getElementById('search').value.toLowerCase();
@@ -352,7 +357,7 @@ async function sendMessage(){
 function clearLinkForm(){
  const ids=['lnome','lurl','limagemUrl','lmensagem','ldata','lhorario','lmin'];
  ids.forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
- const grupo=document.getElementById('lgrupo');if(grupo)grupo.value='';
+ document.querySelectorAll('.schedule-group-check').forEach(c=>c.checked=false);
  const rep=document.getElementById('lrep');if(rep)rep.value='uma_vez';
  const ativo=document.getElementById('lativo');if(ativo)ativo.checked=true;
  const imagem=document.getElementById('limagem');if(imagem)imagem.checked=true;
@@ -385,7 +390,7 @@ async function saveLink(){
  const url=(get('lurl')?.value||'').trim();
  const data=(get('ldata')?.value||'').trim();
  const horario=(get('lhorario')?.value||'').trim();
- const grupoId=(get('lgrupo')?.value||'').trim();
+ const grupoIds=[...document.querySelectorAll('.schedule-group-check:checked')].map(x=>String(x.value||'').trim()).filter(Boolean);
  const repeticao=get('lrep')?.value||'uma_vez';
  const intervalo=Math.max(1,Number(get('lmin')?.value||2));
  const ativo=Boolean(get('lativo')?.checked);
@@ -400,7 +405,7 @@ async function saveLink(){
  if(!/^https?:\/\//i.test(url))return fail('O link do produto deve começar com http:// ou https://.');
  if(!data)return fail('Escolha a data do envio.');
  if(!horario)return fail('Escolha o horário do envio.');
- if(!grupoId)return fail('Selecione o grupo de envio.');
+ if(!grupoIds.length)return fail('Selecione pelo menos um grupo de envio.');
  if(randomEnabled&&!randomSelected.length)return fail('Selecione pelo menos uma mensagem aleatória.');
  // REGULOS_AUTO_OFFER_BUILD_V1
  let nomeFinal=nome;
@@ -429,7 +434,7 @@ async function saveLink(){
   }
  }
  const body={
-  nome:nomeFinal,url,mensagem:mensagemFinal,data,horario,grupoId,repeticao,
+  nome:nomeFinal,url,mensagem:mensagemFinal,data,horario,grupoIds,repeticao,
   intervaloMin:intervalo,intervaloMax:intervalo,ativo,
   imagemAutomatica:imagemAutomaticaFinal,imagemUrl:imagemUrlFinal,
   mensagensAleatorias:randomEnabled?randomSelected:[],
@@ -487,13 +492,15 @@ async function loadSchedules(){
   if(!d.agendamentos.length){box.innerHTML='<div class="muted">Nenhum link agendado.</div>';return;}
   d.agendamentos.forEach(x=>{
    const ativo=x.ativo===true;
-   const grupoNome=x.grupoNome || groups.find(g=>String(g.id)===String(x.grupoId))?.name || x.grupoId || '—';
+   const scheduleGroupIds=Array.isArray(x.grupoIds)?x.grupoIds:(x.grupoId?[x.grupoId]:[]);
+   const grupoNomes=Array.isArray(x.grupoNomes)?x.grupoNomes:Object.values(x.grupoNomes||{});
+   const grupoNome=grupoNomes.length?grupoNomes.join(', '):(scheduleGroupIds.map(id=>groups.find(g=>String(g.id)===String(id))?.name||id).join(', ')||x.grupoNome||'—');
    const status=x.status==='concluido'?'concluído':(ativo?'ativo':'pausado');
    const el=document.createElement('div');
    el.className='link';
    el.innerHTML=`<h3>📅 ${esc(x.nome)} <span class="badge ${ativo?'good':'bad'}">${status}</span></h3>
    <div class="stats">🗓️ ${esc(x.data||'—')} às ${esc(x.horario||'—')} · ${esc(x.repeticao||'uma_vez')}</div>
-   <div class="stats">👥 Grupo: ${esc(grupoNome)}</div>
+   <div class="stats">👥 Grupos: ${esc(grupoNome)}</div>
    <div class="stats">📨 ${x.enviados||0} enviados · 🟢 ${x.sucessos||0} sucesso(s) · ❌ ${x.erros||0} erro(s)</div>
    <div class="row"><button onclick="editLink('${x.id}')">✏️ Editar</button><button onclick="toggleLink('${x.id}',${ativo})">${ativo?'⏸️ Pausar':'▶️ Ativar'}</button><button class="red" onclick="deleteLink('${x.id}')">🗑️ Excluir</button></div>`;
    box.appendChild(el);
@@ -533,8 +540,8 @@ async function loadLinkHistory(){
   });
  }catch(e){box.innerHTML='<div class="muted">⚠️ Não foi possível carregar o histórico agora. Tentando novamente...</div>';setTimeout(loadLinkHistory,3000)}
 }
-async function editLink(id){const d=await jfetch('/api/link-agendamentos');const x=d.agendamentos.find(a=>a.id===id);if(!x)return;editingId=id;showForm();populateScheduleGroupSelect(x.grupoId||'');lnome.value=x.nome||'';lurl.value=x.url||'';limagemUrl.value=x.imagemUrl||'';lmensagem.value=x.mensagem||'';ldata.value=x.data||'';lhorario.value=x.horario||'';lrep.value=x.repeticao||'uma_vez';lmin.value=x.intervaloMin||2;lativo.checked=x.ativo===true;limagem.checked=x.imagemAutomatica!==false;lrandom.checked=x.mensagemAleatoriaAtiva===true || (Array.isArray(x.mensagensAleatorias)&&x.mensagensAleatorias.length>0);document.querySelectorAll('.rmsg').forEach(c=>c.checked=Array.isArray(x.mensagensAleatorias)&&x.mensagensAleatorias.includes(c.value));toggleRandomBox();syncRandomAll()}
-async function editFailedLink(id){try{const d=await jfetch('/api/link-falhas');const f=d.falhas.find(x=>String(x.id)===String(id));if(!f)return;editingId=f.agendamentoId;editingFailedId=f.id;showForm();populateScheduleGroupSelect(f.grupoId||'');lnome.value=f.nome||'';lurl.value=f.url||'';limagemUrl.value=f.imagemUrl||'';lmensagem.value=f.mensagem||'';ldata.value=f.data||new Date().toISOString().slice(0,10);lhorario.value=f.horario||'';lrep.value=f.repeticao||'uma_vez';lmin.value=f.intervaloMin||2;lativo.checked=true;limagem.checked=f.imagemAutomatica!==false;document.getElementById('formResult').textContent='⚠️ Link recuperado das falhas. Corrija e salve para programar novamente.';toggleRandomBox();}catch(e){toast(e.message,true)}}
+async function editLink(id){const d=await jfetch('/api/link-agendamentos');const x=d.agendamentos.find(a=>a.id===id);if(!x)return;editingId=id;showForm();populateScheduleGroupSelect(Array.isArray(x.grupoIds)?x.grupoIds:(x.grupoId?[x.grupoId]:[]));lnome.value=x.nome||'';lurl.value=x.url||'';limagemUrl.value=x.imagemUrl||'';lmensagem.value=x.mensagem||'';ldata.value=x.data||'';lhorario.value=x.horario||'';lrep.value=x.repeticao||'uma_vez';lmin.value=x.intervaloMin||2;lativo.checked=x.ativo===true;limagem.checked=x.imagemAutomatica!==false;lrandom.checked=x.mensagemAleatoriaAtiva===true || (Array.isArray(x.mensagensAleatorias)&&x.mensagensAleatorias.length>0);document.querySelectorAll('.rmsg').forEach(c=>c.checked=Array.isArray(x.mensagensAleatorias)&&x.mensagensAleatorias.includes(c.value));toggleRandomBox();syncRandomAll()}
+async function editFailedLink(id){try{const d=await jfetch('/api/link-falhas');const f=d.falhas.find(x=>String(x.id)===String(id));if(!f)return;editingId=f.agendamentoId;editingFailedId=f.id;showForm();populateScheduleGroupSelect(f.grupoId?[f.grupoId]:[]);lnome.value=f.nome||'';lurl.value=f.url||'';limagemUrl.value=f.imagemUrl||'';lmensagem.value=f.mensagem||'';ldata.value=f.data||new Date().toISOString().slice(0,10);lhorario.value=f.horario||'';lrep.value=f.repeticao||'uma_vez';lmin.value=f.intervaloMin||2;lativo.checked=true;limagem.checked=f.imagemAutomatica!==false;document.getElementById('formResult').textContent='⚠️ Link recuperado das falhas. Corrija e salve para programar novamente.';toggleRandomBox();}catch(e){toast(e.message,true)}}
 async function resendFailed(id){try{const d=await jfetch('/api/link-falhas/'+encodeURIComponent(id)+'/reenviar',{method:'POST'});toast(d.msg,!d.ok);await loadLinkHistory();await loadLinkFailures();await loadLinks();await loadSchedules();}catch(e){toast(e.message,true)}}
 async function clearLinkFailures(){if(!confirm('Apagar todos os links com falha?'))return;try{const d=await jfetch('/api/link-falhas',{method:'DELETE'});toast(d.msg);await loadLinkFailures();}catch(e){toast(e.message,true)}}
 let lastFailureSignature='';
