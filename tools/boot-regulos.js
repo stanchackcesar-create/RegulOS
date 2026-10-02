@@ -228,4 +228,6 @@ if (changed) {
   console.log('[boot] Nenhuma correção de runtime pendente.');
 }
 
-require(serverPath);
+// Este arquivo é um patcher de pré-inicialização. O servidor é iniciado uma única
+// vez pelo tools/cloud-start.js depois que todos os patches terminam.
+// Não faça require(serverPath) aqui: isso iniciaria uma segunda instância durante o preboot.
