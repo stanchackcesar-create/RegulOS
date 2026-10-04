@@ -415,6 +415,7 @@ async function saveLink(){
    const preview=await jfetch('/api/oferta-preview?url='+encodeURIComponent(url),{cache:'no-store'});
    const titulo=String(preview.titulo||'').trim();
    const preco=String(preview.preco||'').trim();
+   const precoOriginal=String(preview.precoOriginal||'').trim();
    const desconto=String(preview.desconto||'').trim();
    if(titulo)nomeFinal=titulo;
    // No modo automático, o título e o link são adicionados pelo servidor
@@ -422,6 +423,7 @@ async function saveLink(){
    // complementares, evitando duplicação de título/link.
    if(!mensagemFinal){
     const partes=[];
+    if(precoOriginal && preco && precoOriginal !== preco)partes.push('🏷️ De: '+precoOriginal);
     if(preco)partes.push('💰 Por: '+preco);
     if(desconto)partes.push('🟢 '+desconto);
     mensagemFinal=partes.join('\n\n');
