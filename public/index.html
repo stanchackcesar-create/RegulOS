@@ -187,7 +187,7 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
   }
   /* O monitor continua acessível pelo botão do cabeçalho, mas não cobre conteúdo no celular. */
   #regulosSchedulerMonitorBtn{display:none!important}
-.message-float-launcher{position:fixed;right:20px;bottom:86px;z-index:10001;width:58px;height:58px;border:0;border-radius:50%;background:#22c55e;color:#fff;font-size:24px;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.message-float-launcher{display:flex!important;align-items:center;justify-content:center;position:fixed;right:20px;bottom:86px;z-index:99999;width:58px;height:58px;border:0;border-radius:50%;background:#22c55e;color:#fff;font-size:24px;cursor:pointer;pointer-events:auto;visibility:visible;opacity:1;box-shadow:0 8px 24px rgba(0,0,0,.35)}
 .message-float-panel{position:fixed;right:20px;bottom:154px;z-index:10002;width:min(380px,calc(100vw - 32px));background:#111b2d;border:1px solid #34445c;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.5);display:none;overflow:hidden}
 .message-float-panel.open{display:block}
 .message-float-head{display:flex;justify-content:space-between;align-items:center;padding:11px 13px;background:#17243a;border-bottom:1px solid #263653}
