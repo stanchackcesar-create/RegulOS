@@ -63,6 +63,30 @@
   }
   document.addEventListener('keydown',e=>{if(e.key==='Escape')closePanelModal()});
   document.body.append(aside,toggle,overlay);
+  async function updateSidebarStatus(){
+    const statusEl=document.getElementById('regulosSidebarStatus');
+    const numberEl=document.getElementById('regulosSidebarNumber');
+    const dot=aside.querySelector('.regulos-sidebar-status .dot');
+    if(!statusEl||!numberEl)return;
+    try{
+      const r=await fetch('/api/status',{cache:'no-store',credentials:'same-origin'});
+      const d=await r.json();
+      const connected=Boolean(d.conectado);
+      const waitingQr=Boolean(d.temQR);
+      statusEl.textContent=connected?'WhatsApp conectado':(waitingQr?'Aguardando QR':'WhatsApp desconectado');
+      numberEl.textContent=connected&&d.numero?('Número: '+d.numero):(waitingQr?'Escaneie o QR Code':'Número: —');
+      if(dot){
+        dot.style.background=connected?'#22c55e':waitingQr?'#f59e0b':'#ef4444';
+        dot.style.boxShadow=connected?'0 0 10px rgba(34,197,94,.7)':waitingQr?'0 0 10px rgba(245,158,11,.7)':'0 0 10px rgba(239,68,68,.55)';
+      }
+    }catch{
+      statusEl.textContent='Sistema indisponível';
+      numberEl.textContent='Não foi possível verificar';
+      if(dot){dot.style.background='#ef4444';dot.style.boxShadow='0 0 10px rgba(239,68,68,.55)';}
+    }
+  }
+  updateSidebarStatus();
+  setInterval(updateSidebarStatus,3000);
   const style=document.createElement('style');
   style.textContent='@keyframes regulosNavGlow{0%,100%{box-shadow:0 0 0 rgba(34,211,238,0)}50%{box-shadow:0 0 30px rgba(34,211,238,.32)}}';
   document.head.appendChild(style);
