@@ -230,3 +230,13 @@ body.regulos-has-sidebar main.wrap{max-width:none;margin-left:18px}
     margin-right:0!important;
   }
 }
+
+
+/* REGULOS_MOBILE_MENU_RESERVED_SPACE_V1 */
+@media(max-width:560px){
+  /* Reserva espaço apenas na linha do usuário. Os botões abaixo continuam em largura total. */
+  body.regulos-has-sidebar header>.wrap> .row:first-child{
+    padding-left:60px!important;
+    min-height:44px;
+  }
+}
