@@ -251,3 +251,12 @@ body.regulos-has-sidebar main.wrap{max-width:none;margin-left:18px}
     display:none!important;
   }
 }
+
+
+/* REGULOS_MOBILE_SCHEDULE_MAIN_DUPLICATE_V3 */
+@media(max-width:560px){
+  /* O painel de agendamentos é aberto pela Central de Automação; não exibir a cópia no final da página. */
+  #scheduleMainPanel{
+    display:none!important;
+  }
+}
