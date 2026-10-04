@@ -252,6 +252,16 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
   .message-float-panel{right:8px;bottom:calc(144px + env(safe-area-inset-bottom));width:calc(100vw - 16px)}
 }
 .account-mobile-toggle{display:none}
+.diagnostic-modal{position:fixed;inset:0;z-index:10045;background:rgba(3,8,18,.72);display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}
+.diagnostic-modal.diagnostic-open{display:flex}
+.diagnostic-modal-card{width:min(900px,calc(100vw - 40px));max-height:86vh;background:#111b2d;border:1px solid #34445c;border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,.55);overflow:auto;padding:16px}
+.diagnostic-modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.diagnostic-modal-head h2{margin:0}
+.diagnostic-modal-head button{border:0;border-radius:9px;background:#34455f;color:#fff;font-size:20px;min-width:42px;min-height:42px;cursor:pointer}
+.diagnostic-modal-actions{margin:12px 0}
+.diagnostic-modal-content{min-height:80px}
+@media(min-width:561px){.diagnostic-main-panel{display:none}}
+@media(max-width:560px){.desktop-diagnostic-button{display:none}.diagnostic-modal{display:none!important}}
 .schedules-modal{position:fixed;inset:0;z-index:10045;background:rgba(3,8,18,.72);display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}
 .schedules-modal.schedules-open{display:flex}
 .schedules-modal-card{width:min(1100px,calc(100vw - 40px));max-height:86vh;background:#111b2d;border:1px solid #34445c;border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,.55);overflow:hidden}
@@ -299,6 +309,7 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 <button type="button" onclick="openAccountsPanel()">👤 Contas</button>
 <button type="button" class="desktop-logs-button" onclick="openLogsPanel()">📜 Logs</button>
 <button type="button" class="desktop-schedules-button" onclick="openSchedulesPanel()">📅 Agendamentos</button>
+<button type="button" class="desktop-diagnostic-button" onclick="openDiagnosticPanel()">🩺 Diagnóstico</button>
 </div>
 </div></header>
 
@@ -359,7 +370,7 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 </section>
 
 <main class="wrap">
-<section class="panel" style="margin:18px 0">
+<section class="panel diagnostic-main-panel" style="margin:18px 0">
   <div class="row" style="justify-content:space-between;align-items:center">
     <div>
       <h2 style="margin:0">🩺 Diagnóstico Central</h2>
@@ -368,6 +379,20 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
     <button class="primary" onclick="runCentralDiagnostic()">🔍 Executar diagnóstico</button>
   </div>
   <div id="centralDiagnostic" class="muted" style="margin-top:14px">Clique em “Executar diagnóstico” para verificar o RegulOS.</div>
+</section>
+<section id="diagnosticModal" class="diagnostic-modal" aria-hidden="true">
+  <div class="diagnostic-modal-card">
+    <div class="diagnostic-modal-head">
+      <h2>🩺 Diagnóstico Central</h2>
+      <button type="button" onclick="closeDiagnosticPanel()" aria-label="Fechar">✕</button>
+    </div>
+    <div class="diagnostic-modal-actions">
+      <button class="primary" type="button" onclick="runCentralDiagnostic('diagnosticModalContent')">🔍 Executar diagnóstico</button>
+    </div>
+    <div id="diagnosticModalContent" class="diagnostic-modal-content">
+      <div class="muted">Clique em “Executar diagnóstico” para verificar o RegulOS.</div>
+    </div>
+  </div>
 </section>
 <div class="cards">
 <div class="card metric"><small>WhatsApp</small><b id="conn">...</b><span id="number" class="muted">Número: —</span></div>
@@ -1210,8 +1235,8 @@ async function saveBotSchedule(){
  el.addEventListener('input',()=>{botScheduleDirty=true});
  el.addEventListener('change',()=>{botScheduleDirty=true});
 });
-async function runCentralDiagnostic(){
-  const box=document.getElementById('centralDiagnostic');
+async function runCentralDiagnostic(targetId='centralDiagnostic'){
+  const box=document.getElementById(targetId);
   if(!box)return;
   box.innerHTML='<div class="muted">🔎 Executando diagnóstico...</div>';
   try{
@@ -1261,6 +1286,19 @@ async function loadLogs(){
     const main=document.getElementById('logs'); if(main) main.textContent=txt;
     const modal=document.getElementById('logsModalContent'); if(modal) modal.textContent=txt;
   }catch{}
+}
+function openDiagnosticPanel(){
+  const panel=document.getElementById('diagnosticModal');
+  if(!panel)return;
+  panel.classList.add('diagnostic-open');
+  panel.setAttribute('aria-hidden','false');
+  runCentralDiagnostic('diagnosticModalContent');
+}
+function closeDiagnosticPanel(){
+  const panel=document.getElementById('diagnosticModal');
+  if(!panel)return;
+  panel.classList.remove('diagnostic-open');
+  panel.setAttribute('aria-hidden','true');
 }
 function openSchedulesPanel(){
   const panel=document.getElementById('schedulesModal');
