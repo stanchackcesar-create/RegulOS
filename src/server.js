@@ -2566,13 +2566,34 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
       &&/\b(qual|quais|onde|qual\s+link)\b/.test(q);
     const intencaoStatusAgendamento=Boolean(horarioAnterior)&&/\b(status|situacao|situação|estado)\b/.test(q)
       &&/\b(link|agendamento|agendado|programado|ele|esse|desse)\b/.test(q);
+    const intencaoGrupoAgendamento=(Boolean(agendamentoContexto)||Boolean(horarioAnterior)||Boolean(horarioNormalizado))
+      &&/\b(grupo|grupos)\b/.test(q)
+      &&/\b(ver|mostrar|mostre|qual|quais|onde|desse|deste|agendamento|link|links)\b/.test(q);
     const intencaoProximoAgendamento=/\b(proximo|proxima|seguinte)\b/.test(q)
       &&/\b(link|agendamento|agendamentos|envio|enviado|enviar)\b/.test(q);
     const intencaoPausados=/\b(pausad|pausados|pausadas|pausa)\w*\b/.test(q)
       &&/\b(link|links|agendamento|agendamentos)\b/.test(q);
     const intencaoRecomendacaoAgendamento=(Boolean(horarioAnterior)||Boolean(horarioNormalizado))&&/\b(recomenda|recomendacao|sugestao|sugira|o que devo|o que eu deveria|que devo|o que fazer|o que eu faco|como melhorar|devo fazer)\b/.test(q)
       &&/\b(link|agendamento|agendado|programado|ele|esse|desse)\b/.test(q);
-    if(intencaoProximoAgendamento){
+    if(intencaoGrupoAgendamento){
+      const horarioAlvo=horarioNormalizado||horarioAnterior;
+      let encontrados=[];
+      if(agendamentoContexto){
+        encontrados=[agendamentoContexto];
+      }else if(horarioAlvo){
+        encontrados=schedules.filter(item=>String(item.horario||'').slice(0,5)===horarioAlvo);
+      }
+      if(!encontrados.length){
+        resposta='👥 Não consegui identificar o agendamento para consultar o grupo. Tente selecionar um agendamento específico primeiro.';
+      }else{
+        agendamentoSelecionado=encontrados.length===1?encontrados[0]:agendamentoSelecionado;
+        resposta=encontrados.map(item=>{
+          const ids=normalizeScheduleGroupIds(item);
+          const nomes=ids.map(id=>String(item.grupoNomes?.[id]||groups.find(g=>String(g.id)===String(id))?.name||id)).filter(Boolean);
+          return '👥 Grupo(s) do agendamento:\n• '+String(item.nome||item.id)+' — '+(nomes.length?nomes.join(', '):'grupo não informado');
+        }).join('\n');
+      }
+    }else if(intencaoProximoAgendamento){
       const futuros=schedules.filter(item=>{
         if(item.ativo===false) return false;
         if(!item.data||!item.horario) return false;
