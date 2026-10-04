@@ -69,6 +69,51 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 .assistant-suggestion:disabled{opacity:.55;cursor:wait}
 @media(max-width:560px){.assistant-chat-form{flex-direction:column}.assistant-chat-form button{min-height:44px}.assistant-chat-messages{height:300px}.assistant-chat-msg{max-width:96%}}
 
+
+/* REGULOS_ASSISTENTE_FLUTUANTE_V1 */
+.assistant-float-launcher{
+  position:fixed;right:20px;bottom:20px;z-index:70;
+  width:58px;height:58px;border-radius:50%;border:0;
+  background:#3d83f6;color:#fff;font-size:25px;
+  box-shadow:0 10px 30px rgba(0,0,0,.35);
+  display:flex;align-items:center;justify-content:center;
+}
+.assistant-float-launcher:hover{filter:brightness(1.08)}
+.assistant-float-panel{
+  position:fixed;right:20px;bottom:88px;z-index:71;
+  width:min(390px,calc(100vw - 28px));height:min(600px,calc(100dvh - 110px));
+  background:#111b2d;border:1px solid #34445c;border-radius:18px;
+  box-shadow:0 20px 70px rgba(0,0,0,.5);display:none;overflow:hidden;
+}
+.assistant-float-panel.open{display:flex;flex-direction:column}
+.assistant-float-head{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;
+  padding:13px 14px;border-bottom:1px solid #263653;background:#111b2d;
+}
+.assistant-float-head strong{font-size:15px}
+.assistant-float-close{padding:7px 10px;min-height:38px}
+.assistant-float-body{display:flex;flex:1;flex-direction:column;min-height:0;padding:10px}
+.assistant-float-messages{
+  flex:1;min-height:0;overflow:auto;background:#07101f;border:1px solid #263653;
+  border-radius:12px;padding:9px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;
+}
+.assistant-float-msg{max-width:92%;padding:9px 11px;border-radius:12px;margin:7px 0;line-height:1.4;white-space:pre-wrap;word-break:break-word}
+.assistant-float-user{margin-left:auto;background:#234b83}
+.assistant-float-bot{margin-right:auto;background:#19273e}
+.assistant-float-meta{font-size:10px;color:#9eb0ca;margin-bottom:3px}
+.assistant-float-form{display:flex;gap:7px;margin-top:8px}
+.assistant-float-form input{min-width:0;flex:1}
+.assistant-float-form button{min-height:44px}
+@media(max-width:560px){
+  .assistant-float-launcher{right:12px;bottom:calc(12px + env(safe-area-inset-bottom));width:54px;height:54px}
+  .assistant-float-panel{
+    right:8px;bottom:calc(74px + env(safe-area-inset-bottom));
+    width:calc(100vw - 16px);height:min(72dvh,620px);border-radius:16px;
+  }
+  .assistant-float-form{flex-direction:row}
+  .assistant-float-form button{width:auto;flex:0 0 auto}
+}
+
 /* REGULOS_MOBILE_AUDIT_V1 */
 @media(max-width:560px){
   html{scroll-behavior:smooth;overflow-x:hidden}
@@ -183,6 +228,25 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 <button class="red" onclick="novoQR()">📱 Novo QR</button>
 </div>
 </div></header>
+
+
+<!-- REGULOS_ASSISTENTE_FLUTUANTE_V1 -->
+<button id="assistantFloatLauncher" class="assistant-float-launcher" type="button" aria-label="Abrir Assistente do RegulOS" title="Assistente do RegulOS">🤖</button>
+<section id="assistantFloatPanel" class="assistant-float-panel" aria-label="Assistente do RegulOS">
+  <div class="assistant-float-head">
+    <div><strong>🤖 Assistente do RegulOS</strong><div class="muted" style="font-size:11px">Análise dos dados do RegulOS</div></div>
+    <button id="assistantFloatClose" class="assistant-float-close" type="button" aria-label="Fechar">✕</button>
+  </div>
+  <div class="assistant-float-body">
+    <div id="assistantFloatMessages" class="assistant-float-messages" aria-live="polite">
+      <div class="assistant-float-msg assistant-float-bot"><div class="assistant-float-meta">🤖 RegulOS</div><div>Olá! Posso analisar agendamentos, erros, entregas e resultados. O que você quer saber?</div></div>
+    </div>
+    <form id="assistantFloatForm" class="assistant-float-form" autocomplete="off">
+      <input id="assistantFloatInput" type="text" inputmode="text" autocomplete="off" placeholder="Pergunte ao Assistente...">
+      <button class="primary" type="submit">Enviar</button>
+    </form>
+  </div>
+</section>
 
 <main class="wrap">
 <section class="panel" style="margin:18px 0">
@@ -1275,6 +1339,54 @@ setTimeout(()=>{refreshAccountPresence();},1500);
 </script>
 <script src="/history-stability-fix.js"></script>
 <script src="/auto-offer.js"></script>
-<script src="/scheduler-monitor.js"></script>
+<script src="/scheduler-monitor.js">
+/* REGULOS_ASSISTENTE_FLUTUANTE_V1 */
+(function(){
+  const launcher=document.getElementById('assistantFloatLauncher');
+  const panel=document.getElementById('assistantFloatPanel');
+  const close=document.getElementById('assistantFloatClose');
+  const form=document.getElementById('assistantFloatForm');
+  const input=document.getElementById('assistantFloatInput');
+  const box=document.getElementById('assistantFloatMessages');
+  if(!launcher||!panel||!close||!form||!input||!box)return;
+  launcher.addEventListener('click',()=>{
+    panel.classList.add('open');
+    input.focus();
+  });
+  close.addEventListener('click',()=>{panel.classList.remove('open');input.blur();});
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&panel.classList.contains('open')){panel.classList.remove('open');input.blur();}
+  });
+  function add(tipo,texto){
+    const d=document.createElement('div');
+    d.className='assistant-float-msg '+(tipo==='user'?'assistant-float-user':'assistant-float-bot');
+    d.innerHTML='<div class="assistant-float-meta">'+(tipo==='user'?'👤 Você':'🤖 RegulOS')+'</div>';
+    const b=document.createElement('div');b.textContent=String(texto||'');d.appendChild(b);
+    box.appendChild(d);box.scrollTop=box.scrollHeight;
+    return d;
+  }
+  form.addEventListener('submit',async e=>{
+    e.preventDefault();
+    const pergunta=String(input.value||'').trim();
+    if(!pergunta)return;
+    add('user',pergunta);input.value='';input.disabled=true;
+    const btn=form.querySelector('button');if(btn){btn.disabled=true;btn.textContent='...';}
+    try{
+      const periodoSelecionado=Number(document.getElementById('assistantPeriod')?.value||7);
+      const d=await jfetch('/api/assistente/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pergunta,periodoSolicitado:periodoSelecionado,contexto:assistantConversationContext})});
+      assistantConversationContext.push({role:'user',content:pergunta});
+      assistantConversationContext.push({role:'assistant',content:d.resposta||'',periodoLabel:d.periodoLabel,intervalo:d.intervalo,agendamentoSelecionado:d.agendamentoSelecionado||null});
+      assistantConversationContext=assistantConversationContext.slice(-6);
+      add('bot',d.resposta||'Não consegui interpretar essa pergunta.');
+    }catch(err){add('bot','⚠️ Não foi possível consultar o Assistente: '+(err.message||err));}
+    finally{
+      input.disabled=false;
+      if(btn){btn.disabled=false;btn.textContent='Enviar';}
+      input.blur();
+    }
+  });
+})();
+
+</script>
 </body>
 </html>
