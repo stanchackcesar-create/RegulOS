@@ -10,7 +10,6 @@
     ['👥','Grupos',()=>window.openAllGroups?.()],
     ['📊','Monitor',()=>document.getElementById('regulosSchedulerMonitorBtn')?.click()],
     ['🩺','Diagnóstico',()=>window.openDiagnosticPanel?.()],
-    ['📜','Logs',()=>window.openLogsPanel?.()]
   ];
   const aside=document.createElement('aside');
   aside.id='regulosSidebar';aside.className='regulos-sidebar';aside.setAttribute('aria-label','Navegação RegulOS');
