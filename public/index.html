@@ -1008,7 +1008,14 @@ async function sendAssistantChat(){
     assistantConversationContext=assistantConversationContext.slice(-6);
     appendAssistantChatMessage('bot',d.resposta||'Não consegui interpretar essa pergunta.',d.sugestoes||[]);
   }catch(e){appendAssistantChatMessage('bot','⚠️ Não foi possível consultar o Assistente: '+(e.message||e));}
-  finally{input.disabled=false;const btn=document.querySelector('.assistant-chat-form button');if(btn){btn.disabled=false;btn.textContent=btn.dataset.originalText||'📨 Perguntar';}input.focus();}
+  finally{
+    input.disabled=false;
+    const btn=document.querySelector('.assistant-chat-form button');
+    if(btn){btn.disabled=false;btn.textContent=btn.dataset.originalText||'📨 Perguntar';}
+    // No celular, não reabrir o teclado automaticamente após cada pergunta.
+    // O usuário decide quando tocar no campo novamente.
+    input.blur();
+  }
 }
 function appendAssistantChatMessage(tipo,texto,sugestoes=[]){
   const box=document.getElementById('assistantChatMessages'); if(!box)return;
