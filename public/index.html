@@ -296,8 +296,6 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 <button class="primary" onclick="refreshAll()">🔄 Atualizar</button>
 <button onclick="apiAction('/api/reconectar')">🔌 Reconectar</button>
 <button onclick="apiAction('/api/desconectar')">⛔ Desconectar</button>
-<button onclick="document.getElementById('regulosSchedulerMonitorBtn')?.click()">📊 Monitor</button>
-<button onclick="openAllGroups()">👥 Grupos</button>
 <div class="header-bot-schedule" title="Programação do bot">
   <span class="badge neutral" id="windowBadge">...</span>
   <label>⏰ Liga <input id="botInicio" type="time"></label>
@@ -307,8 +305,6 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 </div>
 <button class="red" onclick="novoQR()">📱 Novo QR</button>
 <button type="button" onclick="openAccountsPanel()">👤 Contas</button>
-<button type="button" class="desktop-logs-button" onclick="openLogsPanel()">📜 Logs</button>
-<button type="button" class="desktop-schedules-button" onclick="openSchedulesPanel()">📅 Agendamentos</button>
 <button type="button" class="desktop-diagnostic-button" onclick="openDiagnosticPanel()">🩺 Diagnóstico</button>
 </div>
 </div></header>
