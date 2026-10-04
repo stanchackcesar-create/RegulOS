@@ -1849,6 +1849,7 @@ async function sendScheduledLink(item) {
           addHistory({ grupoId:id, link:item.url, status:'erro', erro:lastError?.message||'Falha no envio.', agendamentoId:item.id, tipo:'agendado', ocorrencia:item.progressKey });
           upsertLinkFailure(item, id, lastError?.message||'Falha no envio.');
           addLog(`Falha agendamento ${item.nome}: ${lastError?.message||'Falha no envio.'} após ${MAX_DELIVERY_ATTEMPTS} tentativa(s).`);
+          // A ocorrência não fica presa em retry infinito. O registro permanece ERRO para consulta no painel.
           writeJson(FILES.schedules, linkSchedules);
           continue;
         }
