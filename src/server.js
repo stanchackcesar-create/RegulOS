@@ -595,6 +595,23 @@ function setLinkDeliveryStatus(item, occurrence, groupId, status, errorMessage =
   return delivery;
 }
 
+function setExistingLinkDeliveryStatus(delivery, status, errorMessage = '', occurrenceLabel = '') {
+  if (!delivery) return null;
+  const now = new Date().toISOString();
+  delivery.status = status;
+  if (occurrenceLabel) delivery.ocorrencia = String(occurrenceLabel);
+  delivery.erro = status === 'ERRO' ? String(errorMessage || 'Falha no envio.') : '';
+  if (status === 'ENVIANDO') {
+    delivery.iniciadoEm = now;
+    delivery.concluidoEm = '';
+    delivery.tentativas = Number(delivery.tentativas || 0) + 1;
+  } else if (status === 'SUCESSO' || status === 'ERRO') {
+    delivery.concluidoEm = now;
+  }
+  saveLinkDeliveries();
+  return delivery;
+}
+
 function addHistory(item) {
   history.push({ at: new Date().toISOString(), ...item });
   saveHistory();
@@ -2445,13 +2462,27 @@ app.post('/api/link-falhas/:id/reenviar', async (req,res)=>{
       erros:0
     };
   }
-  const resendOccurrence='reenvio:'+String(failure.id||Date.now());
-  ensureLinkDeliveries(item,resendOccurrence,[String(failure.grupoId||'')]);
-  if(!online || !sock) return res.status(503).json({ok:false,msg:'WhatsApp não conectado.'});
   const target=String(failure.grupoId||'');
   if(!target) return res.status(400).json({ok:false,msg:'A falha não possui grupo de destino registrado.'});
+  if(!online || !sock) return res.status(503).json({ok:false,msg:'WhatsApp não conectado.'});
+
+  // Reenvio reutiliza o MESMO card de entrega que terminou em ERRO.
+  // Não criamos uma segunda ocorrência/entrega visual.
+  const resendOccurrence='reenvio:'+String(failure.id||Date.now());
+  let delivery=linkDeliveries
+    .filter(x=>String(x?.agendamentoId||'')===String(item.id||'') &&
+      String(x?.grupoId||'')===target &&
+      String(x?.status||'').toUpperCase()==='ERRO')
+    .sort((a,b)=>String(b?.concluidoEm||b?.criadoEm||'').localeCompare(String(a?.concluidoEm||a?.criadoEm||'')))[0];
+
+  if(!delivery){
+    ensureLinkDeliveries(item, item.progressKey || 'once', [target]);
+    delivery=linkDeliveries
+      .filter(x=>String(x?.agendamentoId||'')===String(item.id||'') && String(x?.grupoId||'')===target)
+      .sort((a,b)=>String(b?.criadoEm||'').localeCompare(String(a?.criadoEm||'')))[0];
+  }
   try {
-    setLinkDeliveryStatus(item,resendOccurrence,target,'ENVIANDO');
+    setExistingLinkDeliveryStatus(delivery,'ENVIANDO','',resendOccurrence);
     addLog(`Reenvio iniciado para "${item.nome}" no grupo ${target}.`);
     const text=[chooseRandomMessage(item),item.tituloProduto?`📦 ${item.tituloProduto}`:'',String(item.mensagem||'').trim(),'👉 Garanta agora:',String(item.url||'').trim()].filter(Boolean).join('\n\n');
     let image=null;
@@ -2459,7 +2490,7 @@ app.post('/api/link-falhas/:id/reenviar', async (req,res)=>{
     else image=await findProductImage(String(item.url||'').trim());
     if(!image) throw new Error('Não foi possível obter a imagem. Edite o link ou informe uma URL de imagem.');
     if(image) await sock.sendMessage(target,{image:image.buffer,caption:text}); else await sock.sendMessage(target,{text});
-    setLinkDeliveryStatus(item,resendOccurrence,target,'SUCESSO');
+    setExistingLinkDeliveryStatus(delivery,'SUCESSO','',resendOccurrence);
     addHistory({grupoId:target,link:item.url,status:'sucesso',agendamentoId:item.id,tipo:'reenvio',at:new Date().toISOString()});
     archiveSentFailureAsHistory(item,failure,target);
     removeLinkFailure(failure.id);
@@ -2468,7 +2499,7 @@ app.post('/api/link-falhas/:id/reenviar', async (req,res)=>{
     writeJson(FILES.schedules,linkSchedules);
     res.json({ok:true,msg:'Link reenviado com sucesso e movido para o histórico de enviados.'});
   } catch(e) {
-    setLinkDeliveryStatus(item,resendOccurrence,target,'ERRO',e.message);
+    setExistingLinkDeliveryStatus(delivery,'ERRO',e.message,resendOccurrence);
     upsertLinkFailure(item,target,e.message);
     addLog(`Reenvio falhou para "${item.nome}" no grupo ${target}: ${e.message}`);
     res.status(500).json({ok:false,msg:`Reenvio falhou: ${e.message}`});
