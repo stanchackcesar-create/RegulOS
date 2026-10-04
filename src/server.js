@@ -2532,7 +2532,8 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     const intencaoAnalise=/\b(como esta|como estao|analise|analisar|desempenho|resultado|resultados|situacao)\b/.test(q);
     const intencaoRecomendacao=/\b(recomenda|recomendacao|sugestao|sugira|o que devo|que devo|o que fazer|como melhorar)\b/.test(q);
     const intencaoFalhas=/\b(erro|erros|falha|falhas|falhou|falharam|falhar|problema|problemas|por que|porque|motivo|motivos)\b/.test(q)
-      || (continuidade&&contextoEraFalha);
+      || (continuidade&&contextoEraFalha)
+      || (agendamentoContexto && /\b(problema|problemas|erro|erros|falha|falhas)\b/.test(q));
 
     function scheduleOccursToday(item){
       if(!item || !item.data || !item.horario) return false;
@@ -2564,14 +2565,15 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     const horarioAnterior=agendamentoContexto?.horario|| (horarioAnteriorMatch?String(horarioAnteriorMatch[1]).padStart(2,'0')+':'+horarioAnteriorMatch[2]:null);
     const intencaoAgendamentoEspecifico=Boolean(horarioNormalizado)&&/\b(link|links|agendamento|agendamentos)\b/.test(q)
       &&/\b(qual|quais|onde|qual\s+link)\b/.test(q);
+    const referenciaAgendamento=/\b(ele|ela|dele|dela|desse|dessa|esse|essa|deste|desta|o mesmo|a mesma|isso)\b/.test(q);
     const intencaoStatusAgendamento=Boolean(horarioAnterior)&&/\b(status|situacao|situação|estado)\b/.test(q)
-      &&/\b(link|agendamento|agendado|programado|ele|esse|desse)\b/.test(q);
+      &&(/\b(link|agendamento|agendado|programado|ele|esse|desse)\b/.test(q)||Boolean(agendamentoContexto));
     const intencaoGrupoAgendamento=(Boolean(agendamentoContexto)||Boolean(horarioAnterior)||Boolean(horarioNormalizado))
-      &&/\b(grupo|grupos)\b/.test(q)
+      &&/\b(grupo|grupos|onde sera|onde vai|para onde)\b/.test(q)
       &&/\b(ver|mostrar|mostre|qual|quais|onde|desse|deste|agendamento|link|links)\b/.test(q);
     const intencaoDetalhesAgendamento=(Boolean(agendamentoContexto)||Boolean(horarioAnterior)||Boolean(horarioNormalizado))
       &&/\b(detalhes|detalhes completos|informacoes|informações|dados)\b/.test(q)
-      &&/\b(link|agendamento|agendado|programado|ele|esse|desse|deste)\b/.test(q);
+      &&(/\b(link|agendamento|agendado|programado|ele|esse|desse|deste)\b/.test(q)||Boolean(agendamentoContexto));
     const intencaoOutrosHorarios=/\b(outros|outras)\b/.test(q)
       &&/\b(horarios|horários|links|agendamentos)\b/.test(q)
       &&/\b(programados|programadas|agendados|agendadas|hoje)\b/.test(q);
@@ -2581,8 +2583,8 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
       &&/\b(link|agendamento|agendamentos|envio|enviado|enviar)\b/.test(q);
     const intencaoPausados=/\b(pausad|pausados|pausadas|pausa)\w*\b/.test(q)
       &&/\b(link|links|agendamento|agendamentos)\b/.test(q);
-    const intencaoRecomendacaoAgendamento=(Boolean(horarioAnterior)||Boolean(horarioNormalizado))&&/\b(recomenda|recomendacao|sugestao|sugira|o que devo|o que eu deveria|que devo|o que fazer|o que eu faco|como melhorar|devo fazer)\b/.test(q)
-      &&/\b(link|agendamento|agendado|programado|ele|esse|desse)\b/.test(q);
+    const intencaoRecomendacaoAgendamento=(Boolean(agendamentoContexto)||Boolean(horarioAnterior)||Boolean(horarioNormalizado))&&/\b(recomenda|recomendacao|sugestao|sugira|o que devo|o que eu deveria|que devo|o que fazer|o que eu faco|como melhorar|devo fazer)\b/.test(q)
+      &&(/\b(link|agendamento|agendado|programado|ele|esse|desse)\b/.test(q)||Boolean(agendamentoContexto));
     if(intencaoDetalhesAgendamento){
       const horarioAlvo=horarioNormalizado||horarioAnterior;
       let encontrados=agendamentoContexto?[agendamentoContexto]:(horarioAlvo?schedules.filter(item=>String(item.horario||'').slice(0,5)===horarioAlvo):[]);
