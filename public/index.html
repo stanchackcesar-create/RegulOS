@@ -417,12 +417,15 @@ async function saveLink(){
    const preco=String(preview.preco||'').trim();
    const desconto=String(preview.desconto||'').trim();
    if(titulo)nomeFinal=titulo;
-   const partes=['🔥 OFERTA IMPERDÍVEL!'];
-   if(titulo)partes.push('📦 '+titulo);
-   if(preco)partes.push('💰 Por: '+preco);
-   if(desconto)partes.push('🟢 '+desconto);
-   partes.push('🛒 Confira a oferta:\n'+url);
-   if(!mensagemFinal)mensagemFinal=partes.join('\n\n');
+   // No modo automático, o título e o link são adicionados pelo servidor
+   // no momento do envio. A mensagem personalizada recebe apenas dados
+   // complementares, evitando duplicação de título/link.
+   if(!mensagemFinal){
+    const partes=[];
+    if(preco)partes.push('💰 Por: '+preco);
+    if(desconto)partes.push('🟢 '+desconto);
+    mensagemFinal=partes.join('\n\n');
+   }
    if(!imagemUrlFinal && preview.imagemUrl)imagemUrlFinal=String(preview.imagemUrl);
    imagemAutomaticaFinal=true;
    if(result)result.textContent='✅ Dados encontrados. Salvando agendamento...';
