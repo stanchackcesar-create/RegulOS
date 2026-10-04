@@ -1084,15 +1084,24 @@ async function loadAccount(){
       </div>
       <div class="panel" style="margin-top:12px;padding:12px">
         <b>🔐 Alterar senha do administrador</b>
-        <div class="two" style="margin-top:8px">
-          <input id="adminCurrentPass" type="password" autocomplete="current-password" placeholder="Senha atual">
-          <input id="adminNewPass" type="password" autocomplete="new-password" placeholder="Nova senha (mín. 6)">
-          <input id="adminConfirmPass" type="password" autocomplete="new-password" placeholder="Confirmar nova senha">
-          <button class="primary" onclick="changeAdminPassword()">🔄 Alterar senha</button>
-        </div>
+        <form id="adminPasswordForm" autocomplete="off" onsubmit="event.preventDefault();changeAdminPassword()">
+          <div class="two" style="margin-top:8px">
+            <input id="adminCurrentPass" name="regulos-current-password" type="password" autocomplete="off" placeholder="Senha atual">
+            <input id="adminNewPass" name="regulos-new-password" type="password" autocomplete="new-password" placeholder="Nova senha (mín. 6)">
+            <input id="adminConfirmPass" name="regulos-confirm-password" type="password" autocomplete="new-password" placeholder="Confirmar nova senha">
+            <button class="primary" type="submit">🔄 Alterar senha</button>
+          </div>
+        </form>
       </div>`;
   }
   document.getElementById('accountPanel').innerHTML=html;
+  // Nunca manter senhas preenchidas após atualizar/recarregar a página.
+  requestAnimationFrame(()=>{
+    ['adminCurrentPass','adminNewPass','adminConfirmPass','newUserPass'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.value='';
+    });
+  });
  }catch(e){document.getElementById('accountPanel').textContent=e.message}
 }
 async function refreshAccountPresence(){
