@@ -2546,10 +2546,24 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
       return String(item.data)===todayKey;
     }
 
-    function formatSchedule(item){
+    function scheduleGroupDetails(item){
       const ids=normalizeScheduleGroupIds(item);
-      const groupNames=ids.map(id=>String(item.grupoNomes?.[id]||groups.find(g=>String(g.id)===String(id))?.name||id)).filter(Boolean);
-      const grupo=groupNames.length?groupNames.join(', '):String(item.grupoNome||item.grupoId||'grupo não informado');
+      const detalhes=ids.map(id=>{
+        const key=String(id);
+        const nome=String(item?.grupoNomes?.[key]||groupNameForId(key)||'').trim();
+        const permitido=allowed.some(x=>String(x)===key);
+        const ativo=groups.find(g=>String(g?.id||'')===key)?.allowed===true || permitido;
+        return {id:key,nome:nome||key,permitido,ativo};
+      });
+      return detalhes.filter(x=>x.id);
+    }
+    function scheduleGroupLabel(item){
+      const detalhes=scheduleGroupDetails(item);
+      if(!detalhes.length) return 'grupo não informado';
+      return detalhes.map(x=>x.nome).join(', ');
+    }
+    function formatSchedule(item){
+      const grupo=scheduleGroupLabel(item);
       const status=String(item.status|| (item.ativo===false?'pausado':'agendado')).toLowerCase();
       const statusLabel={agendado:'AGENDADO',enviando:'ENVIANDO',concluido:'CONCLUÍDO',erro:'ERRO',aguardando_grupo:'AGUARDANDO GRUPO',pausado:'PAUSADO'}[status]||status.toUpperCase();
       return '• '+String(item.nome||item.id)+' — '+String(item.horario||'sem horário')+' — '+grupo+' — '+statusLabel;
@@ -2592,9 +2606,9 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
       else{
         agendamentoSelecionado=encontrados.length===1?encontrados[0]:agendamentoSelecionado;
         resposta=encontrados.map(item=>{
-          const ids=normalizeScheduleGroupIds(item);
-          const nomes=ids.map(id=>String(item.grupoNomes?.[id]||groups.find(g=>String(g.id)===String(id))?.name||id)).filter(Boolean);
-          return '🔎 Detalhes do agendamento:\n• Link: '+String(item.nome||item.id)+'\n• Horário: '+String(item.horario||'sem horário')+'\n• Grupo(s): '+(nomes.length?nomes.join(', '):'não informado')+'\n• Status: '+String(item.status|| (item.ativo===false?'PAUSADO':'AGENDADO')).toUpperCase()+'\n• Ativo: '+(item.ativo===false?'NÃO':'SIM')+'\n• Repetição: '+String(item.repeticao||'uma vez');
+          const detalhes=scheduleGroupDetails(item);
+          const gruposTexto=detalhes.length?detalhes.map(x=>x.nome+(x.permitido?' (permitido)':' (não está na lista de permitidos)')).join(', '):'nenhum grupo registrado';
+          return '🔎 Detalhes do agendamento:\n• Link: '+String(item.nome||item.id)+'\n• Horário: '+String(item.horario||'sem horário')+'\n• Grupo(s): '+gruposTexto+'\n• Status: '+String(item.status|| (item.ativo===false?'PAUSADO':'AGENDADO')).toUpperCase()+'\n• Ativo: '+(item.ativo===false?'NÃO':'SIM')+'\n• Repetição: '+String(item.repeticao||'uma vez');
         }).join('\n\n');
       }
     }else if(intencaoOutrosHorarios){
@@ -2620,9 +2634,9 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
       }else{
         agendamentoSelecionado=encontrados.length===1?encontrados[0]:agendamentoSelecionado;
         resposta=encontrados.map(item=>{
-          const ids=normalizeScheduleGroupIds(item);
-          const nomes=ids.map(id=>String(item.grupoNomes?.[id]||groups.find(g=>String(g.id)===String(id))?.name||id)).filter(Boolean);
-          return '👥 Grupo(s) do agendamento:\n• '+String(item.nome||item.id)+' — '+(nomes.length?nomes.join(', '):'grupo não informado');
+          const detalhes=scheduleGroupDetails(item);
+          if(!detalhes.length) return '👥 Grupo(s) do agendamento:\n• '+String(item.nome||item.id)+' — nenhum grupo registrado neste agendamento.';
+          return '👥 Grupo(s) do agendamento:\n• '+String(item.nome||item.id)+' — '+detalhes.map(x=>x.nome+(x.permitido?' (permitido)':' (não está na lista de permitidos)')).join(', ');
         }).join('\n');
       }
     }else if(intencaoProximoAgendamento){
