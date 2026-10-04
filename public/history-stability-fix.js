@@ -16,7 +16,11 @@
         const id = this.id;
         if (id === 'linkHistory' || id === 'linkFailures') {
           const text = String(value ?? '').trim();
-          if (text === '' || text === boxes[id]) return;
+          // A renderização dos painéis limpa o container com innerHTML=''.
+          // Bloquear essa limpeza fazia os cartões antigos permanecerem no
+          // DOM e cada atualização acrescentava outra cópia.
+          // O carregamento já evita renderizações quando a assinatura não muda.
+          if (text === boxes[id]) return;
         }
         originalSetter.call(this, value);
       }
