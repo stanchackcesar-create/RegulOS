@@ -991,7 +991,7 @@ async function runCentralDiagnostic(){
 }
 
 async let assistantConversationContext=[];
-function sendAssistantChat(){
+async function sendAssistantChat(){
   const input=document.getElementById('assistantChatInput'), box=document.getElementById('assistantChatMessages');
   if(!input||!box)return;
   const pergunta=String(input.value||'').trim(); if(!pergunta)return;
