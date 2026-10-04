@@ -2332,10 +2332,6 @@ app.delete('/api/link-historico/:id',(req,res)=>{
   const [removed]=linkHistory.splice(i,1);
   cancelLinkHistoryExpiration(removed);
   saveLinkHistory();
-  // O histórico arquivado usa o ID do agendamento; exclui apenas entregas finalizadas associadas.
-  const beforeDeliveries=linkDeliveries.length;
-  linkDeliveries=linkDeliveries.filter(x=>String(x?.agendamentoId||'')!==String(removed.agendamentoId||removed.id)||!['SUCESSO','ERRO'].includes(String(x?.status||'').toUpperCase()));
-  if(linkDeliveries.length!==beforeDeliveries) saveLinkDeliveries();
   addLog(`Registro de histórico removido: ${removed.nome||removed.id}.`);
   res.json({ok:true,msg:'Registro removido do histórico.'});
 });
