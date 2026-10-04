@@ -2166,6 +2166,31 @@ app.get('/api/entregas', requireAuth, (req,res) => {
   }
 });
 
+app.post('/api/assistente', requireAuth, (req,res)=>{
+  try{
+    const b=req.body||{}, acao=String(b.acao||'analisar').trim().toLowerCase(), periodo=Math.max(1,Math.min(90,Number(b.periodo||7)));
+    const cutoff=Date.now()-periodo*24*60*60*1000;
+    const agendamentos=Array.isArray(linkSchedules)?linkSchedules:[], falhas=Array.isArray(linkFailures)?linkFailures:[], entregas=Array.isArray(linkDeliveries)?linkDeliveries:[], historico=Array.isArray(linkHistory)?linkHistory:[];
+    const entregasRecentes=entregas.filter(x=>Date.parse(String(x?.concluidoEm||x?.criadoEm||''))>=cutoff);
+    const sucessos=entregasRecentes.filter(x=>String(x?.status||'').toUpperCase()==='SUCESSO').length;
+    const erros=entregasRecentes.filter(x=>String(x?.status||'').toUpperCase()==='ERRO').length;
+    const enviando=entregasRecentes.filter(x=>String(x?.status||'').toUpperCase()==='ENVIANDO').length;
+    const taxa=sucessos+erros?Math.round((sucessos/(sucessos+erros))*100):0;
+    const topFalhas={}; falhas.forEach(x=>{const k=String(x?.erro||'Falha não informada');topFalhas[k]=(topFalhas[k]||0)+1;});
+    const principaisFalhas=Object.entries(topFalhas).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([motivo,total])=>({motivo,total}));
+    const porLink={}; entregasRecentes.forEach(x=>{const k=String(x?.agendamentoId||'sem-id');porLink[k] ||= {agendamentoId:k,sucesso:0,erro:0,tentativas:0};const st=String(x?.status||'').toUpperCase();if(st==='SUCESSO')porLink[k].sucesso++;if(st==='ERRO')porLink[k].erro++;porLink[k].tentativas+=Number(x?.tentativas||0);});
+    const ranking=Object.values(porLink).sort((a,b)=>(b.sucesso-b.erro)-(a.sucesso-a.erro)).slice(0,10).map(x=>({...x,nome:agendamentos.find(a=>String(a.id)===String(x.agendamentoId))?.nome||historico.find(h=>String(h.agendamentoId)===String(x.agendamentoId))?.nome||'Link'}));
+    let resposta;
+    if(acao==='erros') resposta=principaisFalhas.length ? 'Encontrei '+falhas.length+' falha(s) registradas. O principal motivo é "'+principaisFalhas[0].motivo+'" ('+principaisFalhas[0].total+' ocorrência(s)).' : 'Não há falhas registradas no momento.';
+    else if(acao==='comparar') resposta='No período de '+periodo+' dia(s), foram '+sucessos+' sucesso(s), '+erros+' erro(s) e '+enviando+' envio(s) ainda em andamento. A taxa de sucesso das entregas finalizadas foi '+taxa+'%.';
+    else if(acao==='organizar') resposta='Há '+agendamentos.length+' agendamento(s), '+falhas.length+' falha(s) e '+historico.length+' registro(s) no histórico. Recomendo revisar primeiro os links com falha e depois os agendamentos recorrentes.';
+    else if(acao==='relatorio') resposta='Relatório de '+periodo+' dia(s): '+sucessos+' sucesso(s), '+erros+' erro(s), taxa de sucesso '+taxa+'%, '+agendamentos.length+' agendamento(s) atuais e '+falhas.length+' falha(s) pendentes.';
+    else if(acao==='campanha') resposta='Rascunho de campanha preparado. O Assistente pode organizar links, grupos, mensagens e horários; a publicação deve ser confirmada antes de criar os agendamentos.';
+    else resposta='Status do RegulOS: '+agendamentos.length+' agendamento(s), '+falhas.length+' falha(s), '+historico.length+' registro(s) no histórico. Nos últimos '+periodo+' dia(s), a taxa de sucesso foi '+taxa+'%.';
+    res.set('Cache-Control','no-store'); res.json({ok:true,acao,periodo,resposta,metricas:{agendamentos:agendamentos.length,falhas:falhas.length,historico:historico.length,sucessos,erros,enviando,taxaSucesso:taxa},principaisFalhas,ranking});
+  }catch(e){res.status(500).json({ok:false,msg:e.message||'Falha ao executar o Assistente.'});}
+});
+
 app.get('/api/diagnostico', (req,res) => {
   try {
     const agora = new Date();
