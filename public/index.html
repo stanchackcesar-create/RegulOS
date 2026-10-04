@@ -104,6 +104,17 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 .assistant-float-form{display:flex;gap:7px;margin-top:8px}
 .assistant-float-form input{min-width:0;flex:1}
 .assistant-float-form button{min-height:44px}
+.assistant-float-tabs{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid #263653;background:#0d1728}
+.assistant-float-tab{flex:1;min-height:40px;border-radius:9px;background:#1a2940;color:#cbd7ea}
+.assistant-float-tab.active{background:#3d83f6;color:#fff}
+.assistant-float-view{display:none;flex:1;min-height:0;flex-direction:column;padding:10px}
+.assistant-float-view.active{display:flex}
+.assistant-float-help{font-size:13px;line-height:1.35;margin-bottom:8px}
+.assistant-float-label{font-size:12px;color:#c6d2e7;margin:0 0 8px}
+.assistant-float-label select{min-height:42px;margin-top:4px}
+.assistant-float-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:8px}
+.assistant-float-actions button{min-height:42px;padding:9px 7px}
+.assistant-float-result{flex:1;min-height:100px;overflow:auto;margin:0}
 @media(max-width:560px){
   #assistantMainPanel{display:none!important}
   .assistant-float-launcher{right:12px;bottom:calc(12px + env(safe-area-inset-bottom));width:54px;height:54px}
@@ -238,7 +249,28 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
     <div><strong>🤖 Assistente do RegulOS</strong><div class="muted" style="font-size:11px">Análise dos dados do RegulOS</div></div>
     <button id="assistantFloatClose" class="assistant-float-close" type="button" aria-label="Fechar" onclick="document.getElementById('assistantFloatPanel')?.classList.remove('open');document.getElementById('assistantFloatInput')?.blur()">✕</button>
   </div>
-  <div class="assistant-float-body">
+  <div class="assistant-float-tabs" role="tablist">
+    <button id="assistantFloatTabAnalysis" class="assistant-float-tab active" type="button" role="tab">🧠 Assistente</button>
+    <button id="assistantFloatTabChat" class="assistant-float-tab" type="button" role="tab">💬 Conversa</button>
+  </div>
+  <div id="assistantFloatAnalysis" class="assistant-float-view active">
+    <div class="muted assistant-float-help">Escolha uma ação para analisar os dados reais do RegulOS.</div>
+    <label class="assistant-float-label">Período
+      <select id="assistantFloatPeriod">
+        <option value="1">Hoje</option><option value="7" selected>Últimos 7 dias</option><option value="15">Últimos 15 dias</option><option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option>
+      </select>
+    </label>
+    <div class="assistant-float-actions">
+      <button class="primary" type="button" onclick="runRegulosAssistant('analisar')">🧠 Analisar</button>
+      <button type="button" onclick="runRegulosAssistant('erros')">🔎 Erros</button>
+      <button type="button" onclick="runRegulosAssistant('organizar')">📋 Organizar</button>
+      <button type="button" onclick="runRegulosAssistant('comparar')">⚖️ Comparar</button>
+      <button type="button" onclick="runRegulosAssistant('campanha')">🚀 Campanha</button>
+      <button type="button" onclick="runRegulosAssistant('relatorio')">📄 Relatório</button>
+    </div>
+    <div id="assistantFloatAnalysisResult" class="notice assistant-float-result">Escolha uma ação para o Assistente analisar os dados reais do RegulOS.</div>
+  </div>
+  <div id="assistantFloatConversation" class="assistant-float-view">
     <div id="assistantFloatMessages" class="assistant-float-messages" aria-live="polite">
       <div class="assistant-float-msg assistant-float-bot"><div class="assistant-float-meta">🤖 RegulOS</div><div>Olá! Posso analisar agendamentos, erros, entregas e resultados. O que você quer saber?</div></div>
     </div>
@@ -1168,7 +1200,7 @@ async function sendAssistantChat(){
   const pergunta=String(input.value||'').trim(); if(!pergunta)return;
   appendAssistantChatMessage('user',pergunta); input.value=''; input.disabled=true; const btn=document.querySelector('.assistant-chat-form button'); if(btn){btn.disabled=true;btn.dataset.originalText=btn.textContent;btn.textContent='⏳ Analisando...';}
   try{
-    const periodoSelecionado=Number(document.getElementById('assistantPeriod')?.value||7);
+    const periodoSelecionado=Number(document.getElementById('assistantFloatPeriod')?.value||document.getElementById('assistantPeriod')?.value||7);
     const d=await jfetch('/api/assistente/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pergunta,periodoSolicitado:periodoSelecionado,contexto:assistantConversationContext})});
     assistantConversationContext.push({role:'user',content:pergunta});
     assistantConversationContext.push({role:'assistant',content:d.resposta||'',periodoLabel:d.periodoLabel,intervalo:d.intervalo,agendamentoSelecionado:d.agendamentoSelecionado||null});
@@ -1207,19 +1239,22 @@ document.addEventListener('DOMContentLoaded',()=>{
 });
 
 async function runRegulosAssistant(acao){
-  const box=document.getElementById('assistantResult'); if(!box)return;
-  const periodo=Number(document.getElementById('assistantPeriod')?.value||7);
-  box.innerHTML='<div class="muted">🤖 Assistente analisando os dados...</div>';
+  const boxes=[document.getElementById('assistantResult'),document.getElementById('assistantFloatAnalysisResult')].filter(Boolean);
+  if(!boxes.length)return;
+  const box=boxes[boxes.length-1];
+  const periodo=Number(document.getElementById('assistantFloatPeriod')?.value||document.getElementById('assistantPeriod')?.value||7);
+  boxes.forEach(b=>{b.innerHTML='<div class="muted">🤖 Assistente analisando os dados...</div>';});
   try{
     const d=await jfetch('/api/assistente',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao,periodo})});
     const m=d.metricas||{};
     const fails=(d.principaisFalhas||[]).map(x=>'<div class="stats">🔴 '+esc(x.motivo)+' — '+esc(x.total)+' ocorrência(s)</div>').join('');
     const ranking=(d.ranking||[]).slice(0,5).map(x=>'<div class="stats">📦 '+esc(x.nome)+' — '+esc(x.sucesso)+' sucesso(s), '+esc(x.erro)+' erro(s), '+esc(x.tentativas)+' tentativa(s)</div>').join('');
-    box.innerHTML='<div style="font-size:16px;font-weight:800">🤖 '+esc(d.resposta||'Análise concluída.')+'</div>'
+    const resultHtml='<div style="font-size:16px;font-weight:800">🤖 '+esc(d.resposta||'Análise concluída.')+'</div>'
       +'<div class="row" style="margin-top:10px"><span class="badge neutral">📅 '+esc(d.periodo)+' dia(s)</span><span class="badge good">🟢 '+esc(m.sucessos)+' sucesso(s)</span><span class="badge bad">🔴 '+esc(m.erros)+' erro(s)</span><span class="badge neutral">📈 '+esc(m.taxaSucesso)+'% sucesso</span></div>'
       +(fails?'<div style="margin-top:10px"><b>Principais problemas</b>'+fails+'</div>':'')
       +(ranking?'<div style="margin-top:10px"><b>Desempenho dos links</b>'+ranking+'</div>':'');
-  }catch(e){box.innerHTML='<div class="error">🔴 '+esc(e.message||e)+'</div>'}
+    boxes.forEach(b=>{b.innerHTML=resultHtml;});
+  }catch(e){boxes.forEach(b=>{b.innerHTML='<div class="error">🔴 '+esc(e.message||e)+'</div>';})}
 }
 async function loadLogs(){try{const d=await jfetch('/api/logs');document.getElementById('logs').textContent=(d.logs||[]).join('\\n')}catch{}}
 async function loadDashboard(){try{const d=await jfetch('/api/dashboard');document.getElementById('today').textContent=d.hoje||0}catch{}}
@@ -1351,9 +1386,23 @@ setTimeout(()=>{refreshAccountPresence();},1500);
   const input=document.getElementById('assistantFloatInput');
   const box=document.getElementById('assistantFloatMessages');
   if(!launcher||!panel||!close||!form||!input||!box)return;
+  const tabAnalysis=document.getElementById('assistantFloatTabAnalysis');
+  const tabChat=document.getElementById('assistantFloatTabChat');
+  const viewAnalysis=document.getElementById('assistantFloatAnalysis');
+  const viewChat=document.getElementById('assistantFloatConversation');
+  function showTab(which){
+    const analysis=which==='analysis';
+    tabAnalysis?.classList.toggle('active',analysis);
+    tabChat?.classList.toggle('active',!analysis);
+    viewAnalysis?.classList.toggle('active',analysis);
+    viewChat?.classList.toggle('active',!analysis);
+    if(!analysis) input.focus(); else input.blur();
+  }
+  tabAnalysis?.addEventListener('click',()=>showTab('analysis'));
+  tabChat?.addEventListener('click',()=>showTab('chat'));
   launcher.addEventListener('click',()=>{
     panel.classList.add('open');
-    input.focus();
+    showTab('analysis');
   });
   close.addEventListener('click',()=>{panel.classList.remove('open');input.blur();});
   document.addEventListener('keydown',e=>{
