@@ -799,7 +799,7 @@ document.getElementById('lrandom').addEventListener('change',toggleRandomBox);
 async function loadLinks(){
   const box=document.getElementById('links');
   if(!box)return;
-  box.innerHTML='<div class="muted">Os links salvos aparecem somente em <b>Agendamentos</b>. O Gerenciador de links serve para criar ou editar uma programação.</div>';
+  box.innerHTML='';
 }
 function toggleScheduleMobile(){
   const content=document.getElementById('schedulePanelContent');
