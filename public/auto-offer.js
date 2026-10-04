@@ -28,14 +28,14 @@
     const price = String(d.preco || '').trim();
     const discount = String(d.desconto || '').trim();
     const image = String(d.imagemUrl || '').trim();
+    // No modo automático, o título e o link não entram na mensagem personalizada:
+    // o servidor já acrescenta o título do produto e o link uma única vez no envio.
+    // Aqui deixamos somente informações complementares que realmente foram encontradas.
     const originalMessage = String(get('lmensagem')?.value || '').trim();
     const lines = [];
-    lines.push('🔥 OFERTA IMPERDÍVEL!');
-    if (title) lines.push('', '📦 ' + title);
-    if (price) lines.push('', '💰 Por: ' + price);
+    if (price) lines.push('💰 Por: ' + price);
     if (discount) lines.push('🟢 ' + discount);
-    lines.push('', '🛒 Confira a oferta:', url);
-    if (!title && originalMessage) lines.splice(1, 0, '', originalMessage);
+    if (!lines.length && originalMessage) lines.push(originalMessage);
 
     get('lmensagem').value = lines.join('\n');
 
