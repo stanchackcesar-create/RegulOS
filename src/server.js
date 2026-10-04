@@ -1957,7 +1957,65 @@ app.post('/api/reconectar', requireAdmin, async (req,res) => {
   try { old?.end(); } catch {}
   setTimeout(() => start(), 300);
   res.json({ok:true,msg:'Reconexão iniciada. Aguarde.'});
+})
+function diagnosticoSchedulerState() {
+  const ativos = Array.isArray(linkSchedules) ? linkSchedules.filter(x => x && x.ativo !== false) : [];
+  const pendentes = ativos.filter(x => hasPendingProgress(x));
+  const enviando = ativos.filter(x => String(x?.status || '') === 'enviando');
+  return { ativos, pendentes, enviando };
+}
+
+app.get('/api/diagnostico', (req,res) => {
+  try {
+    const agora = new Date();
+    const sched = diagnosticoSchedulerState();
+    const historicoRecente = Array.isArray(linkHistory) ? linkHistory.slice(0, 10) : [];
+    const falhasRecentes = Array.isArray(linkFailures) ? linkFailures.slice(0, 10) : [];
+    const ultimoHistorico = historicoRecente[0] || null;
+    const ultimaFalha = falhasRecentes[0] || null;
+    const selectedGroups = Array.isArray(allowed) ? allowed.filter(isValidGroupJid) : [];
+    const loadedGroups = Array.isArray(groups) ? groups.filter(g => isValidGroupJid(g?.id)) : [];
+    const queue = orderedLinks();
+    const queueCurrent = queue.find(x => String(x.id) === String(linkQueue.currentId || '')) || null;
+    const historyOk = Array.isArray(linkHistory);
+    const schedulesOk = Array.isArray(linkSchedules);
+    const groupsOk = Array.isArray(groups);
+    const persistenceOk = [FILES.groups, FILES.groupConfig, FILES.schedules, FILES.linkHistory, FILES.linkFailures, FILES.linkQueue]
+      .every(file => {
+        try { return fs.existsSync(file); } catch { return false; }
+      });
+    const checks = [
+      { key:'whatsapp', label:'WhatsApp', ok:online === true, value:online ? 'Conectado' : (qr ? 'Aguardando QR' : (status || 'Desconectado')), level:online ? 'ok' : (qr ? 'warn' : 'error') },
+      { key:'groups', label:'Grupos', ok:groupsOk && loadedGroups.length > 0, value:`${loadedGroups.length} carregados`, level:groupsOk && loadedGroups.length > 0 ? 'ok' : 'error' },
+      { key:'selected', label:'Grupos selecionados', ok:selectedGroups.length > 0, value:`${selectedGroups.length} selecionados`, level:selectedGroups.length > 0 ? 'ok' : 'warn' },
+      { key:'scheduler', label:'Scheduler', ok:botSchedule.ativo !== false, value:botSchedule.ativo === true ? botWindowLabel() : 'Desativado', level:botSchedule.ativo === true ? 'ok' : 'warn' },
+      { key:'queue', label:'Fila', ok:queue.length === 0 || !sched.pendentes.length || online, value:queue.length ? `${queue.length} ativos` : 'Vazia', level:!online && queue.length ? 'warn' : 'ok' },
+      { key:'schedules', label:'Agendamentos', ok:schedulesOk, value:`${Array.isArray(linkSchedules) ? linkSchedules.length : 0} registrados`, level:schedulesOk ? 'ok' : 'error' },
+      { key:'history', label:'Histórico', ok:historyOk, value:`${Array.isArray(linkHistory) ? linkHistory.length : 0} registros`, level:historyOk ? 'ok' : 'error' },
+      { key:'persistence', label:'Persistência', ok:persistenceOk, value:persistenceOk ? 'Arquivos OK' : 'Verificar arquivos', level:persistenceOk ? 'ok' : 'error' }
+    ];
+    const errors = checks.filter(x => x.level === 'error');
+    const warnings = checks.filter(x => x.level === 'warn');
+    const result = errors.length ? 'erro' : (warnings.length ? 'atencao' : 'ok');
+    res.set('Cache-Control','no-store');
+    res.json({
+      ok:true,
+      resultado:result,
+      resultadoLabel:result === 'ok' ? 'RegulOS operando normalmente' : (result === 'atencao' ? 'RegulOS operando com atenção' : 'RegulOS precisa de verificação'),
+      executadoEm:agora.toISOString(),
+      whatsapp:{conectado:online, status, qr:Boolean(qr), numero:connectedNumber ? formatPhone(connectedNumber) : '', numeroBruto:connectedNumber},
+      grupos:{carregados:loadedGroups.length, selecionados:selectedGroups.length, ligados:selectedGroups.filter(id => getGroupConfig(id).ativo !== false).length},
+      scheduler:{ativo:botSchedule.ativo === true, janela:botWindowLabel(), agendamentos:linkSchedules.length, fila:queue.length, filaAtual:queueCurrent?.nome || '', cursor:Number(linkQueue.cursor || 0), pendentes:sched.pendentes.length, enviando:sched.enviando.length},
+      ultimoEnvio:ultimoHistorico ? {nome:ultimoHistorico.nome || '', em:ultimoHistorico.concluidoAt || ultimoHistorico.lastRunAt || ultimoHistorico.at || '', status:ultimoHistorico.status || ''} : null,
+      ultimoErro:ultimaFalha ? {nome:ultimaFalha.nome || '', motivo:ultimaFalha.erro || '', em:ultimaFalha.atualizadoEm || ultimaFalha.criadoEm || ''} : null,
+      persistencia:{ok:persistenceOk, arquivos:[FILES.groups,FILES.groupConfig,FILES.schedules,FILES.linkHistory,FILES.linkFailures,FILES.linkQueue].map(file => ({arquivo:path.basename(file),existe:fs.existsSync(file)}))},
+      checks
+    });
+  } catch(e) {
+    res.status(500).json({ok:false,msg:e.message || 'Falha ao executar diagnóstico.'});
+  }
 });
+;
 
 app.post('/api/desconectar', requireAdmin, async (req,res) => {
   // Desconectar pelo painel agora significa ENCERRAR a sessão atual e
