@@ -493,7 +493,20 @@ async function loadSchedules(){
   if(!box)return;
   box.innerHTML='';
   if(!d.agendamentos.length){box.innerHTML='<div class="muted">Nenhum link agendado.</div>';return;}
-  d.agendamentos.forEach(x=>{
+  // Organiza visualmente os agendamentos em ordem cronológica:
+  // primeiro a data e, dentro da mesma data, o horário.
+  // Não altera a ordem/execução do scheduler no servidor; é somente a apresentação do painel.
+  const agendamentosOrdenados=[...d.agendamentos].sort((a,b)=>{
+    const chave=(x)=>{
+      const data=String(x?.data||'').trim();
+      const horario=String(x?.horario||'').trim();
+      const dataISO=/^\\d{4}-\\d{2}-\\d{2}$/.test(data)?data:'9999-12-31';
+      const hora=/^\\d{2}:\\d{2}/.test(horario)?horario.slice(0,5):'99:99';
+      return dataISO+'T'+hora;
+    };
+    return chave(a).localeCompare(chave(b));
+  });
+  agendamentosOrdenados.forEach(x=>{
    const ativo=x.ativo===true;
    const scheduleGroupIds=Array.isArray(x.grupoIds)?x.grupoIds:(x.grupoId?[x.grupoId]:[]);
    const grupoNomes=Array.isArray(x.grupoNomes)?x.grupoNomes:Object.values(x.grupoNomes||{});
