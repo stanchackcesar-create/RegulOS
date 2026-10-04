@@ -176,3 +176,21 @@ body.regulos-has-sidebar main.wrap{max-width:none;margin-left:18px}
     max-width:100%!important;
   }
 }
+
+
+/* REGULOS_MOBILE_TOAST_FIX_V1 */
+@media(max-width:560px){
+  /* O toast de sucesso é inserido diretamente no body. No celular ele não pode ficar atrás do menu. */
+  body > .notice{
+    position:fixed!important;
+    top:8px!important;
+    left:104px!important;
+    right:12px!important;
+    width:auto!important;
+    max-width:none!important;
+    margin:0!important;
+    z-index:1300!important;
+    overflow-wrap:anywhere;
+    pointer-events:none;
+  }
+}
