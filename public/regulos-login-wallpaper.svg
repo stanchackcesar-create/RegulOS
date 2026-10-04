@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000">
+<defs>
+ <radialGradient id="bg"><stop stop-color="#10284a"/><stop offset=".5" stop-color="#050b16"/><stop offset="1" stop-color="#01040a"/></radialGradient>
+ <linearGradient id="cyan" x1="0" x2="1"><stop stop-color="#20d9ff"/><stop offset=".5" stop-color="#3d83f6"/><stop offset="1" stop-color="#08f0ff"/></linearGradient>
+ <linearGradient id="silver" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#fff"/><stop offset=".45" stop-color="#aebbd0"/><stop offset="1" stop-color="#fff"/></linearGradient>
+ <filter id="glow"><feGaussianBlur stdDeviation="10" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+ <filter id="soft"><feGaussianBlur stdDeviation="35"/></filter>
+</defs>
+<rect width="1600" height="1000" fill="url(#bg)"/>
+<circle cx="800" cy="420" r="360" fill="none" stroke="#087cff" stroke-opacity=".13" stroke-width="3"/>
+<circle cx="800" cy="420" r="300" fill="none" stroke="#22d3ee" stroke-opacity=".1" stroke-width="2" stroke-dasharray="25 18"/>
+<circle cx="800" cy="420" r="230" fill="none" stroke="#3d83f6" stroke-opacity=".12" stroke-width="2"/>
+<path d="M470 570 C560 270 1050 140 1190 390 C1260 515 1100 650 930 700" fill="none" stroke="#22d3ee" stroke-opacity=".18" stroke-width="32" filter="url(#soft)"/>
+<path d="M470 570 C560 270 1050 140 1190 390 C1260 515 1100 650 930 700" fill="none" stroke="url(#cyan)" stroke-width="12" filter="url(#glow)"/>
+<g filter="url(#glow)">
+ <path d="M615 250 H920 C1035 250 1085 315 1085 390 C1085 455 1038 505 962 520 L1090 690 H900 L790 535 H735 V690 H565 V300 C565 270 585 250 615 250 Z M735 355 V430 H895 C930 430 950 414 950 392 C950 368 930 355 895 355 Z" fill="url(#silver)" stroke="#7defff" stroke-width="5"/>
+ <path d="M735 535 L640 640 H735 Z" fill="#168cff"/>
+</g>
+<text x="800" y="825" text-anchor="middle" font-family="Segoe UI,Arial,sans-serif" font-size="150" font-weight="800" letter-spacing="4" fill="url(#silver)" filter="url(#glow)">Regul<tspan fill="#22d3ee">OS</tspan></text>
+<path d="M440 870 H1160" stroke="#22d3ee" stroke-opacity=".65" stroke-width="3"/>
+<path d="M650 870 H950" stroke="#22d3ee" stroke-width="8" filter="url(#glow)"/>
+</svg>
