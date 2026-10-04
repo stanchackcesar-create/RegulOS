@@ -260,3 +260,12 @@ body.regulos-has-sidebar main.wrap{max-width:none;margin-left:18px}
     display:none!important;
   }
 }
+
+
+/* REGULOS_MOBILE_SCHEDULE_NAV_FIX_V1 */
+@media(max-width:560px){
+  /* A Central de Automação abre o modal de Agendamentos no celular. */
+  .schedules-modal.schedules-open{
+    display:flex!important;
+  }
+}
