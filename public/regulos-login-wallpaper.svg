@@ -6,7 +6,7 @@
  <filter id="glow"><feGaussianBlur stdDeviation="10" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
  <filter id="soft"><feGaussianBlur stdDeviation="35"/></filter>
 </defs>
-<rect width="1600" height="1000" fill="url(#bg)"/>
+
 <circle cx="800" cy="420" r="360" fill="none" stroke="#087cff" stroke-opacity=".13" stroke-width="3"/>
 <circle cx="800" cy="420" r="300" fill="none" stroke="#22d3ee" stroke-opacity=".1" stroke-width="2" stroke-dasharray="25 18"/>
 <circle cx="800" cy="420" r="230" fill="none" stroke="#3d83f6" stroke-opacity=".12" stroke-width="2"/>
