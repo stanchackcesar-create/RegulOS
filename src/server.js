@@ -1384,8 +1384,29 @@ async function sendScheduledLink(item) {
 
         const randomIntro = chooseRandomMessage(item);
         const titleLine = productTitle ? `📦 ${productTitle}` : '';
-        const customMessage = String(item.mensagem || '').trim();
         const linkUrl = String(item.url||'').trim();
+        let customMessage = String(item.mensagem || '').trim();
+
+        // No modo "Montar oferta automaticamente", título e link são
+        // responsabilidade do montador do envio e aparecem uma única vez.
+        // Removemos apenas linhas que sejam duplicatas exatas, preservando
+        // qualquer texto personalizado que o usuário tenha escrito.
+        if (item.autoOfertaAutomatica === true && customMessage) {
+          const duplicateLines = new Set([
+            productTitle,
+            titleLine,
+            linkUrl,
+            '🛒 Confira a oferta:',
+            '👉 Garanta agora:'
+          ].filter(Boolean));
+          customMessage = customMessage
+            .split(/\r?\n/)
+            .filter(line => !duplicateLines.has(String(line).trim()))
+            .join('\n')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+        }
+
         const guaranteeLine = linkUrl ? '👉 Garanta agora:' : '';
         const text = [randomIntro, titleLine, customMessage, guaranteeLine, linkUrl].filter(Boolean).join('\n\n');
         if (productImage) {
