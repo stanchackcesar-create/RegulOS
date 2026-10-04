@@ -2778,7 +2778,7 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
 
     res.set('Cache-Control','no-store');
     res.json({
-      ok:true,resposta,periodo,periodoLabel,sugestoes,agendamentoSelecionado:agendamentoSelecionado?{id:agendamentoSelecionado.id,nome:agendamentoSelecionado.nome,horario:String(agendamentoSelecionado.horario||'').slice(0,5),grupoId:agendamentoSelecionado.grupoId,status:agendamentoSelecionado.status,ativo:agendamentoSelecionado.ativo}:null,
+      ok:true,resposta,periodo,periodoLabel,sugestoes,agendamentoSelecionado:agendamentoSelecionado?{id:agendamentoSelecionado.id,nome:agendamentoSelecionado.nome,horario:String(agendamentoSelecionado.horario||'').slice(0,5),grupoId:agendamentoSelecionado.grupoId,grupoIds:normalizeScheduleGroupIds(agendamentoSelecionado),grupoNome:agendamentoSelecionado.grupoNome||'',grupoNomes:agendamentoSelecionado.grupoNomes||{},status:agendamentoSelecionado.status,ativo:agendamentoSelecionado.ativo}:null,
       intervalo:{inicio:new Date(startMs).toISOString(),fim:new Date(endMs).toISOString()},
       metricas:{sucessos:success,erros:errors,emAndamento:sending,total,taxaSucesso:pct},
       diagnostico:{principaisFalhas:failureList,linkMaisCritico:ranking[0]||null,recomendacoes},
