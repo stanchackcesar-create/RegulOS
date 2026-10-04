@@ -2460,7 +2460,7 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
       }
     }else if(/\b(de ontem para hoje|de ontem ate hoje|de ontem a hoje|desde ontem|a partir de ontem)\b/.test(q)){
       startMs=addDays(todayStart,-1);endMs=addDays(todayStart,1);periodo=2;periodoLabel='ontem e hoje';
-    }else if(/\bontem\b/.test(q)&&!\bhoje\b/.test(q)){
+    }else if(/\bontem\b/.test(q)&&!/\bhoje\b/.test(q)){
       startMs=addDays(todayStart,-1);endMs=todayStart;periodo=1;periodoLabel='ontem';
     }else if(/\bhoje\b/.test(q)){
       startMs=todayStart;endMs=addDays(todayStart,1);periodo=1;periodoLabel='hoje';
