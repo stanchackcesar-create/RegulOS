@@ -3,10 +3,10 @@
   if(document.getElementById('regulosSidebar'))return;
   document.body.classList.add('regulos-has-sidebar');
   const nav=[
-    ['🏠','Dashboard',()=>window.scrollTo({top:0,behavior:'smooth'})],
+    ['🏠','Dashboard',()=>closeNav()],
     ['📅','Agendamentos',()=>window.openSchedulesPanel?.()],
-    ['🔗','Gerenciador de Links',()=>focusPanel('🔗 Gerenciador de links')],
-    ['📤','Entregas',()=>focusPanel('📤 Status das Entregas')],
+    ['🔗','Gerenciador de Links',()=>openPanelModalByTitle('🔗 Gerenciador de links')],
+    ['📤','Entregas',()=>openPanelModalByTitle('📤 Status das Entregas')],
     ['👥','Grupos',()=>window.openAllGroups?.()],
     ['📊','Monitor',()=>document.getElementById('regulosSchedulerMonitorBtn')?.click()],
     ['🩺','Diagnóstico',()=>window.openDiagnosticPanel?.()],
@@ -24,18 +24,47 @@
   toggle.addEventListener('click',()=>document.body.classList.toggle('regulos-sidebar-open'));
   const overlay=document.createElement('div');overlay.className='regulos-sidebar-overlay';overlay.addEventListener('click',closeNav);
   function closeNav(){document.body.classList.remove('regulos-sidebar-open')}
-  function focusPanel(title){
-    const panels=[...document.querySelectorAll('.panel')];
-    const p=panels.find(x=>String(x.querySelector('h2')?.textContent||'').includes(title));
-    if(p){p.scrollIntoView({behavior:'smooth',block:'start'});p.style.animation='regulosNavGlow .9s ease';setTimeout(()=>p.style.animation='',1000)}
+  function openPanelModalByTitle(title){
+    const panel=[...document.querySelectorAll('.panel')].find(x=>String(x.querySelector('h2')?.textContent||'').includes(title));
+    if(!panel)return;
+    const modalId='regulosNavPanelModal';
+    let modal=document.getElementById(modalId);
+    if(!modal){
+      modal=document.createElement('section');
+      modal.id=modalId;
+      modal.className='regulos-nav-modal';
+      modal.innerHTML='<div class="regulos-nav-modal-card"><div class="regulos-nav-modal-head"><strong id="regulosNavModalTitle"></strong><button type="button" aria-label="Fechar">✕</button></div><div id="regulosNavModalBody" class="regulos-nav-modal-body"></div></div>';
+      document.body.appendChild(modal);
+      modal.querySelector('button').addEventListener('click',closePanelModal);
+      modal.addEventListener('click',e=>{if(e.target===modal)closePanelModal();});
+    }
+    const body=modal.querySelector('#regulosNavModalBody');
+    const titleEl=modal.querySelector('#regulosNavModalTitle');
+    if(panel.parentElement===body)return;
+    panel.__regulosNavParent=panel.parentElement;
+    panel.__regulosNavNext=panel.nextSibling;
+    titleEl.textContent=title;
+    body.appendChild(panel);
+    modal.classList.add('open');
+    document.body.classList.add('regulos-nav-modal-open');
   }
+  function closePanelModal(){
+    const modal=document.getElementById('regulosNavPanelModal');
+    const body=modal?.querySelector('#regulosNavModalBody');
+    const panel=body?.querySelector('.panel');
+    if(panel?.__regulosNavParent){
+      const parent=panel.__regulosNavParent;
+      const next=panel.__regulosNavNext;
+      if(next&&next.parentNode===parent)parent.insertBefore(panel,next);else parent.appendChild(panel);
+      delete panel.__regulosNavParent;
+      delete panel.__regulosNavNext;
+    }
+    modal?.classList.remove('open');
+    document.body.classList.remove('regulos-nav-modal-open');
+  }
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closePanelModal()});
   document.body.append(aside,toggle,overlay);
-  window.regulosFocusPanel=focusPanel;
   const style=document.createElement('style');
   style.textContent='@keyframes regulosNavGlow{0%,100%{box-shadow:0 0 0 rgba(34,211,238,0)}50%{box-shadow:0 0 30px rgba(34,211,238,.32)}}';
   document.head.appendChild(style);
-  const originalStatus=window.status;
-  if(typeof originalStatus==='function'){
-    window.status=async function(){const result=await originalStatus.apply(this,arguments);const c=document.getElementById('conn')?.textContent||'';const n=document.getElementById('number')?.textContent||'Número: —';const s=document.getElementById('regulosSidebarStatus');const nn=document.getElementById('regulosSidebarNumber');if(s){s.textContent=c.includes('Conectado')?'WhatsApp conectado':'Sistema '+(c||'verificando')}if(nn)nn.textContent=n;return result};
-  }
 })();
