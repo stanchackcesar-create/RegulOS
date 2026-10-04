@@ -1,6 +1,6 @@
 /* REGULOS_NAV_V1 */
 .regulos-sidebar{
-  position:fixed;left:14px;right:auto;top:92px;bottom:14px;width:236px;z-index:900;
+  position:fixed;left:14px;right:auto;top:18px;bottom:14px;width:236px;z-index:900;
   padding:14px;background:rgba(7,16,30,.94);border:1px solid rgba(34,211,238,.28);
   border-radius:18px;box-shadow:0 20px 55px rgba(0,0,0,.42),0 0 22px rgba(34,211,238,.06);
   backdrop-filter:blur(16px);display:flex;flex-direction:column;gap:8px;
