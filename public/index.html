@@ -41,8 +41,7 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 @media(max-width:560px){
 .account-mobile-toggle{display:block;margin-top:14px}
 .account-mobile-toggle button{width:100%;min-height:44px;padding:10px 14px;font-weight:700}
-.account-panel{display:none}
-.account-panel.account-open{display:block}
+
 body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:sticky;top:0;padding:12px 12px}.title{font-size:22px}.sub{font-size:12px}.wrap{padding-left:10px;padding-right:10px}.cards{grid-template-columns:1fr 1fr;gap:8px}.card,.panel{padding:12px;border-radius:12px}.metric b{font-size:22px}.actions{gap:6px}.actions button{flex:1 1 calc(50% - 6px);min-height:44px;padding:11px 9px}.row>button{min-height:44px}.two{grid-template-columns:1fr}.group{align-items:stretch;flex-direction:column}.group .toggle{width:100%;min-height:44px}.groups{max-height:55vh;overflow:auto}.qr img{width:min(78vw,280px)}input,textarea,select{font-size:16px;min-height:44px}.link .row{display:grid;grid-template-columns:1fr 1fr}.link .row button{width:100%;min-height:44px}.checks{grid-template-columns:1fr}.modal{padding:8px}.modal-card{max-height:94vh}.modal-head{padding:12px}.modal-body{padding:10px;max-height:82vh}.all-groups{grid-template-columns:1fr}.all-group{flex-direction:column;align-items:stretch}.all-group button{width:100%;min-height:44px}.logs{height:220px}.notice{position:relative;z-index:1000}.accountPanel,.panel{overflow-wrap:anywhere}}
 .presence-dot{display:inline-block;width:11px;height:11px;border-radius:50%;flex:0 0 11px;box-shadow:0 0 0 2px rgba(255,255,255,.05)}
 .presence-online{background:#22c55e;box-shadow:0 0 8px rgba(34,197,94,.45)}
@@ -253,6 +252,12 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
   .message-float-panel{right:8px;bottom:calc(144px + env(safe-area-inset-bottom));width:calc(100vw - 16px)}
 }
 .account-mobile-toggle{display:none}
+.account-modal{position:fixed;inset:0;z-index:10050;background:rgba(3,8,18,.72);display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}
+.account-modal.account-open{display:flex}
+.account-modal-card{width:min(760px,calc(100vw - 40px));max-height:min(86vh,760px);overflow:auto;background:#111b2d;border:1px solid #34445c;border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,.55);padding:16px}
+.account-modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.account-modal-head h2{margin:0}
+.account-modal-head button{border:0;border-radius:9px;background:#34455f;color:#fff;font-size:20px;min-width:42px;min-height:42px;cursor:pointer}
 </style>
 </head>
 <body>
@@ -465,12 +470,17 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 </div>
 
 <div class="account-mobile-toggle">
-  <button id="accountMobileToggle" type="button" onclick="toggleAccountsMobile()">👤 Mostrar contas do RegulOS</button>
+  <button id="accountMobileToggle" type="button" onclick="openAccountsPanel()">👤 Mostrar contas do RegulOS</button>
 </div>
-<div class="panel account-panel" id="accountSection" style="margin-top:14px">
-<h2>👤 Contas do RegulOS</h2>
-<div id="accountPanel" class="muted">Carregando conta...</div>
-</div>
+<section id="accountSection" class="account-modal" aria-hidden="true">
+  <div class="account-modal-card">
+    <div class="account-modal-head">
+      <h2>👤 Contas do RegulOS</h2>
+      <button type="button" onclick="closeAccountsPanel()" aria-label="Fechar">✕</button>
+    </div>
+    <div id="accountPanel" class="muted">Carregando conta...</div>
+  </div>
+</section>
 
 <div class="panel" style="margin-top:14px">
 <h2>📜 Logs</h2><div id="logs" class="logs"></div>
@@ -1212,17 +1222,19 @@ function openAccountsPanel(){
   const panel=document.getElementById('accountSection');
   if(!panel)return;
   panel.classList.add('account-open');
-  panel.scrollIntoView({behavior:'smooth',block:'start'});
-  const btn=document.getElementById('accountMobileToggle');
-  if(btn)btn.textContent='✖ Ocultar contas do RegulOS';
+  panel.setAttribute('aria-hidden','false');
+}
+function closeAccountsPanel(){
+  const panel=document.getElementById('accountSection');
+  if(!panel)return;
+  panel.classList.remove('account-open');
+  panel.setAttribute('aria-hidden','true');
 }
 function toggleAccountsMobile(){
   const panel=document.getElementById('accountSection');
-  const btn=document.getElementById('accountMobileToggle');
-  if(!panel||!btn)return;
-  const open=panel.classList.toggle('account-open');
-  btn.textContent=open?'✖ Ocultar contas do RegulOS':'👤 Mostrar contas do RegulOS';
-  if(open)setTimeout(()=>panel.scrollIntoView({behavior:'smooth',block:'start'}),40);
+  if(!panel)return;
+  panel.classList.toggle('account-open');
+  panel.setAttribute('aria-hidden',panel.classList.contains('account-open')?'false':'true');
 }
 async function loadAccount(){
  try{
