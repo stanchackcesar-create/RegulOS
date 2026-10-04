@@ -72,7 +72,7 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 
 /* REGULOS_ASSISTENTE_FLUTUANTE_V1 */
 .assistant-float-launcher{
-  position:fixed;right:20px;bottom:20px;z-index:70;
+  position:fixed;right:20px;bottom:20px;z-index:9999;pointer-events:auto;
   width:58px;height:58px;border-radius:50%;border:0;
   background:#3d83f6;color:#fff;font-size:25px;
   box-shadow:0 10px 30px rgba(0,0,0,.35);
@@ -80,7 +80,7 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 }
 .assistant-float-launcher:hover{filter:brightness(1.08)}
 .assistant-float-panel{
-  position:fixed;right:20px;bottom:88px;z-index:71;
+  position:fixed;right:20px;bottom:88px;z-index:10000;pointer-events:auto;
   width:min(390px,calc(100vw - 28px));height:min(600px,calc(100dvh - 110px));
   background:#111b2d;border:1px solid #34445c;border-radius:18px;
   box-shadow:0 20px 70px rgba(0,0,0,.5);display:none;overflow:hidden;
@@ -231,11 +231,11 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 
 
 <!-- REGULOS_ASSISTENTE_FLUTUANTE_V1 -->
-<button id="assistantFloatLauncher" class="assistant-float-launcher" type="button" aria-label="Abrir Assistente do RegulOS" title="Assistente do RegulOS">🤖</button>
+<button id="assistantFloatLauncher" class="assistant-float-launcher" type="button" aria-label="Abrir Assistente do RegulOS" title="Assistente do RegulOS" onclick="document.getElementById('assistantFloatPanel')?.classList.add('open');document.getElementById('assistantFloatInput')?.focus()">🤖</button>
 <section id="assistantFloatPanel" class="assistant-float-panel" aria-label="Assistente do RegulOS">
   <div class="assistant-float-head">
     <div><strong>🤖 Assistente do RegulOS</strong><div class="muted" style="font-size:11px">Análise dos dados do RegulOS</div></div>
-    <button id="assistantFloatClose" class="assistant-float-close" type="button" aria-label="Fechar">✕</button>
+    <button id="assistantFloatClose" class="assistant-float-close" type="button" aria-label="Fechar" onclick="document.getElementById('assistantFloatPanel')?.classList.remove('open');document.getElementById('assistantFloatInput')?.blur()">✕</button>
   </div>
   <div class="assistant-float-body">
     <div id="assistantFloatMessages" class="assistant-float-messages" aria-live="polite">
