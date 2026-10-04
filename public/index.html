@@ -7,6 +7,21 @@
 <style>
 *{box-sizing:border-box}body{margin:0;background:#080e1a;color:#eef3ff;font-family:Segoe UI,Arial,sans-serif}
 header{padding:18px 24px;border-bottom:1px solid #26344d;background:#111b2d;position:sticky;top:0;z-index:5}
+.header-bot-schedule{display:flex;align-items:center;gap:7px;padding:5px 7px;border:1px solid #263653;border-radius:10px;background:#0b1423}
+.header-bot-schedule label{display:flex;align-items:center;gap:4px;font-size:11px;color:#9eb0ca}
+.header-bot-schedule input[type=time]{width:92px;min-height:36px;padding:6px 7px;font-size:14px}
+.header-bot-schedule .header-bot-active{white-space:nowrap}
+.header-bot-schedule .header-bot-active input{width:auto;min-height:auto}
+.header-bot-schedule button{min-height:36px;padding:7px 10px}
+@media(max-width:900px){
+  .header-bot-schedule{width:100%;order:10;flex-wrap:wrap}
+  .header-bot-schedule label{flex:1}
+  .header-bot-schedule input[type=time]{width:100%}
+}
+@media(max-width:560px){
+  .header-bot-schedule{padding:7px}
+  .header-bot-schedule label{min-width:120px}
+}
 .wrap{max-width:1240px;margin:auto}.title{font-size:28px;font-weight:800}.sub{color:#9eb0ca;font-size:13px}
 button{border:0;border-radius:9px;padding:10px 15px;font-weight:700;cursor:pointer;background:#34445c;color:white}
 button:hover{filter:brightness(1.08)}button.primary{background:#3d83f6}button.green{background:#20c55a;color:#06100a}button.red{background:#ef4444}
@@ -221,6 +236,13 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 <button onclick="apiAction('/api/desconectar')">⛔ Desconectar</button>
 <button onclick="document.getElementById('regulosSchedulerMonitorBtn')?.click()">📊 Monitor</button>
 <button onclick="openAllGroups()">👥 Grupos</button>
+<div class="header-bot-schedule" title="Programação do bot">
+  <span class="badge neutral" id="windowBadge">...</span>
+  <label>⏰ Liga <input id="botInicio" type="time"></label>
+  <label>Desliga <input id="botFim" type="time"></label>
+  <label class="header-bot-active"><input id="botAtivo" type="checkbox"> Ativo</label>
+  <button class="primary" type="button" onclick="saveBotSchedule()">💾 Salvar</button>
+</div>
 <button class="red" onclick="novoQR()">📱 Novo QR</button>
 </div>
 </div></header>
@@ -398,16 +420,6 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 <div id="scheduleFilterResult" class="schedule-filter-result"></div>
 <div id="schedules" class="schedule-scroll" style="margin-top:10px">Carregando agendamentos...</div>
 </div>
-
-<div class="panel" style="margin-top:14px">
-<h2>🤖 Programação do bot <span id="windowBadge" class="badge neutral">...</span></h2>
-<div class="muted">Controla somente a janela geral em que o bot pode enviar. Escolha manualmente o início e a parada; nenhum horário é definido automaticamente.</div>
-<div class="two"><div><label>Horário liga</label><input id="botInicio" type="time"></div><div><label>Horário desliga</label><input id="botFim" type="time"></div></div>
-<label><input id="botAtivo" type="checkbox" style="width:auto"> Ativar programação do bot</label>
-<button class="primary" onclick="saveBotSchedule()">💾 Salvar programação</button>
-<div id="botResult" class="muted">Nenhum horário definido.</div>
-</div>
-
 
 <div class="panel" style="margin-top:14px">
 <h2>👤 Contas do RegulOS</h2>
