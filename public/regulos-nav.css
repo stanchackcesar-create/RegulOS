@@ -176,3 +176,9 @@ body.regulos-has-sidebar main.wrap{max-width:none;margin-left:18px}
     max-width:100%!important;
   }
 }
+
+/* REGULOS_MOBILE_TITLE_FIX_V1 */
+@media(max-width:560px){
+  header .title{display:block!important;font-size:22px!important;white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important}
+  header .sub{display:block!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+}
