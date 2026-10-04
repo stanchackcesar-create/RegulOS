@@ -187,6 +187,19 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
   }
   /* O monitor continua acessível pelo botão do cabeçalho, mas não cobre conteúdo no celular. */
   #regulosSchedulerMonitorBtn{display:none!important}
+.message-float-launcher{position:fixed;right:20px;bottom:86px;z-index:10001;width:58px;height:58px;border:0;border-radius:50%;background:#22c55e;color:#fff;font-size:24px;cursor:pointer;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.message-float-panel{position:fixed;right:20px;bottom:154px;z-index:10002;width:min(380px,calc(100vw - 32px));background:#111b2d;border:1px solid #34445c;border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.5);display:none;overflow:hidden}
+.message-float-panel.open{display:block}
+.message-float-head{display:flex;justify-content:space-between;align-items:center;padding:11px 13px;background:#17243a;border-bottom:1px solid #263653}
+.message-float-close{border:0;background:transparent;color:#dbe7f7;font-size:18px;cursor:pointer}
+.message-float-form{padding:12px}
+.message-float-form textarea{width:100%;min-height:96px;resize:vertical;box-sizing:border-box}
+.message-float-actions{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:8px}
+.message-float-actions button{min-height:42px;padding:9px 14px}
+@media(max-width:560px){
+  .message-float-launcher{right:12px;bottom:calc(78px + env(safe-area-inset-bottom));width:54px;height:54px}
+  .message-float-panel{right:8px;bottom:calc(144px + env(safe-area-inset-bottom));width:calc(100vw - 16px)}
+}
   #regulosSchedulerMonitor .sm-card{
     width:100%;
     max-height:calc(100dvh - 16px);
@@ -247,6 +260,22 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 </div>
 </div></header>
 
+
+<!-- REGULOS_ENVIO_MENSAGEM_FLUTANTE_V1 -->
+<button id="messageFloatLauncher" class="message-float-launcher" type="button" aria-label="Enviar mensagem" title="Enviar mensagem">📤</button>
+<section id="messageFloatPanel" class="message-float-panel" aria-label="Enviar mensagem">
+  <div class="message-float-head">
+    <strong>📤 Enviar mensagem</strong>
+    <button id="messageFloatClose" class="message-float-close" type="button" aria-label="Fechar">✕</button>
+  </div>
+  <form id="messageFloatForm" class="message-float-form" autocomplete="off">
+    <textarea id="messageFloatInput" rows="4" placeholder="Digite sua mensagem..." autocomplete="off"></textarea>
+    <div class="message-float-actions">
+      <span id="messageFloatResult" class="muted"></span>
+      <button class="green" type="submit">📤 Enviar</button>
+    </div>
+  </form>
+</section>
 
 <!-- REGULOS_ASSISTENTE_FLUTUANTE_V1 -->
 <button id="assistantFloatLauncher" class="assistant-float-launcher" type="button" aria-label="Abrir Assistente do RegulOS" title="Assistente do RegulOS" onclick="document.getElementById('assistantFloatPanel')?.classList.add('open');document.getElementById('assistantFloatInput')?.focus()">🤖</button>
@@ -1276,6 +1305,39 @@ setTimeout(()=>{refreshAccountPresence();},1500);
 <script>
 /* REGULOS_ASSISTENTE_FLUTUANTE_V1 */
 (function(){
+  const messageLauncher=document.getElementById('messageFloatLauncher');
+  const messagePanel=document.getElementById('messageFloatPanel');
+  const messageClose=document.getElementById('messageFloatClose');
+  const messageForm=document.getElementById('messageFloatForm');
+  const messageInput=document.getElementById('messageFloatInput');
+  const messageResult=document.getElementById('messageFloatResult');
+
+  messageLauncher?.addEventListener('click',()=>{
+    messagePanel?.classList.toggle('open');
+    if(messagePanel?.classList.contains('open')) messageInput?.focus();
+  });
+  messageClose?.addEventListener('click',()=>{
+    messagePanel?.classList.remove('open');
+    messageInput?.blur();
+  });
+  messageForm?.addEventListener('submit',async e=>{
+    e.preventDefault();
+    const message=String(messageInput?.value||'').trim();
+    if(!message){messageResult.textContent='Digite uma mensagem.';return;}
+    const btn=messageForm.querySelector('button[type="submit"]');
+    if(btn){btn.disabled=true;btn.textContent='⏳ Enviando...';}
+    messageResult.textContent='';
+    try{
+      const d=await jfetch('/api/mensagem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message})});
+      messageResult.textContent=d.msg||'Mensagem enviada.';
+      messageInput.value='';
+      await loadDashboard();
+    }catch(e){messageResult.textContent=friendlyFetchError(e);}
+    finally{
+      if(btn){btn.disabled=false;btn.textContent='📤 Enviar';}
+    }
+  });
+
   const launcher=document.getElementById('assistantFloatLauncher');
   const panel=document.getElementById('assistantFloatPanel');
   const close=document.getElementById('assistantFloatClose');
