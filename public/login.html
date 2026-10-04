@@ -1,1 +1,148 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Entrar — RegulOS</title><style>body{margin:0;background:linear-gradient(rgba(2,6,14,.62),rgba(2,6,14,.72)),url("/regulos-login-wallpaper.svg") center/cover fixed;color:#eef3ff;font-family:Segoe UI,Arial;display:flex;min-height:100vh;align-items:center;justify-content:center}.box{width:min(420px,92vw);background:rgba(8,16,30,.88);backdrop-filter:blur(10px);border:1px solid #263653;border-radius:18px;padding:28px;box-shadow:0 20px 60px #000b,0 0 30px rgba(34,211,238,.12)}h1{margin:0 0 8px}p{color:#9eb0ca}label{display:block;margin:14px 0 6px;color:#c6d2e7;font-size:13px}input{width:100%;box-sizing:border-box;background:#07101f;color:#eef3ff;border:1px solid #34445c;border-radius:9px;padding:12px;font:inherit}button{width:100%;margin-top:18px;border:0;border-radius:9px;padding:12px;background:#3d83f6;color:white;font-weight:800;cursor:pointer}.err{margin-top:12px;padding:10px;border-radius:9px;background:#481c27;color:#ffd3d8}.small{font-size:12px;color:#7f91ac;text-align:center;margin-top:16px}</style></head><body><div class="box"><h1>⚙️ RegulOS</h1><p>Entre para acessar o painel compartilhado.</p><form id="f"><label>Usuário</label><input id="u" autocomplete="username" required><label>Senha</label><input id="s" type="password" autocomplete="current-password" required><button>Entrar</button></form><div id="e"></div><div class="small">A sessão do WhatsApp e os dados continuam compartilhados entre os usuários autorizados.</div></div><script>async function init(){try{const r=await fetch('/api/auth/status');const d=await r.json();if(d.autenticado)location.href='/';if(!d.configurado)location.href='/configurar';}catch(e){document.getElementById('e').textContent='Servidor indisponível.'}}document.getElementById('f').onsubmit=async e=>{e.preventDefault();const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario:u.value,senha:s.value})});const d=await r.json();if(r.ok)location.href='/';else document.getElementById('e').className='err',document.getElementById('e').textContent=d.msg||'Não foi possível entrar.'};init();</script></body></html>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Entrar — RegulOS</title>
+<style>
+*{box-sizing:border-box}
+html,body{min-height:100%}
+body{
+  margin:0;
+  min-height:100vh;
+  overflow:hidden;
+  color:#eef7ff;
+  font-family:Segoe UI,Arial,sans-serif;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:
+    radial-gradient(circle at 50% 38%,rgba(22,106,170,.18),transparent 28%),
+    radial-gradient(circle at 15% 80%,rgba(34,211,238,.08),transparent 25%),
+    radial-gradient(circle at 85% 20%,rgba(61,131,246,.09),transparent 25%),
+    linear-gradient(135deg,#02050c 0%,#06101d 48%,#02050b 100%);
+}
+body:before{
+  content:"";
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  background:
+    linear-gradient(rgba(34,211,238,.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(34,211,238,.025) 1px,transparent 1px);
+  background-size:55px 55px;
+  mask-image:linear-gradient(to bottom,transparent 0%,black 35%,black 70%,transparent 100%);
+}
+.wallpaper{
+  position:fixed;
+  width:min(980px,78vw);
+  height:auto;
+  left:50%;
+  top:43%;
+  transform:translate(-50%,-50%);
+  opacity:.18;
+  filter:drop-shadow(0 0 28px rgba(34,211,238,.24));
+  pointer-events:none;
+}
+.wallpaper:after{content:""}
+.box{
+  position:relative;
+  z-index:2;
+  width:min(420px,92vw);
+  padding:28px;
+  background:linear-gradient(145deg,rgba(12,25,43,.94),rgba(5,12,22,.94));
+  border:1px solid rgba(34,211,238,.32);
+  border-radius:18px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.045),
+    0 25px 80px rgba(0,0,0,.65),
+    0 0 35px rgba(34,211,238,.1);
+  backdrop-filter:blur(14px);
+}
+.box:before{
+  content:"";
+  position:absolute;
+  left:28px;right:28px;top:0;
+  height:2px;
+  background:linear-gradient(90deg,transparent,#22d3ee,transparent);
+  box-shadow:0 0 14px rgba(34,211,238,.6);
+}
+.brand{display:flex;align-items:center;gap:11px;margin-bottom:8px}
+.brand-mark{
+  width:38px;height:38px;border-radius:11px;
+  display:grid;place-items:center;
+  color:#fff;font-size:22px;font-weight:900;
+  background:linear-gradient(135deg,#2563eb,#06b6d4);
+  border:1px solid #72eaff;
+  box-shadow:0 0 20px rgba(34,211,238,.28);
+}
+h1{margin:0;font-size:29px;letter-spacing:-.5px}
+h1 span{color:#22d3ee;text-shadow:0 0 14px rgba(34,211,238,.32)}
+p{color:#9eb0ca;margin:0 0 18px}
+label{display:block;margin:14px 0 6px;color:#cbd8ea;font-size:13px}
+input{
+  width:100%;height:46px;
+  box-sizing:border-box;
+  background:#07111f!important;
+  color:#eef7ff!important;
+  border:1px solid #334c6d;
+  border-radius:9px;
+  padding:12px;
+  font:inherit;
+  outline:none;
+}
+input:focus{
+  border-color:#22d3ee;
+  box-shadow:0 0 0 2px rgba(34,211,238,.08),0 0 18px rgba(34,211,238,.12);
+}
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus{
+  -webkit-text-fill-color:#eef7ff!important;
+  -webkit-box-shadow:0 0 0 1000px #07111f inset!important;
+  box-shadow:0 0 0 1000px #07111f inset!important;
+  caret-color:#eef7ff;
+}
+button{
+  width:100%;
+  height:46px;
+  margin-top:18px;
+  border:1px solid #70eaff;
+  border-radius:9px;
+  padding:12px;
+  background:linear-gradient(135deg,#286fe4,#06aeca);
+  color:white;
+  font-weight:800;
+  cursor:pointer;
+  box-shadow:0 0 20px rgba(34,211,238,.16),0 8px 20px rgba(0,0,0,.28);
+  transition:filter .16s ease,box-shadow .16s ease;
+}
+button:hover{filter:brightness(1.08);box-shadow:0 0 26px rgba(34,211,238,.28),0 9px 22px rgba(0,0,0,.32)}
+.err{margin-top:12px;padding:10px;border-radius:9px;background:#481c27;color:#ffd3d8;border:1px solid #ef444466}
+.small{font-size:12px;color:#7f91ac;text-align:center;margin-top:16px;line-height:1.45}
+@media(max-width:600px){
+  body{overflow:auto;padding:18px}
+  .wallpaper{width:125vw;top:50%;opacity:.12}
+  .box{width:100%;padding:24px 20px}
+}
+</style>
+</head>
+<body>
+<img class="wallpaper" src="/regulos-login-wallpaper.svg" alt="">
+<div class="box">
+  <div class="brand"><div class="brand-mark">R</div><h1>Regul<span>OS</span></h1></div>
+  <p>Entre para acessar o painel compartilhado.</p>
+  <form id="f">
+    <label>Usuário</label><input id="u" autocomplete="username" required>
+    <label>Senha</label><input id="s" type="password" autocomplete="current-password" required>
+    <button>Entrar</button>
+  </form>
+  <div id="e"></div>
+  <div class="small">A sessão do WhatsApp e os dados continuam compartilhados entre os usuários autorizados.</div>
+</div>
+<script>
+async function init(){try{const r=await fetch('/api/auth/status');const d=await r.json();if(d.autenticado)location.href='/';if(!d.configurado)location.href='/configurar';}catch(e){document.getElementById('e').textContent='Servidor indisponível.'}}
+document.getElementById('f').onsubmit=async e=>{e.preventDefault();const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario:u.value,senha:s.value})});const d=await r.json();if(r.ok)location.href='/';else document.getElementById('e').className='err',document.getElementById('e').textContent=d.msg||'Não foi possível entrar.'};init();
+</script>
+</body>
+</html>
