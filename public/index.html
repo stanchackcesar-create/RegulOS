@@ -344,13 +344,6 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 </div>
 
 <div class="panel" style="margin-top:14px">
-<h2>💬 Enviar mensagem</h2>
-<div class="muted">A mensagem é enviada somente aos grupos que estiverem <b>Ligados</b>.</div>
-<textarea id="message" placeholder="Digite sua mensagem..."></textarea>
-<div class="row" style="margin-top:8px"><button class="green" onclick="sendMessage()">📤 Enviar mensagem</button><span id="sendResult" class="muted"></span></div>
-</div>
-
-<div class="panel" style="margin-top:14px">
 <div class="row" style="justify-content:space-between;align-items:center">
   <div>
     <h2 style="margin:0">📤 Status das Entregas</h2>
@@ -618,10 +611,6 @@ function openAllGroups(){
   window.location.href='/grupos';
 }
 
-async function sendMessage(){
- const message=document.getElementById('message').value.trim();if(!message)return toast('Digite uma mensagem.',true);
- try{const d=await jfetch('/api/mensagem',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message})});document.getElementById('sendResult').textContent=d.msg;document.getElementById('message').value='';await loadDashboard()}catch(e){const msg=friendlyFetchError(e);document.getElementById('sendResult').textContent=msg;toast(msg,true)}
-}
 function clearLinkForm(){
  const ids=['lnome','lurl','limagemUrl','lmensagem','ldata','lhorario','lmin'];
  ids.forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
