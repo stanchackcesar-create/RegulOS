@@ -79,3 +79,20 @@ body.regulos-has-sidebar main.wrap{max-width:none;margin-left:18px}
   .regulos-nav-modal-card{width:100%;max-height:94vh;border-radius:14px}
   .regulos-nav-modal-body{max-height:calc(94vh - 68px);padding:10px}
 }
+
+/* REGULOS_SIDEBAR_METRICS_V1 */
+.regulos-sidebar-metrics{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:5px;padding:6px 0 2px;
+}
+.regulos-sidebar-metrics>div{
+  min-width:0;padding:7px 5px;border:1px solid rgba(34,211,238,.16);border-radius:9px;
+  background:rgba(11,20,35,.72);text-align:center;
+}
+.regulos-sidebar-metrics span{
+  display:block;color:#8fa6c5;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.regulos-sidebar-metrics b{display:block;margin-top:2px;font-size:17px;color:#eef3ff}
+.regulos-dashboard-metrics{display:none!important}
+@media(max-width:700px){
+  .regulos-sidebar-metrics{grid-template-columns:repeat(3,1fr)}
+}
