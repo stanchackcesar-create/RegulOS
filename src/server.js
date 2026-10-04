@@ -2650,7 +2650,7 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
           resposta=(indice>0?'⏭️ O próximo agendamento na sequência é:\n':'⏭️ O próximo link programado é:\n')+formatSchedule(futuros[indice].item);
         }
       }
-    }    }else if(intencaoPausados){
+    }else if(intencaoPausados){
       const pausados=schedules.filter(item=>item.ativo===false || String(item.status||'').toLowerCase()==='pausado');
       if(!pausados.length) resposta='✅ Não encontrei links ou agendamentos pausados.';
       else resposta='⏸️ Encontrei '+pausados.length+' agendamento(s) pausado(s):\n'+pausados.map(formatSchedule).join('\n');
