@@ -1,6 +1,6 @@
 /* REGULOS_NAV_V1 */
 .regulos-sidebar{
-  position:fixed;right:14px;top:92px;bottom:14px;width:236px;z-index:900;
+  position:fixed;left:14px;right:auto;top:92px;bottom:14px;width:236px;z-index:900;
   padding:14px;background:rgba(7,16,30,.94);border:1px solid rgba(34,211,238,.28);
   border-radius:18px;box-shadow:0 20px 55px rgba(0,0,0,.42),0 0 22px rgba(34,211,238,.06);
   backdrop-filter:blur(16px);display:flex;flex-direction:column;gap:8px;
@@ -31,11 +31,11 @@
   width:44px;height:44px;padding:0;border-radius:12px;background:#10233b;border:1px solid rgba(34,211,238,.38);
 }
 .regulos-sidebar-overlay{display:none}
-body.regulos-has-sidebar{padding-right:264px}
+body.regulos-has-sidebar{padding-left:264px;padding-right:0}
 body.regulos-has-sidebar header .wrap{max-width:none}
 body.regulos-has-sidebar main.wrap{max-width:none;margin-left:18px}
 @media(max-width:1100px) and (min-width:701px){
-  .regulos-sidebar{width:210px}.regulos-sidebar-toggle{display:none}body.regulos-has-sidebar{padding-right:226px}
+  .regulos-sidebar{width:210px}.regulos-sidebar-toggle{display:none}body.regulos-has-sidebar{padding-left:226px;padding-right:0}
 }
 @media(max-width:700px){
   .regulos-sidebar{
