@@ -300,3 +300,33 @@ body.regulos-has-sidebar main.wrap{max-width:none;margin-left:18px}
     bottom:calc(14px + env(safe-area-inset-bottom))!important;
   }
 }
+
+/* REGULOS_NEON_BRAND_BACKGROUND_V1 */
+.regulos-sidebar-brand{display:flex;flex-direction:column;align-items:flex-start}
+.regulos-sidebar-logo{
+  display:block;
+  width:132px;
+  height:54px;
+  object-fit:contain;
+  object-position:center;
+  margin:0 0 2px -2px;
+  filter:drop-shadow(0 0 9px rgba(34,211,238,.22));
+}
+@media(max-width:700px){
+  .regulos-sidebar-logo{width:142px;height:58px}
+}
+/* Marca d'água visual: somente aparência, sem alterar layout. */
+body.regulos-has-sidebar{
+  background:
+    linear-gradient(rgba(3,8,18,.91),rgba(3,8,18,.94)),
+    url("/regulos-login-wallpaper.svg") center 38%/cover fixed no-repeat;
+  background-color:#040812;
+}
+@media(max-width:700px){
+  body.regulos-has-sidebar{
+    background:
+      linear-gradient(rgba(3,8,18,.95),rgba(3,8,18,.97)),
+      url("/regulos-login-wallpaper.svg") center 34%/auto 82% fixed no-repeat;
+    background-color:#040812;
+  }
+}
