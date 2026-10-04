@@ -253,3 +253,13 @@ select,select option,select optgroup{color:var(--rg-text);background-color:#0b14
     box-shadow:0 0 0 2px rgba(34,211,238,.12),0 0 22px rgba(34,211,238,.2),inset 0 0 12px rgba(0,0,0,.2)!important;
   }
 }
+
+/* REGULOS_WALLPAPER_VISIBILITY_V2 — mobile */
+@media(max-width:700px){
+  body.regulos-has-sidebar{
+    background:
+      linear-gradient(rgba(3,8,18,.76),rgba(3,8,18,.82)),
+      url("/regulos-login-wallpaper.svg") center 38%/auto 96% fixed no-repeat!important;
+    background-color:#040812!important;
+  }
+}
