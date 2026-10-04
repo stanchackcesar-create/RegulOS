@@ -2492,7 +2492,20 @@ app.put('/api/link-falhas/:id',(req,res)=>{
   upsertLinkFailure(item,failure.grupoId,failure.erro);
   res.json({ok:true,agendamento:item});
 });
-app.delete('/api/link-falhas',(req,res)=>{ const total=linkFailures.length; clearLinkFailures(); res.json({ok:true,msg:`Links com falha limpos. ${total} registro(s) removido(s).`}); });
+app.delete('/api/link-falhas',(req,res)=>{
+  const total=linkFailures.length;
+  clearLinkFailures();
+
+  // "Limpar falhas" também remove do Status das Entregas os registros
+  // finalizados com ERRO. Sucessos e entregas ainda em andamento são preservados.
+  const beforeDeliveries=linkDeliveries.length;
+  linkDeliveries=linkDeliveries.filter(x=>String(x?.status||'').toUpperCase()!=='ERRO');
+  const removedDeliveries=beforeDeliveries-linkDeliveries.length;
+  if(removedDeliveries>0) saveLinkDeliveries();
+
+  addLog(`Links com falha limpos pelo painel: ${total} falha(s) e ${removedDeliveries} entrega(s) com ERRO removidas.`);
+  res.json({ok:true,msg:`Links com falha limpos. ${total} falha(s) e ${removedDeliveries} registro(s) de ERRO removidos.`});
+});
 
 app.get('/api/link-imagem-preview', async (req,res)=>{
   const url=String(req.query?.url||'').trim();
