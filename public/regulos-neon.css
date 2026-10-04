@@ -263,3 +263,83 @@ select,select option,select optgroup{color:var(--rg-text);background-color:#0b14
     background-color:#040812!important;
   }
 }
+
+/* REGULOS_GLASS_NEON_V1 — glassmorphism + interactive neon, visual only */
+.card,.panel,.link,.group,.all-group,.random-box,.header-bot-schedule{
+  background:linear-gradient(145deg,rgba(18,34,55,.68),rgba(5,14,27,.76))!important;
+  backdrop-filter:blur(14px) saturate(125%);
+  -webkit-backdrop-filter:blur(14px) saturate(125%);
+  border-color:rgba(87,166,255,.38);
+}
+.card:hover,.panel:hover,.link:hover,.group:hover,.all-group:hover{
+  border-color:rgba(34,211,238,.72);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.06),
+    0 14px 36px rgba(0,0,0,.32),
+    0 0 22px rgba(34,211,238,.14);
+}
+button{
+  background:linear-gradient(145deg,rgba(37,57,81,.82),rgba(14,29,48,.88));
+  backdrop-filter:blur(10px) saturate(125%);
+  -webkit-backdrop-filter:blur(10px) saturate(125%);
+}
+button:hover{
+  border-color:rgba(34,211,238,.78);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.07),
+    0 0 18px rgba(34,211,238,.18),
+    0 8px 22px rgba(0,0,0,.3);
+}
+button:active{
+  filter:brightness(1.1);
+  border-color:#7cecff;
+  box-shadow:
+    inset 0 0 12px rgba(34,211,238,.08),
+    0 0 12px rgba(34,211,238,.34),
+    0 0 28px rgba(34,211,238,.16);
+}
+.regulos-sidebar{
+  background:linear-gradient(145deg,rgba(8,20,36,.76),rgba(3,10,20,.84))!important;
+  backdrop-filter:blur(18px) saturate(135%);
+  -webkit-backdrop-filter:blur(18px) saturate(135%);
+  border-color:rgba(34,211,238,.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.04),
+    0 20px 55px rgba(0,0,0,.46),
+    0 0 26px rgba(34,211,238,.08);
+}
+.regulos-nav button:hover,.regulos-nav button.active{
+  background:linear-gradient(90deg,rgba(34,211,238,.16),rgba(61,131,246,.11));
+  border-color:rgba(34,211,238,.52);
+  box-shadow:0 0 18px rgba(34,211,238,.12);
+}
+input,textarea,select{
+  background:rgba(3,11,21,.72)!important;
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+}
+.modal-card,.diagnostic-modal-card,.schedules-modal-card,.logs-modal-card,.regulos-nav-modal-card{
+  background:linear-gradient(145deg,rgba(14,29,48,.84),rgba(4,12,23,.9))!important;
+  backdrop-filter:blur(18px) saturate(130%);
+  -webkit-backdrop-filter:blur(18px) saturate(130%);
+  border-color:rgba(34,211,238,.42);
+}
+.assistant-float-panel,.message-float-panel,#regulosSchedulerMonitor .sm-card{
+  background:linear-gradient(145deg,rgba(13,29,48,.82),rgba(4,12,23,.9))!important;
+  backdrop-filter:blur(18px) saturate(130%);
+  -webkit-backdrop-filter:blur(18px) saturate(130%);
+}
+@media(max-width:700px){
+  .card,.panel,.link,.group,.all-group,.random-box{
+    background:linear-gradient(145deg,rgba(16,31,51,.72),rgba(5,14,27,.78))!important;
+    backdrop-filter:blur(12px) saturate(125%);
+    -webkit-backdrop-filter:blur(12px) saturate(125%);
+  }
+  button:active,.regulos-nav button:active{
+    border-color:#75edff!important;
+    box-shadow:
+      inset 0 0 12px rgba(34,211,238,.12),
+      0 0 14px rgba(34,211,238,.38),
+      0 0 30px rgba(34,211,238,.2)!important;
+  }
+}
