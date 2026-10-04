@@ -2524,9 +2524,9 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     if(sending>0) recomendacoes.push('Há '+sending+' entrega(s) ainda em andamento; aguarde a conclusão antes de interpretar esse resultado como definitivo.');
     if(!total&&!failures.length) recomendacoes.push('Não há dados de entrega no período selecionado; confirme se houve envio nesse intervalo.');
 
-    const intencaoAgendamentos=/\b(quais|qual|mostre|mostrar|liste|listar|tem|tenho|estao|esta|estao|o que)\b/.test(q)
+    const intencaoAgendamentos=/\b(quais|qual|mostre|mostrar|liste|listar|tem|tenho|estao|esta|o que)\b/.test(q)
       && /\b(link|links|agendamento|agendamentos)\b/.test(q)
-      && /\b(agendad|programad|programacao|programacoes|marcad|previst)\b/.test(q);
+      && /\b(agendad\w*|programad\w*|programacao|programacoes|marcad\w*|previst\w*)\b/.test(q);
     const intencaoAgendamentosHoje=intencaoAgendamentos || (continuidade&&contextoEraAgendamento);
     const intencaoComparar=/\b(compar|compare|comparar|melhorou|piorou|evolucao|evoluiu)\b/.test(q);
     const intencaoAnalise=/\b(como esta|como estao|analise|analisar|desempenho|resultado|resultados|situacao)\b/.test(q);
