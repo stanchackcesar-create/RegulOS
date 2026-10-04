@@ -2599,7 +2599,62 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
       &&/\b(link|links|agendamento|agendamentos)\b/.test(q);
     const intencaoRecomendacaoAgendamento=(Boolean(agendamentoContexto)||Boolean(horarioAnterior)||Boolean(horarioNormalizado))&&/\b(recomenda|recomendacao|sugestao|sugira|o que devo|o que eu deveria|que devo|o que fazer|o que eu faco|como melhorar|devo fazer)\b/.test(q)
       &&(/\b(link|agendamento|agendado|programado|ele|esse|desse)\b/.test(q)||Boolean(agendamentoContexto));
-    if(intencaoDetalhesAgendamento){
+    const intencaoDiagnosticoAgendamento=(Boolean(agendamentoContexto)||Boolean(horarioAnterior)||Boolean(horarioNormalizado))
+      &&/\b(problema|problemas|erro|erros|falha|falhou|falhando|nao foi enviado|não foi enviado|nao enviou|não enviou|por que|porque|o que esta acontecendo|o que está acontecendo|por qual motivo|motivo|travou|travado|pendente|parado|aguardando)\b/.test(q)
+      &&(/\b(link|agendamento|agendado|programado|ele|esse|desse|dele|deste)\b/.test(q)||Boolean(agendamentoContexto));
+    if(intencaoDiagnosticoAgendamento){
+      const item=agendamentoContexto || (horarioNormalizado||horarioAnterior
+        ? schedules.find(x=>String(x.horario||'').slice(0,5)===(horarioNormalizado||horarioAnterior))
+        : null);
+      if(!item){
+        resposta='🔎 Não consegui identificar qual agendamento você quer diagnosticar. Selecione um agendamento primeiro.';
+      }else{
+        agendamentoSelecionado=item;
+        const itemId=String(item.id||'');
+        const itemDeliveries=deliveries.filter(d=>String(d?.agendamentoId||'')===itemId);
+        const itemFailures=failures.filter(f=>String(f?.agendamentoId||'')===itemId);
+        const status=String(item.status||'').toLowerCase();
+        const grupos=scheduleGroupDetails(item).map(x=>x.nome+(x.permitido?' (permitido)':' (não está na lista de permitidos)'));
+        const gruposTexto=grupos.length?grupos.join(', '):'nenhum grupo registrado';
+        const tentativas=itemDeliveries.reduce((n,d)=>n+Number(d?.tentativas||0),0);
+        const errosEntrega=itemDeliveries.filter(d=>String(d?.status||'').toUpperCase()==='ERRO').length;
+        const enviando=itemDeliveries.filter(d=>String(d?.status||'').toUpperCase()==='ENVIANDO').length;
+        const pendentes=itemDeliveries.filter(d=>String(d?.status||'').toUpperCase()==='PENDENTE').length;
+
+        resposta='🔎 Diagnóstico do agendamento das '+String(item.horario||horarioNormalizado||horarioAnterior||'').slice(0,5)+':';
+        resposta+='\n• Status: '+String(item.status|| (item.ativo===false?'PAUSADO':'AGENDADO')).toUpperCase();
+        resposta+='\n• Grupo(s): '+gruposTexto;
+        resposta+='\n• Tentativas registradas: '+tentativas;
+        if(errosEntrega||Number(item.erros||0)>0) resposta+='\n• ⚠️ Falhas: '+Math.max(errosEntrega,Number(item.erros||0));
+        if(enviando) resposta+='\n• ⏳ Entregas em andamento: '+enviando;
+        if(pendentes) resposta+='\n• 🕐 Entregas pendentes: '+pendentes;
+
+        if(status==='erro'||Number(item.erros||0)>0||errosEntrega||itemFailures.length){
+          resposta+='\n\n🚨 Há indícios de problema neste agendamento.';
+          const motivos=itemFailures.map(f=>String(f?.erro||f?.motivo||'').trim()).filter(Boolean);
+          if(motivos.length) resposta+='\n• Motivo registrado: '+motivos[0];
+          if(status==='erro') resposta+='\n• O agendamento terminou com ERRO.';
+          if(!grupos.length) resposta+='\n• O agendamento não possui grupo identificado. Revise o destino antes de reenviar.';
+          else if(grupos.some(g=>g.includes('(não está na lista de permitidos)'))) resposta+='\n• O grupo identificado não está na lista de permitidos. Verifique a autorização do grupo.';
+          resposta+='\n\n💡 Próxima ação recomendada: revisar o motivo registrado e o grupo de destino antes de reenviar.';
+        }else if(status==='aguardando_grupo'){
+          resposta+='\n\n⚠️ O agendamento está aguardando um grupo disponível.';
+          resposta+='\n💡 Próxima ação recomendada: confirme se o grupo está conectado, carregado e permitido.';
+        }else if(status==='pausado'||item.ativo===false){
+          resposta+='\n\n⏸️ O agendamento está pausado.';
+          resposta+='\n💡 Próxima ação recomendada: reative-o somente se esse envio ainda for necessário.';
+        }else if(status==='enviando'||enviando){
+          resposta+='\n\n⏳ O envio está em andamento.';
+          resposta+='\n💡 Próxima ação recomendada: aguarde a conclusão antes de tentar reenviar.';
+        }else if(pendentes){
+          resposta+='\n\n🕐 Há entrega pendente para esse agendamento.';
+          resposta+='\n💡 Próxima ação recomendada: aguarde a execução; se permanecer pendente, verifique o grupo e o histórico.';
+        }else{
+          resposta+='\n\n✅ Não encontrei falha registrada neste agendamento.';
+          resposta+='\n💡 Próxima ação recomendada: manter o agendamento ativo e acompanhar a execução.';
+        }
+      }
+    }else if(intencaoDetalhesAgendamento){
       const horarioAlvo=horarioNormalizado||horarioAnterior;
       let encontrados=agendamentoContexto?[agendamentoContexto]:(horarioAlvo?schedules.filter(item=>String(item.horario||'').slice(0,5)===horarioAlvo):[]);
       if(!encontrados.length) resposta='🔎 Não consegui identificar o agendamento para mostrar os detalhes.';
