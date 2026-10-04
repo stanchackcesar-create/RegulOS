@@ -1754,7 +1754,12 @@ async function sendScheduledLink(item) {
         setLinkDeliveryStatus(item, item.progressKey, id, 'ERRO', errorMsg);
         upsertLinkFailure(item, id, errorMsg);
       }
-      item.status = 'erro'; item.ativo = false; writeJson(FILES.schedules, linkSchedules);
+      item.status = 'erro'; item.ativo = false;
+      if (item.repeticao === 'uma_vez') {
+        linkSchedules = linkSchedules.filter(x => String(x?.id || '') !== String(item.id || ''));
+        syncLinkQueue();
+      }
+      writeJson(FILES.schedules, linkSchedules);
       return;
     }
   } else {
@@ -1899,8 +1904,10 @@ async function sendScheduledLink(item) {
         item.ativo = false;
         if (Number(item.erros || 0) > 0) {
           item.status = 'erro';
+          linkSchedules = linkSchedules.filter(x => String(x?.id || '') !== String(item.id || ''));
+          syncLinkQueue();
           writeJson(FILES.schedules, linkSchedules);
-          addLog(`Link "${item.nome}" concluído parcialmente e mantido em falhas para correção.`);
+          addLog(`Link "${item.nome}" removido dos agendamentos e mantido em falhas para correção.`);
         } else {
           item.status = 'concluido';
           archiveCompletedOneTimeLink(item);
@@ -2391,16 +2398,21 @@ app.post('/api/link-falhas/:id/reenviar', async (req,res)=>{
   if(!failure) return res.status(404).json({ok:false,msg:'Falha não encontrada.'});
   const item=linkSchedules.find(x=>String(x.id)===String(failure.agendamentoId));
   if(!item) return res.status(404).json({ok:false,msg:'O link associado à falha não está mais no Gerenciador de Links.'});
+  const resendOccurrence='reenvio:'+String(failure.id||Date.now());
+  ensureLinkDeliveries(item,resendOccurrence,[String(failure.grupoId||'')]);
   if(!online || !sock) return res.status(503).json({ok:false,msg:'WhatsApp não conectado.'});
   const target=String(failure.grupoId||'');
   if(!target) return res.status(400).json({ok:false,msg:'A falha não possui grupo de destino registrado.'});
   try {
+    setLinkDeliveryStatus(item,resendOccurrence,target,'ENVIANDO');
+    addLog(`Reenvio iniciado para "${item.nome}" no grupo ${target}.`);
     const text=[chooseRandomMessage(item),item.tituloProduto?`📦 ${item.tituloProduto}`:'',String(item.mensagem||'').trim(),'👉 Garanta agora:',String(item.url||'').trim()].filter(Boolean).join('\n\n');
     let image=null;
     if(String(item.imagemUrl||'').trim()) image=await downloadBuffer(String(item.imagemUrl).trim(),String(item.url||'').trim());
     else image=await findProductImage(String(item.url||'').trim());
     if(!image) throw new Error('Não foi possível obter a imagem. Edite o link ou informe uma URL de imagem.');
     if(image) await sock.sendMessage(target,{image:image.buffer,caption:text}); else await sock.sendMessage(target,{text});
+    setLinkDeliveryStatus(item,resendOccurrence,target,'SUCESSO');
     addHistory({grupoId:target,link:item.url,status:'sucesso',agendamentoId:item.id,tipo:'reenvio',at:new Date().toISOString()});
     archiveSentFailureAsHistory(item,failure,target);
     removeLinkFailure(failure.id);
@@ -2409,7 +2421,9 @@ app.post('/api/link-falhas/:id/reenviar', async (req,res)=>{
     writeJson(FILES.schedules,linkSchedules);
     res.json({ok:true,msg:'Link reenviado com sucesso e movido para o histórico de enviados.'});
   } catch(e) {
+    setLinkDeliveryStatus(item,resendOccurrence,target,'ERRO',e.message);
     upsertLinkFailure(item,target,e.message);
+    addLog(`Reenvio falhou para "${item.nome}" no grupo ${target}: ${e.message}`);
     res.status(500).json({ok:false,msg:`Reenvio falhou: ${e.message}`});
   }
 });
