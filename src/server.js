@@ -373,6 +373,21 @@ app.get('/api/oferta-preview', requireAuth, async (req,res)=>{
   if(!/^https?:\/\//i.test(url))return res.status(400).json({ok:false,msg:'O link deve começar com http:// ou https://.'});
   try{
     const oferta=await buildAutomaticOffer(url);
+    let sugestoes=[];
+    if(agendamentoSelecionado){
+      sugestoes=['Qual é o status desse link?','O que eu deveria fazer com esse link?','Ver o grupo desse agendamento','Quais outros links estão programados hoje?'];
+    }else if(intencaoAgendamentosHoje||intencaoAgendamentoEspecifico){
+      sugestoes=['Qual é o próximo link a ser enviado?','Existe algum agendamento com problema?','Quais links estão pausados?','O que você recomenda?'];
+    }else if(intencaoFalhas){
+      sugestoes=['Quais links falharam?','Qual teve mais erros?','Qual foi o principal motivo?','O que você recomenda fazer?'];
+    }else if(intencaoAnalise||intencaoComparar||intencaoRecomendacao){
+      sugestoes=['Quais links tiveram problemas?','Qual link precisa de mais atenção?','Compare com o período anterior','O que devo melhorar?'];
+    }else if(/\b(sucesso|envio|entrega|tentativa)\b/.test(q)){
+      sugestoes=['Quantos envios deram certo?','Quantas tentativas foram feitas?','Quais falharam?','O que você recomenda?'];
+    }else{
+      sugestoes=['Quais links estão programados hoje?','Quais links deram erro hoje?','Como estão meus envios nos últimos 7 dias?','O que você recomenda?'];
+    }
+
     res.set('Cache-Control','no-store');
     res.json({ok:true,...oferta});
   }catch(e){res.status(502).json({ok:false,msg:e.message||'Não foi possível consultar o link.'});}
@@ -2633,7 +2648,7 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
 
     res.set('Cache-Control','no-store');
     res.json({
-      ok:true,resposta,periodo,periodoLabel,agendamentoSelecionado:agendamentoSelecionado?{id:agendamentoSelecionado.id,nome:agendamentoSelecionado.nome,horario:String(agendamentoSelecionado.horario||'').slice(0,5),grupoId:agendamentoSelecionado.grupoId,status:agendamentoSelecionado.status,ativo:agendamentoSelecionado.ativo}:null,
+      ok:true,resposta,periodo,periodoLabel,sugestoes,agendamentoSelecionado:agendamentoSelecionado?{id:agendamentoSelecionado.id,nome:agendamentoSelecionado.nome,horario:String(agendamentoSelecionado.horario||'').slice(0,5),grupoId:agendamentoSelecionado.grupoId,status:agendamentoSelecionado.status,ativo:agendamentoSelecionado.ativo}:null,
       intervalo:{inicio:new Date(startMs).toISOString(),fim:new Date(endMs).toISOString()},
       metricas:{sucessos:success,erros:errors,emAndamento:sending,total,taxaSucesso:pct},
       diagnostico:{principaisFalhas:failureList,linkMaisCritico:ranking[0]||null,recomendacoes},
