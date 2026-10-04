@@ -102,6 +102,17 @@ body.regulos-has-sidebar main.wrap{max-width:none;margin-left:18px}
   .regulos-sidebar-metrics{grid-template-columns:repeat(3,1fr)}
 }
 
+/* REGULOS_MOBILE_WIDTH_FIX_V1 */
+@media(max-width:560px){
+  html,body{width:100%;max-width:100%;overflow-x:hidden}
+  *,*::before,*::after{box-sizing:border-box}
+  header,header .wrap,main.wrap{width:100%;max-width:100%}
+  header .actions{width:100%;max-width:100%}
+  .header-bot-schedule{width:100%;max-width:100%;box-sizing:border-box}
+  main.wrap{margin-left:0!important;margin-right:0!important}
+  .grid,.cards,.panel,.card{max-width:100%}
+  .panel,.card{overflow:hidden}
+}
 /* REGULOS_MOBILE_LAYOUT_V2 */
 @media(max-width:560px){
   header .row:first-child{align-items:center;gap:8px}
