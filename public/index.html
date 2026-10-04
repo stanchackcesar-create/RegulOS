@@ -1617,5 +1617,22 @@ document.getElementById('qrModal')?.addEventListener('click',e=>{if(e.target.id=
 .message-float-panel{right:8px!important;bottom:calc(144px + env(safe-area-inset-bottom))!important;width:calc(100vw - 16px)!important;max-width:390px}
 .assistant-float-panel{right:8px!important;bottom:calc(74px + env(safe-area-inset-bottom))!important;width:calc(100vw - 16px)!important;max-width:390px}
 }
+</style><style>
+/* REGULOS_FLOATING_BUTTONS_VIEWPORT_FIX */
+@media (max-width:700px){
+  .message-float-launcher,
+  .assistant-float-launcher{
+    position:fixed!important;
+    right:auto!important;
+    left:calc(100vw - 66px)!important;
+    transform:none!important;
+  }
+  .message-float-launcher{
+    bottom:calc(78px + env(safe-area-inset-bottom))!important;
+  }
+  .assistant-float-launcher{
+    bottom:calc(12px + env(safe-area-inset-bottom))!important;
+  }
+}
 </style></body>
 </html>
