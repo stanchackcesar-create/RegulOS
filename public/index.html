@@ -546,7 +546,9 @@ async function loadLinkHistory(){
    const el=document.createElement('div'); el.className='link';
    const done=x.concluidoAt?new Date(x.concluidoAt):null;
    const doneLabel=done&&!Number.isNaN(done.getTime())?done.toLocaleString('pt-BR'):'—';
-   const limpeza=done&&!Number.isNaN(done.getTime())?new Date(done.getTime()+10*60*60*1000):null;
+   const sentCandidates=[x.lastRunAt,x.concluidoAt,x.at].map(v=>Date.parse(String(v||''))).filter(Number.isFinite);
+   const sentAt=sentCandidates.length?Math.max(...sentCandidates):NaN;
+   const limpeza=Number.isFinite(sentAt)?new Date(sentAt+10*60*60*1000):null;
    const limpezaLabel=limpeza&&!Number.isNaN(limpeza.getTime())?limpeza.toLocaleString('pt-BR'):'—';
    const dur=x.lastDurationMs?`${Math.round(x.lastDurationMs/1000)}s`:'—';
    el.innerHTML=`<h3>📦 ${esc(x.nome)} <span class="badge good">enviado</span></h3>
