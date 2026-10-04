@@ -68,6 +68,108 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 .assistant-suggestion:hover{background:#1b3558}
 .assistant-suggestion:disabled{opacity:.55;cursor:wait}
 @media(max-width:560px){.assistant-chat-form{flex-direction:column}.assistant-chat-form button{min-height:44px}.assistant-chat-messages{height:300px}.assistant-chat-msg{max-width:96%}}
+
+/* REGULOS_MOBILE_AUDIT_V1 */
+@media(max-width:560px){
+  html{scroll-behavior:smooth;overflow-x:hidden}
+  body{overflow-x:hidden;min-width:0}
+  header{z-index:20}
+  header .row{min-width:0}
+  header .row>div:first-child{min-width:0}
+  header .title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  header .actions{
+    display:grid;
+    grid-template-columns:repeat(2,minmax(0,1fr));
+    width:100%;
+    margin-top:10px;
+  }
+  header .actions button{
+    width:100%;
+    min-width:0;
+    min-height:44px;
+    padding:10px 8px;
+    white-space:nowrap;
+    overflow:hidden;
+    text-overflow:ellipsis;
+  }
+  main.wrap{width:100%;max-width:none}
+  .panel,.card{min-width:0}
+  .panel h2{line-height:1.25}
+  .row{min-width:0}
+  .row>button,.row>a{flex:1 1 auto}
+  .notice{overflow-wrap:anywhere}
+  .link{min-width:0}
+  .link a{display:block;max-width:100%;overflow-wrap:anywhere}
+  .link .row{gap:7px}
+  input,textarea,select,button{touch-action:manipulation}
+  input,textarea,select{max-width:100%}
+  textarea{min-height:110px}
+  .modal{
+    align-items:flex-start;
+    padding:env(safe-area-inset-top) 8px env(safe-area-inset-bottom);
+    overflow:auto;
+  }
+  .modal-card{
+    width:100%;
+    max-width:100%;
+    max-height:calc(100dvh - 16px);
+    margin:8px 0;
+    border-radius:14px;
+  }
+  .modal-head{
+    position:sticky;
+    top:0;
+    z-index:2;
+    background:#111b2d;
+  }
+  .modal-body{
+    max-height:none;
+    overflow:visible;
+  }
+  /* O monitor continua acessível pelo botão do cabeçalho, mas não cobre conteúdo no celular. */
+  #regulosSchedulerMonitorBtn{display:none!important}
+  #regulosSchedulerMonitor .sm-card{
+    width:100%;
+    max-height:calc(100dvh - 16px);
+  }
+  #regulosSchedulerMonitor .sm-head{
+    position:sticky;
+    top:0;
+    z-index:2;
+    background:#111b2d;
+    padding:12px;
+  }
+  #regulosSchedulerMonitor .sm-head .row{
+    flex-wrap:nowrap;
+  }
+  #regulosSchedulerMonitor .sm-body{
+    max-height:none;
+    overflow:visible;
+    padding:10px;
+  }
+  #regulosSchedulerMonitor .sm-toolbar{
+    grid-template-columns:1fr!important;
+  }
+  #regulosSchedulerMonitor table{
+    min-width:620px;
+  }
+  #regulosSchedulerMonitor .sm-body>div[style*="overflow:auto"]{
+    overflow-x:auto!important;
+    -webkit-overflow-scrolling:touch;
+  }
+  .assistant-chat-messages{
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
+  }
+  .schedule-scroll,.groups{
+    -webkit-overflow-scrolling:touch;
+    overscroll-behavior:contain;
+  }
+}
+@media(min-width:561px){
+  #regulosSchedulerMonitorBtn{display:block}
+}
+
 </style>
 </head>
 <body>
