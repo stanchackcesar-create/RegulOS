@@ -105,6 +105,7 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 .assistant-float-form input{min-width:0;flex:1}
 .assistant-float-form button{min-height:44px}
 @media(max-width:560px){
+  #assistantMainPanel{display:none!important}
   .assistant-float-launcher{right:12px;bottom:calc(12px + env(safe-area-inset-bottom));width:54px;height:54px}
   .assistant-float-panel{
     right:8px;bottom:calc(74px + env(safe-area-inset-bottom));
@@ -259,7 +260,7 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
   </div>
   <div id="centralDiagnostic" class="muted" style="margin-top:14px">Clique em “Executar diagnóstico” para verificar o RegulOS.</div>
 </section>
-<section class="panel" style="margin:18px 0">
+<section id="assistantMainPanel" class="panel" style="margin:18px 0">
   <div class="row" style="justify-content:space-between;align-items:center">
     <div>
       <h2 style="margin:0">🤖 Assistente do RegulOS 12.5</h2>
