@@ -54,22 +54,6 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 .history-filter-tools,.failure-filter-tools{align-items:stretch}.history-filter-tools input,.failure-filter-tools input{flex-basis:100%}.history-filter-tools select,.failure-filter-tools select{width:100%;min-height:44px}.history-filter-tools button,.failure-filter-tools button{min-height:44px}}
 
 
-/* REGULOS_ASSISTENTE_CHAT_V2_1 */
-.assistant-chat{margin-top:14px;border-top:1px solid #263653;padding-top:14px}
-.assistant-chat-messages{height:280px;overflow:auto;background:#07101f;border:1px solid #263653;border-radius:12px;padding:10px}
-.assistant-chat-msg{max-width:88%;padding:10px 12px;border-radius:12px;margin:7px 0;line-height:1.45;white-space:pre-wrap;word-break:break-word}
-.assistant-chat-user{margin-left:auto;background:#234b83}
-.assistant-chat-bot{margin-right:auto;background:#19273e}
-.assistant-chat-meta{font-size:11px;color:#9eb0ca;margin-bottom:3px}
-.assistant-chat-form{display:flex;gap:8px;margin-top:8px}
-.assistant-chat-form input{flex:1}
-.assistant-suggestions{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
-.assistant-suggestion{border:1px solid #355277;background:#10213a;color:#dbeafe;border-radius:999px;padding:7px 10px;font-size:12px;cursor:pointer;text-align:left}
-.assistant-suggestion:hover{background:#1b3558}
-.assistant-suggestion:disabled{opacity:.55;cursor:wait}
-@media(max-width:560px){.assistant-chat-form{flex-direction:column}.assistant-chat-form button{min-height:44px}.assistant-chat-messages{height:300px}.assistant-chat-msg{max-width:96%}}
-
-
 /* REGULOS_ASSISTENTE_FLUTUANTE_V1 */
 .assistant-float-launcher{
   position:fixed;right:20px;bottom:20px;z-index:9999;pointer-events:auto;
@@ -104,6 +88,9 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 .assistant-float-form{display:flex;gap:7px;margin-top:8px}
 .assistant-float-form input{min-width:0;flex:1}
 .assistant-float-form button{min-height:44px}
+.assistant-float-suggestions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.assistant-float-suggestion{border:1px solid #355277;background:#10213a;color:#dbeafe;border-radius:999px;padding:7px 9px;font-size:12px;cursor:pointer;text-align:left}
+.assistant-float-suggestion:hover{background:#1b3558}
 .assistant-float-tabs{display:flex;gap:6px;padding:8px 10px;border-bottom:1px solid #263653;background:#0d1728}
 .assistant-float-tab{flex:1;min-height:40px;border-radius:9px;background:#1a2940;color:#cbd7ea}
 .assistant-float-tab.active{background:#3d83f6;color:#fff}
@@ -214,10 +201,6 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
     overflow-x:auto!important;
     -webkit-overflow-scrolling:touch;
   }
-  .assistant-chat-messages{
-    overscroll-behavior:contain;
-    -webkit-overflow-scrolling:touch;
-  }
   .schedule-scroll,.groups{
     -webkit-overflow-scrolling:touch;
     overscroll-behavior:contain;
@@ -291,44 +274,6 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
     <button class="primary" onclick="runCentralDiagnostic()">🔍 Executar diagnóstico</button>
   </div>
   <div id="centralDiagnostic" class="muted" style="margin-top:14px">Clique em “Executar diagnóstico” para verificar o RegulOS.</div>
-</section>
-<section id="assistantMainPanel" class="panel" style="margin:18px 0">
-  <div class="row" style="justify-content:space-between;align-items:center">
-    <div>
-      <h2 style="margin:0">🤖 Assistente do RegulOS 12.5</h2>
-      <div class="muted">Analise o desempenho, encontre problemas, organize links e prepare relatórios.</div>
-    </div>
-    <span class="badge neutral">V1</span>
-  </div>
-  <div class="row" style="margin-top:12px">
-    <button class="primary" onclick="runRegulosAssistant('analisar')">🧠 Analisar</button>
-    <button onclick="runRegulosAssistant('erros')">🔎 Explicar erros</button>
-    <button onclick="runRegulosAssistant('organizar')">📋 Organizar links</button>
-    <button onclick="runRegulosAssistant('comparar')">⚖️ Comparar</button>
-    <button onclick="runRegulosAssistant('campanha')">🚀 Criar campanha</button>
-    <button onclick="runRegulosAssistant('relatorio')">📄 Relatório</button>
-  </div>
-  <div class="two" style="margin-top:10px">
-    <label>Período de análise
-      <select id="assistantPeriod">
-        <option value="1">Hoje</option><option value="7" selected>Últimos 7 dias</option><option value="15">Últimos 15 dias</option><option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option>
-      </select>
-    </label>
-  </div>
-  <div id="assistantResult" class="notice" style="margin-top:12px">Escolha uma ação para o Assistente analisar os dados reais do RegulOS.</div>
-  <div class="assistant-chat">
-    <div class="row" style="justify-content:space-between;align-items:center">
-      <div><b>💬 Conversa com o Assistente</b><div class="muted">Pergunte sobre erros, sucessos, tentativas, agendamentos e resultados.</div></div>
-      <span class="badge neutral">V2.1</span>
-    </div>
-    <div id="assistantChatMessages" class="assistant-chat-messages" aria-live="polite">
-      <div class="assistant-chat-msg assistant-chat-bot"><div class="assistant-chat-meta">🤖 RegulOS</div>Olá! Estou pronto para analisar os dados do seu RegulOS. Experimente perguntar: “Quais links deram erro hoje?”</div>
-    </div>
-    <div class="assistant-chat-form">
-      <input id="assistantChatInput" type="text" placeholder="Ex.: Quantos envios deram certo nos últimos 7 dias?" autocomplete="off">
-      <button class="primary" type="button" onclick="sendAssistantChat()">📨 Perguntar</button>
-    </div>
-  </div>
 </section>
 <div class="cards">
 <div class="card metric"><small>WhatsApp</small><b id="conn">...</b><span id="number" class="muted">Número: —</span></div>
@@ -1194,67 +1139,22 @@ async function runCentralDiagnostic(){
 }
 
 let assistantConversationContext=[];
-async function sendAssistantChat(){
-  const input=document.getElementById('assistantChatInput'), box=document.getElementById('assistantChatMessages');
-  if(!input||!box)return;
-  const pergunta=String(input.value||'').trim(); if(!pergunta)return;
-  appendAssistantChatMessage('user',pergunta); input.value=''; input.disabled=true; const btn=document.querySelector('.assistant-chat-form button'); if(btn){btn.disabled=true;btn.dataset.originalText=btn.textContent;btn.textContent='⏳ Analisando...';}
-  try{
-    const periodoSelecionado=Number(document.getElementById('assistantFloatPeriod')?.value||document.getElementById('assistantPeriod')?.value||7);
-    const d=await jfetch('/api/assistente/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pergunta,periodoSolicitado:periodoSelecionado,contexto:assistantConversationContext})});
-    assistantConversationContext.push({role:'user',content:pergunta});
-    assistantConversationContext.push({role:'assistant',content:d.resposta||'',periodoLabel:d.periodoLabel,intervalo:d.intervalo,agendamentoSelecionado:d.agendamentoSelecionado||null});
-    assistantConversationContext=assistantConversationContext.slice(-6);
-    appendAssistantChatMessage('bot',d.resposta||'Não consegui interpretar essa pergunta.',d.sugestoes||[]);
-  }catch(e){appendAssistantChatMessage('bot','⚠️ Não foi possível consultar o Assistente: '+(e.message||e));}
-  finally{
-    input.disabled=false;
-    const btn=document.querySelector('.assistant-chat-form button');
-    if(btn){btn.disabled=false;btn.textContent=btn.dataset.originalText||'📨 Perguntar';}
-    // No celular, não reabrir o teclado automaticamente após cada pergunta.
-    // O usuário decide quando tocar no campo novamente.
-    input.blur();
-  }
-}
-function appendAssistantChatMessage(tipo,texto,sugestoes=[]){
-  const box=document.getElementById('assistantChatMessages'); if(!box)return;
-  const div=document.createElement('div'); div.className='assistant-chat-msg '+(tipo==='user'?'assistant-chat-user':'assistant-chat-bot');
-  const meta=document.createElement('div'); meta.className='assistant-chat-meta'; meta.textContent=tipo==='user'?'👤 Você':'🤖 RegulOS';
-  const body=document.createElement('div'); body.textContent=String(texto||'');
-  div.appendChild(meta);div.appendChild(body);
-  if(tipo==='bot'&&Array.isArray(sugestoes)&&sugestoes.length){
-    const wrap=document.createElement('div'); wrap.className='assistant-suggestions';
-    sugestoes.slice(0,4).forEach(s=>{
-      const b=document.createElement('button'); b.type='button'; b.className='assistant-suggestion'; b.textContent='💬 '+String(s);
-      b.addEventListener('click',()=>{const input=document.getElementById('assistantChatInput');if(input){input.value=String(s);sendAssistantChat();}});
-      wrap.appendChild(b);
-    });
-    div.appendChild(wrap);
-  }
-  box.appendChild(div);box.scrollTop=box.scrollHeight;
-}
-document.addEventListener('DOMContentLoaded',()=>{
-  const input=document.getElementById('assistantChatInput');
-  input?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendAssistantChat();}});
-});
 
 async function runRegulosAssistant(acao){
-  const boxes=[document.getElementById('assistantResult'),document.getElementById('assistantFloatAnalysisResult')].filter(Boolean);
-  if(!boxes.length)return;
-  const box=boxes[boxes.length-1];
-  const periodo=Number(document.getElementById('assistantFloatPeriod')?.value||document.getElementById('assistantPeriod')?.value||7);
-  boxes.forEach(b=>{b.innerHTML='<div class="muted">🤖 Assistente analisando os dados...</div>';});
+  const box=document.getElementById('assistantFloatAnalysisResult');
+  if(!box)return;
+  const periodo=Number(document.getElementById('assistantFloatPeriod')?.value||7);
+  box.innerHTML='<div class="muted">🤖 Assistente analisando os dados...</div>';
   try{
     const d=await jfetch('/api/assistente',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao,periodo})});
     const m=d.metricas||{};
     const fails=(d.principaisFalhas||[]).map(x=>'<div class="stats">🔴 '+esc(x.motivo)+' — '+esc(x.total)+' ocorrência(s)</div>').join('');
     const ranking=(d.ranking||[]).slice(0,5).map(x=>'<div class="stats">📦 '+esc(x.nome)+' — '+esc(x.sucesso)+' sucesso(s), '+esc(x.erro)+' erro(s), '+esc(x.tentativas)+' tentativa(s)</div>').join('');
-    const resultHtml='<div style="font-size:16px;font-weight:800">🤖 '+esc(d.resposta||'Análise concluída.')+'</div>'
+    box.innerHTML='<div style="font-size:16px;font-weight:800">🤖 '+esc(d.resposta||'Análise concluída.')+'</div>'
       +'<div class="row" style="margin-top:10px"><span class="badge neutral">📅 '+esc(d.periodo)+' dia(s)</span><span class="badge good">🟢 '+esc(m.sucessos)+' sucesso(s)</span><span class="badge bad">🔴 '+esc(m.erros)+' erro(s)</span><span class="badge neutral">📈 '+esc(m.taxaSucesso)+'% sucesso</span></div>'
       +(fails?'<div style="margin-top:10px"><b>Principais problemas</b>'+fails+'</div>':'')
       +(ranking?'<div style="margin-top:10px"><b>Desempenho dos links</b>'+ranking+'</div>':'');
-    boxes.forEach(b=>{b.innerHTML=resultHtml;});
-  }catch(e){boxes.forEach(b=>{b.innerHTML='<div class="error">🔴 '+esc(e.message||e)+'</div>';})}
+  }catch(e){box.innerHTML='<div class="error">🔴 '+esc(e.message||e)+'</div>'}
 }
 async function loadLogs(){try{const d=await jfetch('/api/logs');document.getElementById('logs').textContent=(d.logs||[]).join('\\n')}catch{}}
 async function loadDashboard(){try{const d=await jfetch('/api/dashboard');document.getElementById('today').textContent=d.hoje||0}catch{}}
@@ -1408,11 +1308,24 @@ setTimeout(()=>{refreshAccountPresence();},1500);
   document.addEventListener('keydown',e=>{
     if(e.key==='Escape'&&panel.classList.contains('open')){panel.classList.remove('open');input.blur();}
   });
-  function add(tipo,texto){
+  function add(tipo,texto,sugestoes=[]){
     const d=document.createElement('div');
     d.className='assistant-float-msg '+(tipo==='user'?'assistant-float-user':'assistant-float-bot');
     d.innerHTML='<div class="assistant-float-meta">'+(tipo==='user'?'👤 Você':'🤖 RegulOS')+'</div>';
     const b=document.createElement('div');b.textContent=String(texto||'');d.appendChild(b);
+    if(tipo==='bot'&&Array.isArray(sugestoes)&&sugestoes.length){
+      const wrap=document.createElement('div');wrap.className='assistant-float-suggestions';
+      sugestoes.slice(0,4).forEach(s=>{
+        const btn=document.createElement('button');
+        btn.type='button';btn.className='assistant-float-suggestion';btn.textContent='💬 '+String(s);
+        btn.addEventListener('click',()=>{
+          input.value=String(s);
+          form.requestSubmit();
+        });
+        wrap.appendChild(btn);
+      });
+      d.appendChild(wrap);
+    }
     box.appendChild(d);box.scrollTop=box.scrollHeight;
     return d;
   }
@@ -1423,12 +1336,12 @@ setTimeout(()=>{refreshAccountPresence();},1500);
     add('user',pergunta);input.value='';input.disabled=true;
     const btn=form.querySelector('button');if(btn){btn.disabled=true;btn.textContent='...';}
     try{
-      const periodoSelecionado=Number(document.getElementById('assistantFloatPeriod')?.value||document.getElementById('assistantPeriod')?.value||7);
+      const periodoSelecionado=Number(document.getElementById('assistantFloatPeriod')?.value||7);
       const d=await jfetch('/api/assistente/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pergunta,periodoSolicitado:periodoSelecionado,contexto:assistantConversationContext})});
       assistantConversationContext.push({role:'user',content:pergunta});
       assistantConversationContext.push({role:'assistant',content:d.resposta||'',periodoLabel:d.periodoLabel,intervalo:d.intervalo,agendamentoSelecionado:d.agendamentoSelecionado||null});
       assistantConversationContext=assistantConversationContext.slice(-6);
-      add('bot',d.resposta||'Não consegui interpretar essa pergunta.');
+      add('bot',d.resposta||'Não consegui interpretar essa pergunta.',d.sugestoes||[]);
     }catch(err){add('bot','⚠️ Não foi possível consultar o Assistente: '+(err.message||err));}
     finally{
       input.disabled=false;
