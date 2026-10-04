@@ -63,6 +63,10 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 .assistant-chat-meta{font-size:11px;color:#9eb0ca;margin-bottom:3px}
 .assistant-chat-form{display:flex;gap:8px;margin-top:8px}
 .assistant-chat-form input{flex:1}
+.assistant-suggestions{display:flex;flex-wrap:wrap;gap:7px;margin-top:10px}
+.assistant-suggestion{border:1px solid #355277;background:#10213a;color:#dbeafe;border-radius:999px;padding:7px 10px;font-size:12px;cursor:pointer;text-align:left}
+.assistant-suggestion:hover{background:#1b3558}
+.assistant-suggestion:disabled{opacity:.55;cursor:wait}
 @media(max-width:560px){.assistant-chat-form{flex-direction:column}.assistant-chat-form button{min-height:44px}.assistant-chat-messages{height:300px}.assistant-chat-msg{max-width:96%}}
 </style>
 </head>
@@ -1002,16 +1006,26 @@ async function sendAssistantChat(){
     assistantConversationContext.push({role:'user',content:pergunta});
     assistantConversationContext.push({role:'assistant',content:d.resposta||'',periodoLabel:d.periodoLabel,intervalo:d.intervalo,agendamentoSelecionado:d.agendamentoSelecionado||null});
     assistantConversationContext=assistantConversationContext.slice(-6);
-    appendAssistantChatMessage('bot',d.resposta||'Não consegui interpretar essa pergunta.');
+    appendAssistantChatMessage('bot',d.resposta||'Não consegui interpretar essa pergunta.',d.sugestoes||[]);
   }catch(e){appendAssistantChatMessage('bot','⚠️ Não foi possível consultar o Assistente: '+(e.message||e));}
   finally{input.disabled=false;const btn=document.querySelector('.assistant-chat-form button');if(btn){btn.disabled=false;btn.textContent=btn.dataset.originalText||'📨 Perguntar';}input.focus();}
 }
-function appendAssistantChatMessage(tipo,texto){
+function appendAssistantChatMessage(tipo,texto,sugestoes=[]){
   const box=document.getElementById('assistantChatMessages'); if(!box)return;
   const div=document.createElement('div'); div.className='assistant-chat-msg '+(tipo==='user'?'assistant-chat-user':'assistant-chat-bot');
   const meta=document.createElement('div'); meta.className='assistant-chat-meta'; meta.textContent=tipo==='user'?'👤 Você':'🤖 RegulOS';
   const body=document.createElement('div'); body.textContent=String(texto||'');
-  div.appendChild(meta);div.appendChild(body);box.appendChild(div);box.scrollTop=box.scrollHeight;
+  div.appendChild(meta);div.appendChild(body);
+  if(tipo==='bot'&&Array.isArray(sugestoes)&&sugestoes.length){
+    const wrap=document.createElement('div'); wrap.className='assistant-suggestions';
+    sugestoes.slice(0,4).forEach(s=>{
+      const b=document.createElement('button'); b.type='button'; b.className='assistant-suggestion'; b.textContent='💬 '+String(s);
+      b.addEventListener('click',()=>{const input=document.getElementById('assistantChatInput');if(input){input.value=String(s);sendAssistantChat();}});
+      wrap.appendChild(b);
+    });
+    div.appendChild(wrap);
+  }
+  box.appendChild(div);box.scrollTop=box.scrollHeight;
 }
 document.addEventListener('DOMContentLoaded',()=>{
   const input=document.getElementById('assistantChatInput');
