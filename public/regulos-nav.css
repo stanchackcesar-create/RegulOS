@@ -92,10 +92,16 @@ body.regulos-has-sidebar main.wrap{max-width:none;margin-left:18px}
   main.wrap>.grid{width:100%!important;margin-left:0!important;margin-right:0!important}
   main.wrap .panel,main.wrap .card{width:100%!important;max-width:100%!important}
 }
-/* AJUSTE MOBILE: reduzir o espaço vertical abaixo do controle ☰ sem alterar desktop */
+/* AJUSTE MOBILE: cabeçalho e largura sem alterar desktop */
 @media(max-width:560px){
-  header{padding-top:8px!important;padding-bottom:6px!important}
-  header .actions{margin-bottom:0!important}
-  main.wrap>.grid{margin-top:4px!important}
-  .regulos-sidebar-toggle{top:8px!important}
+  header .row:first-child{flex-wrap:nowrap!important;align-items:center!important}
+  header .row:first-child>div:first-child{display:block!important;flex:1 1 auto!important;min-width:0!important;padding-left:0!important;overflow:hidden!important}
+  header .row:first-child>.row{display:flex!important;flex:0 0 auto!important;width:auto!important;min-width:0!important;flex-wrap:nowrap!important}
+  header .row:first-child>.row button{flex:0 0 auto!important;width:auto!important;min-width:0!important;white-space:nowrap!important}
+  header .row:first-child>.row .badge{flex:0 0 auto!important;width:auto!important;max-width:120px!important}
+  header .title{display:block!important;font-size:21px!important;white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important}
+  header .sub{display:block!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+  header .actions{box-sizing:border-box!important;width:calc(100% + 56px)!important;margin-left:-56px!important;max-width:none!important}
+  main.wrap{box-sizing:border-box!important;width:100%!important;max-width:none!important;margin-left:0!important;margin-right:0!important;padding-left:8px!important;padding-right:8px!important}
+  main.wrap>.grid{box-sizing:border-box!important;width:100%!important;margin-left:0!important;margin-right:0!important}
 }
