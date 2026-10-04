@@ -579,46 +579,87 @@ function archiveSentFailureAsHistory(item, failure, grupoId) {
   linkHistory.unshift(snapshot); saveLinkHistory();
 }
 const LINK_HISTORY_MAX_WINDOW_MS = 10 * 60 * 60 * 1000;
+const linkHistoryExpirationTimers = new Map();
 
 function linkHistorySentAt(item){
   const values=[item?.lastRunAt,item?.concluidoAt,item?.at].map(v=>Date.parse(String(v||''))).filter(Number.isFinite);
   return values.length ? Math.max(...values) : NaN;
 }
 
-function pruneLinkHistoryByLatestSentTime({persist=true}={}){
-  if(!Array.isArray(linkHistory) || !linkHistory.length) return 0;
+function cancelLinkHistoryExpiration(item){
+  const timer=linkHistoryExpirationTimers.get(item);
+  if(timer){
+    clearTimeout(timer);
+    linkHistoryExpirationTimers.delete(item);
+  }
+}
 
-  // Cada registro permanece por no máximo 10 horas a partir do seu próprio
-  // último horário de envio/conclusão. Assim a hora mostrada no painel é
-  // exatamente a hora em que aquele registro será removido.
+function expireLinkHistoryRecord(item){
+  linkHistoryExpirationTimers.delete(item);
+  const index=linkHistory.findIndex(x=>x===item);
+  if(index<0)return false;
+
+  linkHistory.splice(index,1);
+  writeJson(FILES.linkHistory,linkHistory);
+  addLog(`Limpeza automática do histórico: ${item.nome||item.id||'registro'} removido após 10h do envio.`);
+  return true;
+}
+
+function scheduleLinkHistoryExpiration(item){
+  cancelLinkHistoryExpiration(item);
+  const sentAt=linkHistorySentAt(item);
+  if(!Number.isFinite(sentAt))return;
+
+  const expiresAt=sentAt+LINK_HISTORY_MAX_WINDOW_MS;
+  const delay=Math.max(0,expiresAt-Date.now());
+  const timer=setTimeout(()=>expireLinkHistoryRecord(item),delay);
+  // O timer não deve impedir o processo do RegulOS de encerrar em um shutdown.
+  if(typeof timer.unref==='function')timer.unref();
+  linkHistoryExpirationTimers.set(item,timer);
+}
+
+function pruneLinkHistoryByLatestSentTime({persist=true}={}){
+  if(!Array.isArray(linkHistory) || !linkHistory.length)return 0;
+
   const now=Date.now();
   const cutoff=now-LINK_HISTORY_MAX_WINDOW_MS;
   const before=linkHistory.length;
+  const previous=linkHistory;
 
   linkHistory=linkHistory.filter(item=>{
     const sentAt=linkHistorySentAt(item);
     return !Number.isFinite(sentAt) || sentAt>=cutoff;
   });
 
+  const kept=new Set(linkHistory);
+  previous.forEach(item=>{
+    if(!kept.has(item))cancelLinkHistoryExpiration(item);
+  });
+
   const removed=before-linkHistory.length;
-  if(removed && persist) writeJson(FILES.linkHistory,linkHistory);
-  if(removed) addLog(`Limpeza automática do histórico: ${removed} registro(s) com mais de 10h desde o envio foram removidos.`);
+  if(removed && persist)writeJson(FILES.linkHistory,linkHistory);
+  if(removed)addLog(`Limpeza automática do histórico: ${removed} registro(s) com mais de 10h desde o envio foram removidos.`);
   return removed;
 }
 
-function saveLinkHistory() {
-  linkHistory = linkHistory.slice(-500);
+function saveLinkHistory(){
+  linkHistory=linkHistory.slice(-500);
   pruneLinkHistoryByLatestSentTime({persist:false});
-  writeJson(FILES.linkHistory, linkHistory);
-}
-function clearLinkHistory() {
-  linkHistory = [];
-  writeJson(FILES.linkHistory, linkHistory);
+  linkHistory.forEach(scheduleLinkHistoryExpiration);
+  writeJson(FILES.linkHistory,linkHistory);
 }
 
-// Mesmo sem novos envios, a limpeza acontece sozinha periodicamente.
-setInterval(()=>pruneLinkHistoryByLatestSentTime(),5*60*1000);
+function clearLinkHistory(){
+  linkHistoryExpirationTimers.forEach(timer=>clearTimeout(timer));
+  linkHistoryExpirationTimers.clear();
+  linkHistory=[];
+  writeJson(FILES.linkHistory,linkHistory);
+}
+
+// Cada registro recebe seu próprio timer de expiração. Ao reiniciar o servidor,
+// os timers são reconstruídos a partir do horário salvo no histórico.
 pruneLinkHistoryByLatestSentTime();
+linkHistory.forEach(scheduleLinkHistoryExpiration);
 
 function archiveCompletedOneTimeLink(item) {
   const snapshot = {
@@ -1943,8 +1984,9 @@ app.delete('/api/link-historico',(req,res)=>{
 });
 app.delete('/api/link-historico/:id',(req,res)=>{
   const i=linkHistory.findIndex(x=>String(x.id)===String(req.params.id));
-  if(i<0) return res.status(404).json({ok:false,msg:'Registro de histórico não encontrado.'});
+  if(i<0)return res.status(404).json({ok:false,msg:'Registro de histórico não encontrado.'});
   const [removed]=linkHistory.splice(i,1);
+  cancelLinkHistoryExpiration(removed);
   saveLinkHistory();
   addLog(`Registro de histórico removido: ${removed.nome||removed.id}.`);
   res.json({ok:true,msg:'Registro removido do histórico.'});
