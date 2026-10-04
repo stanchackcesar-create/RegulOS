@@ -561,25 +561,52 @@ async function deleteLinkHistory(id){
 }
 let lastHistorySignature='';
 let lastHistoryRecords=[];
+
+function normalizeHistorySearchValue(value){
+  return String(value??'')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g,'')
+    .toLocaleLowerCase('pt-BR')
+    .trim();
+}
+
+function normalizeHistoryRecords(records){
+  const seenOneTime=new Set();
+  const normalized=[];
+  for(const item of (Array.isArray(records)?records:[])){
+    const key=item?.motivo==='envio concluído — uma vez' && item?.id
+      ? String(item.id)
+      : '';
+    if(key){
+      if(seenOneTime.has(key))continue;
+      seenOneTime.add(key);
+    }
+    normalized.push(item);
+  }
+  return normalized;
+}
+
 function historySearchText(x){
   return [
     x?.nome,x?.tituloProduto,x?.url,x?.grupoNome,
     ...(Array.isArray(x?.grupoNomes)?x.grupoNomes:[]),
-    ...(x?.grupoNomes&&typeof x.grupoNomes==='object'?Object.values(x.grupoNomes):[]),
+    ...(x?.grupoNomes&&typeof x?.grupoNomes==='object'?Object.values(x.grupoNomes):[]),
     x?.tipo,x?.status,x?.erro
-  ].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR');
+  ].filter(Boolean).map(normalizeHistorySearchValue).join(' ');
 }
+
 function filterLinkHistory(){
   const box=document.getElementById('linkHistory');
   if(!box)return;
-  const q=String(document.getElementById('historyFilter')?.value||'').trim().toLocaleLowerCase('pt-BR');
+  const q=normalizeHistorySearchValue(document.getElementById('historyFilter')?.value||'');
   const status=String(document.getElementById('historyFilterStatus')?.value||'').trim();
   const records=lastHistoryRecords.filter(x=>{
-    if(status && String(x?.status||'')!==status)return false;
+    if(status==='sucesso' && !(String(x?.status||'')==='sucesso' || Number(x?.sucessos||0)>0)) return false;
     return !q || historySearchText(x).includes(q);
   });
   renderLinkHistory(records);
 }
+
 function clearHistoryFilter(){
   const input=document.getElementById('historyFilter');
   const status=document.getElementById('historyFilterStatus');
@@ -587,6 +614,7 @@ function clearHistoryFilter(){
   if(status)status.value='';
   filterLinkHistory();
 }
+
 function renderLinkHistory(records){
   const box=document.getElementById('linkHistory');
   if(!box)return;
@@ -598,7 +626,8 @@ function renderLinkHistory(records){
     box.innerHTML='<div class="muted">Nenhum registro corresponde aos filtros atuais.</div>';
     return;
   }
-  records.slice(0,30).forEach(x=>{
+  // O contador agora corresponde exatamente aos cartões exibidos.
+  records.forEach(x=>{
     const el=document.createElement('div');el.className='link';
     const done=x.concluidoAt?new Date(x.concluidoAt):null;
     const doneLabel=done&&!Number.isNaN(done.getTime())?done.toLocaleString('pt-BR'):'—';
@@ -617,12 +646,13 @@ function renderLinkHistory(records){
     box.appendChild(el);
   });
 }
+
 async function loadLinkHistory(){
   const box=document.getElementById('linkHistory');
   if(!box)return;
   try{
     const d=await jfetch('/api/link-historico');
-    const records=Array.isArray(d.historico)?d.historico:[];
+    const records=normalizeHistoryRecords(Array.isArray(d.historico)?d.historico:[]);
     const signature=JSON.stringify(records);
     if(signature===lastHistorySignature){filterLinkHistory();return;}
     lastHistorySignature=signature;
@@ -633,6 +663,7 @@ async function loadLinkHistory(){
     setTimeout(loadLinkHistory,3000);
   }
 }
+
 async function editLink(id){const d=await jfetch('/api/link-agendamentos');const x=d.agendamentos.find(a=>a.id===id);if(!x)return;editingId=id;showForm();populateScheduleGroupSelect(Array.isArray(x.grupoIds)?x.grupoIds:(x.grupoId?[x.grupoId]:[]));lnome.value=x.nome||'';lurl.value=x.url||'';limagemUrl.value=x.imagemUrl||'';lmensagem.value=x.mensagem||'';ldata.value=x.data||'';lhorario.value=x.horario||'';lrep.value=x.repeticao||'uma_vez';lmin.value=x.intervaloMin||2;lativo.checked=x.ativo===true;limagem.checked=x.imagemAutomatica!==false;lrandom.checked=x.mensagemAleatoriaAtiva===true || (Array.isArray(x.mensagensAleatorias)&&x.mensagensAleatorias.length>0);document.querySelectorAll('.rmsg').forEach(c=>c.checked=Array.isArray(x.mensagensAleatorias)&&x.mensagensAleatorias.includes(c.value));toggleRandomBox();syncRandomAll()}
 async function editFailedLink(id){try{const d=await jfetch('/api/link-falhas');const f=d.falhas.find(x=>String(x.id)===String(id));if(!f)return;editingId=f.agendamentoId;editingFailedId=f.id;showForm();populateScheduleGroupSelect(f.grupoId?[f.grupoId]:[]);lnome.value=f.nome||'';lurl.value=f.url||'';limagemUrl.value=f.imagemUrl||'';lmensagem.value=f.mensagem||'';ldata.value=f.data||new Date().toISOString().slice(0,10);lhorario.value=f.horario||'';lrep.value=f.repeticao||'uma_vez';lmin.value=f.intervaloMin||2;lativo.checked=true;limagem.checked=f.imagemAutomatica!==false;document.getElementById('formResult').textContent='⚠️ Link recuperado das falhas. Corrija e salve para programar novamente.';toggleRandomBox();}catch(e){toast(e.message,true)}}
 async function resendFailed(id){try{const d=await jfetch('/api/link-falhas/'+encodeURIComponent(id)+'/reenviar',{method:'POST'});toast(d.msg,!d.ok);await loadLinkHistory();await loadLinkFailures();await loadLinks();await loadSchedules();}catch(e){toast(e.message,true)}}
