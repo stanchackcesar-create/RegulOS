@@ -2417,6 +2417,73 @@ app.get('/api/links',(req,res)=>{
     res.json({ok:true,links:agendamentos,agendamentos});
   } catch(e) { res.status(500).json({ok:false,msg:'Não foi possível carregar os links.'}); }
 });
+
+// REGULOS_ASSISTENTE_CHAT_V2_1
+app.post('/api/assistente/chat', requireAuth, (req,res)=>{
+  try{
+    const pergunta=String(req.body?.pergunta||'').trim();
+    if(!pergunta) return res.status(400).json({ok:false,msg:'Digite uma pergunta.'});
+    const q=pergunta.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    let periodo=1;
+    const pm=q.match(/(?:ultimos?|ultimas?)\s+(\d+)\s+dias?/);
+    if(pm) periodo=Math.max(1,Math.min(90,Number(pm[1])));
+    else if(/7 dias|semana/.test(q)) periodo=7;
+    else if(/15 dias/.test(q)) periodo=15;
+    else if(/30 dias|mes/.test(q)) periodo=30;
+    else if(/90 dias/.test(q)) periodo=90;
+    const cutoff=Date.now()-((periodo-1)*86400000);
+    const inPeriod=v=>{const t=Date.parse(v||'');return Number.isFinite(t)&&t>=cutoff;};
+    const deliveries=Array.isArray(linkDeliveries)?linkDeliveries.filter(x=>inPeriod(x.concluidoEm||x.criadoEm||x.at)):[];
+    const failures=Array.isArray(linkFailures)?linkFailures.filter(x=>inPeriod(x.at||x.updatedAt||x.createdAt||x.data)):[]; 
+    const schedules=Array.isArray(linkSchedules)?linkSchedules:[];
+    const success=deliveries.filter(x=>String(x.status||'').toUpperCase()==='SUCESSO').length;
+    const errors=deliveries.filter(x=>String(x.status||'').toUpperCase()==='ERRO').length;
+    const sending=deliveries.filter(x=>String(x.status||'').toUpperCase()==='ENVIANDO').length;
+    const total=success+errors+sending, pct=total?Math.round(success/total*100):0;
+    const todayKey=new Date().toISOString().slice(0,10);
+    const isToday=v=>{const t=Date.parse(v||'');return Number.isFinite(t)&&new Date(t).toISOString().slice(0,10)===todayKey;};
+    const todayDeliveries=deliveries.filter(x=>isToday(x.concluidoEm||x.criadoEm||x.at));
+    const names=new Map();
+    deliveries.forEach(x=>{
+      const id=String(x.agendamentoId||x.linkId||''); if(!id)return;
+      const item=schedules.find(s=>String(s.id)===id);
+      const nome=String(x.nome||item?.nome||id);
+      const cur=names.get(id)||{nome,sucesso:0,erro:0,tentativas:0};
+      const st=String(x.status||'').toUpperCase(); cur.tentativas+=Number(x.tentativas||1);
+      if(st==='SUCESSO')cur.sucesso++; if(st==='ERRO')cur.erro++; names.set(id,cur);
+    });
+    const ranking=[...names.values()].sort((a,b)=>(b.erro-a.erro)||(b.tentativas-a.tentativas)).slice(0,5);
+    const topFailures={};
+    failures.forEach(x=>{const k=String(x.erro||x.motivo||'Falha não informada');topFailures[k]=(topFailures[k]||0)+1;});
+    const failureList=Object.entries(topFailures).sort((a,b)=>b[1]-a[1]).slice(0,3);
+    let resposta='';
+    if(/\b(erro|erros|falha|falhas|problema|problemas|por que|porque|motivo)\b/.test(q)){
+      if(!failures.length&&!errors) resposta='Não encontrei falhas registradas no período analisado.';
+      else resposta='Encontrei '+(failures.length||errors)+' ocorrência(s) relacionada(s) a falhas no período de '+periodo+' dia(s).\n'+(failureList.map(x=>'• '+x[0]+' — '+x[1]+' ocorrência(s)').join('\n')||'• Há entregas com ERRO, mas sem motivo detalhado disponível.');
+    }else if(/\b(agendamento|agendamentos|programacao|programacoes)\b/.test(q)){
+      const ativos=schedules.filter(x=>x.ativo!==false).length;
+      resposta='No momento há '+ativos+' agendamento(s) ativo(s) de '+schedules.length+' cadastrado(s).';
+    }else if(/\b(sucesso|sucessos|enviado|enviados|envios|entregas)\b/.test(q)){
+      resposta='No período de '+periodo+' dia(s), encontrei '+success+' sucesso(s), '+errors+' erro(s) e '+sending+' envio(s) em andamento.\nTaxa de sucesso: '+pct+'%.';
+    }else if(/\b(tentativa|tentativas)\b/.test(q)){
+      const tent=deliveries.reduce((n,x)=>n+Number(x.tentativas||0),0);
+      resposta='Foram registradas '+tent+' tentativa(s) de entrega no período de '+periodo+' dia(s).';
+    }else if(/\b(compar|compare|comparar)\b/.test(q)){
+      resposta='Comparação rápida do período de '+periodo+' dia(s): '+success+' sucesso(s), '+errors+' erro(s) e '+sending+' em andamento, com taxa de sucesso de '+pct+'%.';
+    }else if(/\b(link|links)\b/.test(q)&&/\b(mais|maior|pior)\b/.test(q)){
+      const top=ranking[0]; resposta=top?'O link com maior número de falhas no período é "'+top.nome+'", com '+top.erro+' erro(s) e '+top.tentativas+' tentativa(s).':'Não encontrei dados suficientes para apontar um link.';
+    }else if(/\b(hoje|agora)\b/.test(q)){
+      const ts=todayDeliveries.filter(x=>String(x.status||'').toUpperCase()==='SUCESSO').length;
+      const te=todayDeliveries.filter(x=>String(x.status||'').toUpperCase()==='ERRO').length;
+      resposta='Hoje, encontrei '+ts+' envio(s) com sucesso e '+te+' com erro no registro de entregas.';
+    }else{
+      resposta='Posso analisar erros, sucessos, tentativas, agendamentos e comparações.\nExemplo: "Quais links deram erro hoje?" ou "Quantos envios deram certo nos últimos 7 dias?"';
+    }
+    res.set('Cache-Control','no-store');
+    res.json({ok:true,resposta,periodo,metricas:{sucessos:success,erros:errors,emAndamento:sending,taxaSucesso:pct}});
+  }catch(e){res.status(500).json({ok:false,msg:'Não foi possível processar a pergunta: '+e.message});}
+});
+
 app.get('/api/link-historico',(req,res)=>{
   res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
   res.set('Pragma','no-cache');
