@@ -729,17 +729,40 @@ function pruneLinkHistoryByLatestSentTime({persist=true}={}){
   return removed;
 }
 
+function linkHistoryDuplicateFingerprint(item){
+  if(item?.motivo !== 'envio concluído — uma vez') return '';
+  const completedAt=Date.parse(String(item?.concluidoAt||''));
+  if(!Number.isFinite(completedAt)) return '';
+
+  // Arredondamos a conclusão para o segundo. Isso captura cópias criadas
+  // pela mesma execução mesmo que o segundo registro tenha sido persistido
+  // alguns milissegundos depois.
+  const completedSecond=Math.floor(completedAt/1000);
+  return JSON.stringify([
+    String(item?.nome||'').trim().toLocaleLowerCase('pt-BR'),
+    String(item?.url||'').trim(),
+    String(item?.tituloProduto||'').trim().toLocaleLowerCase('pt-BR'),
+    String(item?.data||'').trim(),
+    String(item?.horario||'').trim(),
+    String(item?.repeticao||'').trim(),
+    Number(item?.enviados||0),
+    Number(item?.sucessos||0),
+    Number(item?.erros||0),
+    Number(item?.lastDurationMs||0),
+    completedSecond
+  ]);
+}
+
 function normalizeLinkHistory(){
   if(!Array.isArray(linkHistory) || !linkHistory.length)return false;
 
   const seenOneTime=new Set();
+  const seenFingerprints=new Set();
   const normalized=[];
   let changed=false;
 
   for(const item of linkHistory){
     // Execuções únicas usam o ID do agendamento como identidade estável.
-    // O motivo não entra na chave: se um registro legado perdeu o motivo,
-    // mas mantém o mesmo ID, ainda assim não pode virar um segundo cartão.
     const oneTimeKey = item?.motivo === 'envio concluído — uma vez' && item?.id
       ? String(item.id)
       : '';
@@ -752,6 +775,17 @@ function normalizeLinkHistory(){
       seenOneTime.add(oneTimeKey);
     }
 
+    // Proteção para registros legados que foram gravados com IDs diferentes,
+    // mas representam exatamente a mesma execução concluída.
+    const fingerprint=linkHistoryDuplicateFingerprint(item);
+    if(fingerprint){
+      if(seenFingerprints.has(fingerprint)){
+        changed=true;
+        continue;
+      }
+      seenFingerprints.add(fingerprint);
+    }
+
     normalized.push(item);
   }
 
@@ -759,7 +793,6 @@ function normalizeLinkHistory(){
   linkHistory=normalized;
   return changed;
 }
-
 function saveLinkHistory(){
   normalizeLinkHistory();
   // Os novos registros entram com unshift(), portanto os primeiros 500
@@ -2109,7 +2142,7 @@ app.get('/api/link-historico',(req,res)=>{
     const normalized=normalizeLinkHistory();
     const beforePrune=linkHistory.length;
     pruneLinkHistoryByLatestSentTime();
-    if(normalized && linkHistory.length===beforePrune) writeJson(FILES.linkHistory,linkHistory);
+    if(normalized || linkHistory.length!==beforePrune) writeJson(FILES.linkHistory,linkHistory);
     res.json({ok:true,historico:linkHistory});
   } catch(e) {
     addLog(`Erro ao carregar histórico de links: ${e.message}`);
