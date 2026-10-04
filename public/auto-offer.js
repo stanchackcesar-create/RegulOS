@@ -26,6 +26,7 @@
 
     const title = String(d.titulo || '').trim();
     const price = String(d.preco || '').trim();
+    const originalPrice = String(d.precoOriginal || '').trim();
     const discount = String(d.desconto || '').trim();
     const image = String(d.imagemUrl || '').trim();
     // No modo automático, o título e o link não entram na mensagem personalizada:
@@ -33,6 +34,7 @@
     // Aqui deixamos somente informações complementares que realmente foram encontradas.
     const originalMessage = String(get('lmensagem')?.value || '').trim();
     const lines = [];
+    if (originalPrice && price && originalPrice !== price) lines.push('🏷️ De: ' + originalPrice);
     if (price) lines.push('💰 Por: ' + price);
     if (discount) lines.push('🟢 ' + discount);
     if (!lines.length && originalMessage) lines.push(originalMessage);
