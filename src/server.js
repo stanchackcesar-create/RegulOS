@@ -2425,6 +2425,7 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     if(!pergunta) return res.status(400).json({ok:false,msg:'Digite uma pergunta.'});
     const q=pergunta.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     const now=new Date();
+    const periodoSolicitado=Math.max(1,Math.min(90,Number(req.body?.periodoSolicitado||7)));
     const startOfDay=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();
     const addDays=(ms,n)=>ms+(n*86400000);
     const todayStart=startOfDay(now);
@@ -2457,6 +2458,7 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
       else if(/15 dias/.test(q)){periodo=15;startMs=addDays(todayStart,-14);endMs=addDays(todayStart,1);periodoLabel='ultimos 15 dias';}
       else if(/30 dias|mes/.test(q)){periodo=30;startMs=addDays(todayStart,-29);endMs=addDays(todayStart,1);periodoLabel='ultimos 30 dias';}
       else if(/90 dias/.test(q)){periodo=90;startMs=addDays(todayStart,-89);endMs=addDays(todayStart,1);periodoLabel='ultimos 90 dias';}
+      else {periodo=periodoSolicitado;startMs=addDays(todayStart,-(periodo-1));endMs=addDays(todayStart,1);periodoLabel='ultimos '+periodo+' dias';}
     }
 
     const inPeriod=v=>{const t=Date.parse(v||'');return Number.isFinite(t)&&t>=startMs&&t<endMs;};
@@ -2506,12 +2508,24 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     if(sending>0) recomendacoes.push('Há '+sending+' entrega(s) ainda em andamento; aguarde a conclusão antes de interpretar esse resultado como definitivo.');
     if(!total && !failures.length) recomendacoes.push('Não há dados de entrega no período selecionado; confirme se houve envio nesse intervalo.');
 
+    const intencaoAgendamentosHoje=/\b(quais|qual|mostre|mostrar|liste|listar)\b/.test(q)&&/\b(link|links)\b/.test(q)&&/\b(agendad|programad|programacao|programacoes)\b/.test(q);
     const intencaoComparar=/\b(compar|compare|comparar|melhorou|piorou|evolucao|evoluiu)\b/.test(q);
     const intencaoAnalise=/\b(como esta|como estao|analise|analisar|desempenho|resultado|resultados|situacao|situacao)\b/.test(q);
     const intencaoRecomendacao=/\b(recomenda|recomendacao|sugestao|sugira|o que devo|que devo|o que fazer|como melhorar)\b/.test(q);
 
     let resposta='';
-    if(/\b(erro|erros|falha|falhas|problema|problemas|por que|porque|motivo)\b/.test(q)){
+    if(intencaoAgendamentosHoje){
+      const agendados=schedules.filter(x=>String(x.data||'')===now.toISOString().slice(0,10));
+      if(!agendados.length) resposta='Não encontrei links agendados para hoje.';
+      else resposta='Encontrei '+agendados.length+' link(s) agendado(s) para hoje:\\n• '+agendados.map(x=>String(x.nome||x.id)+' — '+String(x.horario||'sem horário')).join('\\n• ');
+    }else if((intencaoAnalise||intencaoRecomendacao)&&/\b(link|links)\b/.test(q)){
+      const top=ranking[0];
+      if(top?.erro>0){
+        resposta='O link que mais precisa de atenção em '+periodoLabel+' é "'+top.nome+'", com '+top.erro+' erro(s) e '+top.tentativas+' tentativa(s).';
+        if(failureList.length) resposta+='\\n\\n🔎 Principal causa registrada: '+failureList[0][0]+' ('+failureList[0][1]+' ocorrência(s)).';
+        if(recomendacoes.length) resposta+='\\n\\n💡 Recomendações:\\n• '+recomendacoes.join('\\n• ');
+      }else resposta='Não encontrei falhas suficientes em '+periodoLabel+' para apontar um link crítico. A taxa de sucesso foi '+pct+'%.';
+    }else if(/\b(erro|erros|falha|falhas|problema|problemas|por que|porque|motivo)\b/.test(q)){
       if(!failures.length&&!errors) resposta='Não encontrei falhas registradas em '+periodoLabel+'.';
       else resposta='Encontrei '+(failures.length||errors)+' ocorrência(s) relacionada(s) a falhas em '+periodoLabel+'.\n'+(failureList.map(x=>'• '+x[0]+' — '+x[1]+' ocorrência(s)').join('\n')||'• Há entregas com ERRO, mas sem motivo detalhado disponível.');
     }else if(/\b(agendamento|agendamentos|programacao|programacoes)\b/.test(q)){
