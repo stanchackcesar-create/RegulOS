@@ -570,8 +570,28 @@ function normalizeHistorySearchValue(value){
     .trim();
 }
 
+function historyDuplicateFingerprint(item){
+  if(item?.motivo!=='envio concluído — uma vez') return '';
+  const completedAt=Date.parse(String(item?.concluidoAt||''));
+  if(!Number.isFinite(completedAt)) return '';
+  return JSON.stringify([
+    normalizeHistorySearchValue(item?.nome),
+    String(item?.url||'').trim(),
+    normalizeHistorySearchValue(item?.tituloProduto),
+    String(item?.data||'').trim(),
+    String(item?.horario||'').trim(),
+    String(item?.repeticao||'').trim(),
+    Number(item?.enviados||0),
+    Number(item?.sucessos||0),
+    Number(item?.erros||0),
+    Number(item?.lastDurationMs||0),
+    Math.floor(completedAt/1000)
+  ]);
+}
+
 function normalizeHistoryRecords(records){
   const seenOneTime=new Set();
+  const seenFingerprints=new Set();
   const normalized=[];
   for(const item of (Array.isArray(records)?records:[])){
     const key=item?.motivo==='envio concluído — uma vez' && item?.id
@@ -581,11 +601,17 @@ function normalizeHistoryRecords(records){
       if(seenOneTime.has(key))continue;
       seenOneTime.add(key);
     }
+
+    const fingerprint=historyDuplicateFingerprint(item);
+    if(fingerprint){
+      if(seenFingerprints.has(fingerprint))continue;
+      seenFingerprints.add(fingerprint);
+    }
+
     normalized.push(item);
   }
   return normalized;
 }
-
 function historySearchText(x){
   return [
     x?.nome,x?.tituloProduto,x?.url,x?.grupoNome,
