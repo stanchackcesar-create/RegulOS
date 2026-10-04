@@ -48,6 +48,7 @@ const FILES = {
   schedules: path.join(DATA, 'link_agendamentos.json'),
   linkHistory: path.join(DATA, 'historico_links_enviados.json'),
   linkFailures: path.join(DATA, 'links_com_falha.json'),
+  deliveries: path.join(DATA, 'entregas_links.json'),
   botSchedule: path.join(DATA, 'programacao_bot.json'),
   linkQueue: path.join(DATA, 'fila_links.json')
 };
@@ -509,6 +510,88 @@ function saveHistory() {
   history = history.slice(-2000);
   writeJson(FILES.history, history);
 }
+
+function deliveryId(item, occurrence, groupId) {
+  return crypto.createHash('sha256')
+    .update([String(item?.id || ''), String(occurrence || ''), String(groupId || '')].join('|'))
+    .digest('hex')
+    .slice(0, 32);
+}
+
+function deliveryGroupName(item, groupId) {
+  return String(
+    item?.grupoNomes?.[String(groupId)] ||
+    (String(item?.grupoNome || '').trim() && String(item?.grupoNome || '').trim() !== '1 grupos' ? item.grupoNome : '') ||
+    groupId ||
+    ''
+  ).trim();
+}
+
+function getLinkDelivery(item, occurrence, groupId) {
+  const id = deliveryId(item, occurrence, groupId);
+  return linkDeliveries.find(x => String(x?.id || '') === id) || null;
+}
+
+function saveLinkDeliveries() {
+  // Mantemos uma janela razoável para evitar crescimento ilimitado do JSON.
+  linkDeliveries = linkDeliveries.slice(-5000);
+  writeJson(FILES.deliveries, linkDeliveries);
+}
+
+function ensureLinkDeliveries(item, occurrence, groupIds) {
+  const ids = [...new Set((Array.isArray(groupIds) ? groupIds : []).map(String).filter(Boolean))];
+  let changed = false;
+
+  for (const groupId of ids) {
+    const id = deliveryId(item, occurrence, groupId);
+    if (linkDeliveries.some(x => String(x?.id || '') === id)) continue;
+
+    linkDeliveries.push({
+      id,
+      agendamentoId: String(item?.id || ''),
+      ocorrencia: String(occurrence || ''),
+      grupoId: String(groupId),
+      grupoNome: deliveryGroupName(item, groupId),
+      status: 'PENDENTE',
+      criadoEm: new Date().toISOString(),
+      iniciadoEm: '',
+      concluidoEm: '',
+      erro: '',
+      tentativas: 0
+    });
+    changed = true;
+  }
+
+  if (changed) saveLinkDeliveries();
+  return changed;
+}
+
+function setLinkDeliveryStatus(item, occurrence, groupId, status, errorMessage = '') {
+  const id = deliveryId(item, occurrence, groupId);
+  let delivery = linkDeliveries.find(x => String(x?.id || '') === id);
+
+  if (!delivery) {
+    ensureLinkDeliveries(item, occurrence, [groupId]);
+    delivery = linkDeliveries.find(x => String(x?.id || '') === id);
+  }
+  if (!delivery) return null;
+
+  const now = new Date().toISOString();
+  delivery.status = status;
+  delivery.erro = status === 'ERRO' ? String(errorMessage || 'Falha no envio.') : '';
+
+  if (status === 'ENVIANDO') {
+    delivery.iniciadoEm = now;
+    delivery.concluidoEm = '';
+    delivery.tentativas = Number(delivery.tentativas || 0) + 1;
+  } else if (status === 'SUCESSO' || status === 'ERRO') {
+    delivery.concluidoEm = now;
+  }
+
+  saveLinkDeliveries();
+  return delivery;
+}
+
 function addHistory(item) {
   history.push({ at: new Date().toISOString(), ...item });
   saveHistory();
@@ -544,6 +627,7 @@ let history = Array.isArray(readJson(FILES.history, [])) ? readJson(FILES.histor
 let linkSchedules = Array.isArray(readJson(FILES.schedules, [])) ? readJson(FILES.schedules, []) : [];
 let linkHistory = Array.isArray(readJson(FILES.linkHistory, [])) ? readJson(FILES.linkHistory, []) : [];
 let linkFailures = Array.isArray(readJson(FILES.linkFailures, [])) ? readJson(FILES.linkFailures, []) : [];
+let linkDeliveries = Array.isArray(readJson(FILES.deliveries, [])) ? readJson(FILES.deliveries, []) : [];
 
 const LINK_FAILURE_MAX_WINDOW_MS = 10 * 60 * 60 * 1000;
 const linkFailureExpirationTimers = new Map();
@@ -1612,6 +1696,7 @@ async function sendScheduledLink(item) {
     item.progressGroupIds = [];
     item.progressStartedAt = now.toISOString();
     item.status = 'enviando';
+    ensureLinkDeliveries(item, item.progressKey, selectedGroupIds.filter(id => getGroupConfig(id).ativo !== false));
     writeJson(FILES.schedules, linkSchedules);
     addLog(`Agendamento "${item.nome}" iniciado para ${selectedGroupIds.length} grupo(s). Progresso salvo em disco.`);
   }
@@ -1699,6 +1784,7 @@ async function sendScheduledLink(item) {
         // Em caso de erro, removemos a marca para permitir nova tentativa.
         item.progressGroupIds = [...new Set([...(item.progressGroupIds || []), id])];
         writeJson(FILES.schedules, linkSchedules);
+        setLinkDeliveryStatus(item, item.progressKey, id, 'ENVIANDO');
 
         const randomIntro = chooseRandomMessage(item);
         const titleLine = productTitle ? `📦 ${productTitle}` : '';
@@ -1733,6 +1819,7 @@ async function sendScheduledLink(item) {
           await sock.sendMessage(id, { text });
         }
         sent++;
+        setLinkDeliveryStatus(item, item.progressKey, id, 'SUCESSO');
         addHistory({ grupoId:id, link:item.url, status:'sucesso', agendamentoId:item.id, tipo:'agendado', ocorrencia:item.progressKey });
         removeLinkFailure(`${item.id}:${String(id)}`);
         item.enviados = Number(item.enviados||0) + 1;
@@ -1742,6 +1829,7 @@ async function sendScheduledLink(item) {
         await new Promise(r => setTimeout(r, Math.max(700, Number(item.intervaloMin||1)*1000)));
       } catch(e) {
         errors++;
+        setLinkDeliveryStatus(item, item.progressKey, id, 'ERRO', e.message);
         item.progressGroupIds = (item.progressGroupIds || []).filter(x => String(x) !== String(id));
         item.erros = Number(item.erros||0) + 1;
         addHistory({ grupoId:id, link:item.url, status:'erro', erro:e.message, agendamentoId:item.id, tipo:'agendado', ocorrencia:item.progressKey });
@@ -1964,6 +2052,26 @@ function diagnosticoSchedulerState() {
   const enviando = ativos.filter(x => String(x?.status || '') === 'enviando');
   return { ativos, pendentes, enviando };
 }
+
+
+app.get('/api/entregas', requireAuth, (req,res) => {
+  try {
+    const agendamentoId = String(req.query?.agendamentoId || '').trim();
+    const ocorrencia = String(req.query?.ocorrencia || '').trim();
+    const status = String(req.query?.status || '').trim().toUpperCase();
+
+    let entregas = Array.isArray(linkDeliveries) ? [...linkDeliveries] : [];
+    if (agendamentoId) entregas = entregas.filter(x => String(x?.agendamentoId || '') === agendamentoId);
+    if (ocorrencia) entregas = entregas.filter(x => String(x?.ocorrencia || '') === ocorrencia);
+    if (status) entregas = entregas.filter(x => String(x?.status || '').toUpperCase() === status);
+
+    entregas.sort((a,b) => String(b?.criadoEm || '').localeCompare(String(a?.criadoEm || '')));
+    res.set('Cache-Control','no-store');
+    res.json({ok:true,total:entregas.length,entregas});
+  } catch(e) {
+    res.status(500).json({ok:false,msg:e.message || 'Falha ao consultar entregas.'});
+  }
+});
 
 app.get('/api/diagnostico', (req,res) => {
   try {
