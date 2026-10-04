@@ -46,7 +46,12 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 .schedule-scroll{max-height:520px;overflow-y:auto;overflow-x:hidden;padding-right:6px;overscroll-behavior:contain;scrollbar-width:thin}
 .schedule-scroll .link{margin-right:2px}
 .schedule-filter-result{font-size:13px;color:#9eb0ca;min-height:18px;margin-top:4px}
-@media(max-width:560px){.schedule-scroll{max-height:60vh}.schedule-tools{align-items:stretch}.schedule-tools input{flex-basis:100%}.schedule-tools button{min-height:44px}}
+.history-filter-tools,.failure-filter-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
+.history-filter-tools input,.failure-filter-tools input{flex:1 1 280px;min-width:180px}
+.history-filter-tools select,.failure-filter-tools select{width:auto;min-width:150px}
+.history-filter-result,.failure-filter-result{font-size:13px;color:#9eb0ca;min-height:18px;margin-top:4px}
+@media(max-width:560px){.schedule-scroll{max-height:60vh}.schedule-tools{align-items:stretch}.schedule-tools input{flex-basis:100%}.schedule-tools button{min-height:44px}
+.history-filter-tools,.failure-filter-tools{align-items:stretch}.history-filter-tools input,.failure-filter-tools input{flex-basis:100%}.history-filter-tools select,.failure-filter-tools select{width:100%;min-height:44px}.history-filter-tools button,.failure-filter-tools button{min-height:44px}}
 
 </style>
 </head>
@@ -93,12 +98,32 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
  <button class="red" onclick="clearLinkHistory()">🗑️ Limpar histórico</button>
 </div>
 <div class="muted" style="margin-top:6px">⚠️ O histórico também é apagado quando você encerra a sessão, usa <b>Desconectar</b> ou gera um novo QR.</div>
+<div class="history-filter-tools">
+  <input id="historyFilter" type="search" placeholder="🔎 Pesquisar nome, produto, grupo ou link..." oninput="filterLinkHistory()" autocomplete="off">
+  <select id="historyFilterStatus" onchange="filterLinkHistory()">
+    <option value="">Todos os registros</option>
+    <option value="sucesso">Sucesso</option>
+  </select>
+  <button type="button" onclick="clearHistoryFilter()">Limpar</button>
+</div>
+<div id="historyFilterResult" class="history-filter-result"></div>
 <div id="linkHistory" style="margin-top:10px"></div>
 </div>
 
 <div class="panel" style="margin-top:14px">
 <div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:0">⚠️ Links com falha</h2><button class="red" onclick="clearLinkFailures()">🗑️ Limpar falhas</button></div>
 <div class="muted">Se o envio falhar ou a imagem não puder ser obtida, o link aparece aqui. <b>Reenviar</b> tenta novamente. <b>Editar</b> abre o Gerenciador de Links com os dados preenchidos.</div>
+<div class="failure-filter-tools">
+  <input id="failureFilter" type="search" placeholder="🔎 Pesquisar nome, grupo, link ou motivo..." oninput="filterLinkFailures()" autocomplete="off">
+  <select id="failureFilterField" onchange="filterLinkFailures()">
+    <option value="">Todos os campos</option>
+    <option value="nome">Nome</option>
+    <option value="grupo">Grupo</option>
+    <option value="motivo">Motivo</option>
+  </select>
+  <button type="button" onclick="clearFailureFilter()">Limpar</button>
+</div>
+<div id="failureFilterResult" class="failure-filter-result"></div>
 <div id="linkFailures" style="margin-top:10px"></div>
 </div>
 </section>
@@ -535,48 +560,151 @@ async function deleteLinkHistory(id){
  catch(e){ toast(e.message,true); }
 }
 let lastHistorySignature='';
-async function loadLinkHistory(){
- const box=document.getElementById('linkHistory');
- if(!box)return;
- try{
-  
-  const d=await jfetch('/api/link-historico'); const signature=JSON.stringify(d.historico||[]); if(signature===lastHistorySignature)return; lastHistorySignature=signature; box.innerHTML='';
-  if(!d.historico.length){box.innerHTML='<div class="muted">Nenhum link enviado e arquivado ainda.</div>';return}
-  d.historico.slice(0,30).forEach(x=>{
-   const el=document.createElement('div'); el.className='link';
-   const done=x.concluidoAt?new Date(x.concluidoAt):null;
-   const doneLabel=done&&!Number.isNaN(done.getTime())?done.toLocaleString('pt-BR'):'—';
-   const sentCandidates=[x.lastRunAt,x.concluidoAt,x.at].map(v=>Date.parse(String(v||''))).filter(Number.isFinite);
-   const sentAt=sentCandidates.length?Math.max(...sentCandidates):NaN;
-   const limpeza=Number.isFinite(sentAt)?new Date(sentAt+10*60*60*1000):null;
-   const limpezaLabel=limpeza&&!Number.isNaN(limpeza.getTime())?limpeza.toLocaleString('pt-BR'):'—';
-   const dur=x.lastDurationMs?`${Math.round(x.lastDurationMs/1000)}s`:'—';
-   el.innerHTML=`<h3>📦 ${esc(x.nome)} <span class="badge good">enviado</span></h3>
-   <a>${esc(x.url)}</a><div class="stats">🏷️ ${esc(x.tituloProduto||'Título não registrado')}</div>
-   <div class="stats">📅 Programado: ${esc(x.data)} às ${esc(x.horario)} · ${esc(x.repeticao||'uma_vez')}</div>
-   <div class="stats">📨 ${x.enviados||0} enviados · 🟢 ${x.sucessos||0} sucesso(s) · ❌ ${x.erros||0} erro(s) · ⏱️ duração: ${dur}</div>
-   <div class="stats">✅ Concluído em: ${doneLabel}</div>
-   <div class="stats">🧹 Limpeza automática prevista: ${limpezaLabel}</div>
-   <div class="row"><button class="red" onclick="deleteLinkHistory('${esc(x.id)}')">🗑️ Excluir registro</button></div>`;
-   box.appendChild(el);
+let lastHistoryRecords=[];
+function historySearchText(x){
+  return [
+    x?.nome,x?.tituloProduto,x?.url,x?.grupoNome,
+    ...(Array.isArray(x?.grupoNomes)?x.grupoNomes:[]),
+    ...(x?.grupoNomes&&typeof x.grupoNomes==='object'?Object.values(x.grupoNomes):[]),
+    x?.tipo,x?.status,x?.erro
+  ].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR');
+}
+function filterLinkHistory(){
+  const box=document.getElementById('linkHistory');
+  if(!box)return;
+  const q=String(document.getElementById('historyFilter')?.value||'').trim().toLocaleLowerCase('pt-BR');
+  const status=String(document.getElementById('historyFilterStatus')?.value||'').trim();
+  const records=lastHistoryRecords.filter(x=>{
+    if(status && String(x?.status||'')!==status)return false;
+    return !q || historySearchText(x).includes(q);
   });
- }catch(e){box.innerHTML='<div class="muted">⚠️ Não foi possível carregar o histórico agora. Tentando novamente...</div>';setTimeout(loadLinkHistory,3000)}
+  renderLinkHistory(records);
+}
+function clearHistoryFilter(){
+  const input=document.getElementById('historyFilter');
+  const status=document.getElementById('historyFilterStatus');
+  if(input)input.value='';
+  if(status)status.value='';
+  filterLinkHistory();
+}
+function renderLinkHistory(records){
+  const box=document.getElementById('linkHistory');
+  if(!box)return;
+  const total=lastHistoryRecords.length;
+  const result=document.getElementById('historyFilterResult');
+  if(result)result.textContent=total?'Mostrando '+records.length+' de '+total+' registro(s).':'';
+  box.innerHTML='';
+  if(!records.length){
+    box.innerHTML='<div class="muted">Nenhum registro corresponde aos filtros atuais.</div>';
+    return;
+  }
+  records.slice(0,30).forEach(x=>{
+    const el=document.createElement('div');el.className='link';
+    const done=x.concluidoAt?new Date(x.concluidoAt):null;
+    const doneLabel=done&&!Number.isNaN(done.getTime())?done.toLocaleString('pt-BR'):'—';
+    const sentCandidates=[x.lastRunAt,x.concluidoAt,x.at].map(v=>Date.parse(String(v||''))).filter(Number.isFinite);
+    const sentAt=sentCandidates.length?Math.max(...sentCandidates):NaN;
+    const limpeza=Number.isFinite(sentAt)?new Date(sentAt+10*60*60*1000):null;
+    const limpezaLabel=limpeza&&!Number.isNaN(limpeza.getTime())?limpeza.toLocaleString('pt-BR'):'—';
+    const dur=x.lastDurationMs?Math.round(x.lastDurationMs/1000)+'s':'—';
+    el.innerHTML='<h3>📦 '+esc(x.nome)+' <span class="badge good">enviado</span></h3>'
+      +'<a>'+esc(x.url)+'</a><div class="stats">🏷️ '+esc(x.tituloProduto||'Título não registrado')+'</div>'
+      +'<div class="stats">📅 Programado: '+esc(x.data)+' às '+esc(x.horario)+' · '+esc(x.repeticao||'uma_vez')+'</div>'
+      +'<div class="stats">📨 '+(x.enviados||0)+' enviados · 🟢 '+(x.sucessos||0)+' sucesso(s) · ❌ '+(x.erros||0)+' erro(s) · ⏱️ duração: '+dur+'</div>'
+      +'<div class="stats">✅ Concluído em: '+doneLabel+'</div>'
+      +'<div class="stats">🧹 Limpeza automática prevista: '+limpezaLabel+'</div>'
+      +'<div class="row"><button class="red" onclick="deleteLinkHistory(\''+esc(x.id)+'\')">🗑️ Excluir registro</button></div>';
+    box.appendChild(el);
+  });
+}
+async function loadLinkHistory(){
+  const box=document.getElementById('linkHistory');
+  if(!box)return;
+  try{
+    const d=await jfetch('/api/link-historico');
+    const records=Array.isArray(d.historico)?d.historico:[];
+    const signature=JSON.stringify(records);
+    if(signature===lastHistorySignature){filterLinkHistory();return;}
+    lastHistorySignature=signature;
+    lastHistoryRecords=records;
+    filterLinkHistory();
+  }catch(e){
+    box.innerHTML='<div class="muted">⚠️ Não foi possível carregar o histórico agora. Tentando novamente...</div>';
+    setTimeout(loadLinkHistory,3000);
+  }
 }
 async function editLink(id){const d=await jfetch('/api/link-agendamentos');const x=d.agendamentos.find(a=>a.id===id);if(!x)return;editingId=id;showForm();populateScheduleGroupSelect(Array.isArray(x.grupoIds)?x.grupoIds:(x.grupoId?[x.grupoId]:[]));lnome.value=x.nome||'';lurl.value=x.url||'';limagemUrl.value=x.imagemUrl||'';lmensagem.value=x.mensagem||'';ldata.value=x.data||'';lhorario.value=x.horario||'';lrep.value=x.repeticao||'uma_vez';lmin.value=x.intervaloMin||2;lativo.checked=x.ativo===true;limagem.checked=x.imagemAutomatica!==false;lrandom.checked=x.mensagemAleatoriaAtiva===true || (Array.isArray(x.mensagensAleatorias)&&x.mensagensAleatorias.length>0);document.querySelectorAll('.rmsg').forEach(c=>c.checked=Array.isArray(x.mensagensAleatorias)&&x.mensagensAleatorias.includes(c.value));toggleRandomBox();syncRandomAll()}
 async function editFailedLink(id){try{const d=await jfetch('/api/link-falhas');const f=d.falhas.find(x=>String(x.id)===String(id));if(!f)return;editingId=f.agendamentoId;editingFailedId=f.id;showForm();populateScheduleGroupSelect(f.grupoId?[f.grupoId]:[]);lnome.value=f.nome||'';lurl.value=f.url||'';limagemUrl.value=f.imagemUrl||'';lmensagem.value=f.mensagem||'';ldata.value=f.data||new Date().toISOString().slice(0,10);lhorario.value=f.horario||'';lrep.value=f.repeticao||'uma_vez';lmin.value=f.intervaloMin||2;lativo.checked=true;limagem.checked=f.imagemAutomatica!==false;document.getElementById('formResult').textContent='⚠️ Link recuperado das falhas. Corrija e salve para programar novamente.';toggleRandomBox();}catch(e){toast(e.message,true)}}
 async function resendFailed(id){try{const d=await jfetch('/api/link-falhas/'+encodeURIComponent(id)+'/reenviar',{method:'POST'});toast(d.msg,!d.ok);await loadLinkHistory();await loadLinkFailures();await loadLinks();await loadSchedules();}catch(e){toast(e.message,true)}}
 async function clearLinkFailures(){if(!confirm('Apagar todos os links com falha?'))return;try{const d=await jfetch('/api/link-falhas',{method:'DELETE'});toast(d.msg);await loadLinkFailures();}catch(e){toast(e.message,true)}}
 let lastFailureSignature='';
-async function loadLinkFailures(){const box=document.getElementById('linkFailures');if(!box)return;try{const d=await jfetch('/api/link-falhas');
-  const signature=JSON.stringify(d.falhas||[]);
-  if(signature===lastFailureSignature)return;
-  lastFailureSignature=signature;box.innerHTML='';if(!d.falhas.length){box.innerHTML='<div class="muted">Nenhum link com falha.</div>';return;}d.falhas.forEach(f=>{const el=document.createElement('div');el.className='link';
-   const failureCandidates=[f.atualizadoEm,f.criadoEm].map(v=>Date.parse(String(v||''))).filter(Number.isFinite);
-   const failedAt=failureCandidates.length?Math.max(...failureCandidates):NaN;
-   const limpeza=Number.isFinite(failedAt)?new Date(failedAt+10*60*60*1000):null;
-   const limpezaLabel=limpeza&&!Number.isNaN(limpeza.getTime())?limpeza.toLocaleString('pt-BR'):'—';
-   const failureLabel=Number.isFinite(failedAt)?new Date(failedAt).toLocaleString('pt-BR'):'—';
-   el.innerHTML=`<h3>⚠️ ${esc(f.nome)} <span class="badge bad">falhou</span></h3><a>${esc(f.url)}</a><div class="stats">Grupo: ${esc(f.grupoNome||f.grupoId||'—')}</div><div class="stats">Motivo: ${esc(f.erro||'Falha não informada')}</div><div class="stats">⚠️ Falha registrada em: ${failureLabel}</div><div class="stats">🧹 Limpeza automática prevista: ${limpezaLabel}</div><div class="row"><button class="green" onclick="resendFailed('${esc(f.id)}')">↻ Reenviar</button><button onclick="editFailedLink('${esc(f.id)}')">✏️ Editar</button></div>`;box.appendChild(el)});}catch(e){box.innerHTML='<div class="muted errorText">Não foi possível carregar as falhas.</div>'}}
+let lastFailureRecords=[];
+function failureSearchText(x){
+  return [x?.nome,x?.url,x?.grupoNome,x?.grupoId,x?.erro,x?.status]
+    .filter(Boolean).join(' ').toLocaleLowerCase('pt-BR');
+}
+function filterLinkFailures(){
+  const box=document.getElementById('linkFailures');
+  if(!box)return;
+  const q=String(document.getElementById('failureFilter')?.value||'').trim().toLocaleLowerCase('pt-BR');
+  const field=String(document.getElementById('failureFilterField')?.value||'').trim();
+  const records=lastFailureRecords.filter(f=>{
+    const value=field==='nome'?String(f?.nome||''):
+      field==='grupo'?String(f?.grupoNome||f?.grupoId||''):
+      field==='motivo'?String(f?.erro||''):failureSearchText(f);
+    return !q || value.toLocaleLowerCase('pt-BR').includes(q);
+  });
+  renderLinkFailures(records);
+}
+function clearFailureFilter(){
+  const input=document.getElementById('failureFilter');
+  const field=document.getElementById('failureFilterField');
+  if(input)input.value='';
+  if(field)field.value='';
+  filterLinkFailures();
+}
+function renderLinkFailures(records){
+  const box=document.getElementById('linkFailures');
+  if(!box)return;
+  const total=lastFailureRecords.length;
+  const result=document.getElementById('failureFilterResult');
+  if(result)result.textContent=total?'Mostrando '+records.length+' de '+total+' falha(s).':'';
+  box.innerHTML='';
+  if(!records.length){
+    box.innerHTML='<div class="muted">Nenhuma falha corresponde aos filtros atuais.</div>';
+    return;
+  }
+  records.forEach(f=>{
+    const el=document.createElement('div');el.className='link';
+    const failureCandidates=[f.atualizadoEm,f.criadoEm].map(v=>Date.parse(String(v||''))).filter(Number.isFinite);
+    const failedAt=failureCandidates.length?Math.max(...failureCandidates):NaN;
+    const limpeza=Number.isFinite(failedAt)?new Date(failedAt+10*60*60*1000):null;
+    const limpezaLabel=limpeza&&!Number.isNaN(limpeza.getTime())?limpeza.toLocaleString('pt-BR'):'—';
+    const failureLabel=Number.isFinite(failedAt)?new Date(failedAt).toLocaleString('pt-BR'):'—';
+    el.innerHTML='<h3>⚠️ '+esc(f.nome)+' <span class="badge bad">falhou</span></h3><a>'+esc(f.url)+'</a>'
+      +'<div class="stats">Grupo: '+esc(f.grupoNome||f.grupoId||'—')+'</div>'
+      +'<div class="stats">Motivo: '+esc(f.erro||'Falha não informada')+'</div>'
+      +'<div class="stats">⚠️ Falha registrada em: '+failureLabel+'</div>'
+      +'<div class="stats">🧹 Limpeza automática prevista: '+limpezaLabel+'</div>'
+      +'<div class="row"><button class="green" onclick="resendFailed(\''+esc(f.id)+'\')">↻ Reenviar</button><button onclick="editFailedLink(\''+esc(f.id)+'\')">✏️ Editar</button></div>';
+    box.appendChild(el);
+  });
+}
+async function loadLinkFailures(){
+  const box=document.getElementById('linkFailures');
+  if(!box)return;
+  try{
+    const d=await jfetch('/api/link-falhas');
+    const records=Array.isArray(d.falhas)?d.falhas:[];
+    const signature=JSON.stringify(records);
+    if(signature===lastFailureSignature){filterLinkFailures();return;}
+    lastFailureSignature=signature;
+    lastFailureRecords=records;
+    filterLinkFailures();
+  }catch(e){
+    box.innerHTML='<div class="muted errorText">Não foi possível carregar as falhas.</div>';
+  }
+}
 async function toggleLink(id,ativo){try{await jfetch('/api/link-agendamentos/'+id+'/toggle',{method:'POST'});await loadLinks();await loadSchedules()}catch(e){toast(e.message,true)}}
 async function sendNow(id){try{const d=await jfetch('/api/link-agendamentos/'+id+'/enviar-agora',{method:'POST'});toast(d.msg);await loadLinks();await loadSchedules()}catch(e){toast(e.message,true)}}
 async function deleteLink(id){if(!confirm('Excluir este agendamento?'))return;try{await jfetch('/api/link-agendamentos/'+id,{method:'DELETE'});await loadLinks();await loadSchedules()}catch(e){toast(e.message,true)}}
