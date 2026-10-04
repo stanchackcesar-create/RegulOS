@@ -729,7 +729,28 @@ function pruneLinkHistoryByLatestSentTime({persist=true}={}){
   return removed;
 }
 
+function normalizeLinkHistory(){
+  if(!Array.isArray(linkHistory) || !linkHistory.length)return;
+  const seenOneTime=new Set();
+  const normalized=[];
+  for(const item of linkHistory){
+    // Registros de links "uma vez" usam o próprio agendamento como ID.
+    // Se o servidor for reiniciado ou a conclusão for processada novamente,
+    // o mesmo agendamento não deve aparecer duas vezes no histórico visual.
+    const oneTimeKey = item?.motivo === 'envio concluído — uma vez' && item?.id
+      ? String(item.id)
+      : '';
+    if(oneTimeKey){
+      if(seenOneTime.has(oneTimeKey))continue;
+      seenOneTime.add(oneTimeKey);
+    }
+    normalized.push(item);
+  }
+  linkHistory=normalized;
+}
+
 function saveLinkHistory(){
+  normalizeLinkHistory();
   linkHistory=linkHistory.slice(-500);
   pruneLinkHistoryByLatestSentTime({persist:false});
   linkHistory.forEach(scheduleLinkHistoryExpiration);
@@ -749,6 +770,11 @@ pruneLinkHistoryByLatestSentTime();
 linkHistory.forEach(scheduleLinkHistoryExpiration);
 
 function archiveCompletedOneTimeLink(item) {
+  const existingIndex = linkHistory.findIndex(x =>
+    x?.motivo === 'envio concluído — uma vez' &&
+    String(x?.id || '') === String(item.id || '')
+  );
+
   const snapshot = {
     id: item.id, nome: item.nome, url: item.url, mensagem: item.mensagem || '',
     tituloProduto: item.tituloProduto || '', repeticao: item.repeticao,
@@ -760,8 +786,14 @@ function archiveCompletedOneTimeLink(item) {
     lastRunAt: item.lastRunAt || new Date().toISOString(), lastDurationMs: Number(item.lastDurationMs || 0),
     concluidoAt: new Date().toISOString(), motivo: 'envio concluído — uma vez'
   };
-  linkHistory.unshift(snapshot);
+
+  // Um agendamento de execução única tem um único registro de histórico.
+  // Se a rotina chegar aqui novamente, atualizamos o registro existente
+  // em vez de criar outro cartão duplicado.
+  if(existingIndex >= 0) linkHistory[existingIndex] = snapshot;
+  else linkHistory.unshift(snapshot);
   saveLinkHistory();
+
   const idx = linkSchedules.findIndex(x => String(x.id) === String(item.id));
   if (idx >= 0) linkSchedules.splice(idx, 1);
   writeJson(FILES.schedules, linkSchedules);
