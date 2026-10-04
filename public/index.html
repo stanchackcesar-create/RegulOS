@@ -78,6 +78,31 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
   </div>
   <div id="centralDiagnostic" class="muted" style="margin-top:14px">Clique em “Executar diagnóstico” para verificar o RegulOS.</div>
 </section>
+<section class="panel" style="margin:18px 0">
+  <div class="row" style="justify-content:space-between;align-items:center">
+    <div>
+      <h2 style="margin:0">🤖 Assistente do RegulOS 12.5</h2>
+      <div class="muted">Analise o desempenho, encontre problemas, organize links e prepare relatórios.</div>
+    </div>
+    <span class="badge neutral">V1</span>
+  </div>
+  <div class="row" style="margin-top:12px">
+    <button class="primary" onclick="runRegulosAssistant('analisar')">🧠 Analisar</button>
+    <button onclick="runRegulosAssistant('erros')">🔎 Explicar erros</button>
+    <button onclick="runRegulosAssistant('organizar')">📋 Organizar links</button>
+    <button onclick="runRegulosAssistant('comparar')">⚖️ Comparar</button>
+    <button onclick="runRegulosAssistant('campanha')">🚀 Criar campanha</button>
+    <button onclick="runRegulosAssistant('relatorio')">📄 Relatório</button>
+  </div>
+  <div class="two" style="margin-top:10px">
+    <label>Período de análise
+      <select id="assistantPeriod">
+        <option value="1">Hoje</option><option value="7" selected>Últimos 7 dias</option><option value="15">Últimos 15 dias</option><option value="30">Últimos 30 dias</option><option value="90">Últimos 90 dias</option>
+      </select>
+    </label>
+  </div>
+  <div id="assistantResult" class="notice" style="margin-top:12px">Escolha uma ação para o Assistente analisar os dados reais do RegulOS.</div>
+</section>
 <div class="cards">
 <div class="card metric"><small>WhatsApp</small><b id="conn">...</b><span id="number" class="muted">Número: —</span></div>
 <div class="card metric"><small>Mensagens hoje</small><b id="today">0</b></div>
@@ -941,6 +966,21 @@ async function runCentralDiagnostic(){
   }
 }
 
+async function runRegulosAssistant(acao){
+  const box=document.getElementById('assistantResult'); if(!box)return;
+  const periodo=Number(document.getElementById('assistantPeriod')?.value||7);
+  box.innerHTML='<div class="muted">🤖 Assistente analisando os dados...</div>';
+  try{
+    const d=await jfetch('/api/assistente',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({acao,periodo})});
+    const m=d.metricas||{};
+    const fails=(d.principaisFalhas||[]).map(x=>'<div class="stats">🔴 '+esc(x.motivo)+' — '+esc(x.total)+' ocorrência(s)</div>').join('');
+    const ranking=(d.ranking||[]).slice(0,5).map(x=>'<div class="stats">📦 '+esc(x.nome)+' — '+esc(x.sucesso)+' sucesso(s), '+esc(x.erro)+' erro(s), '+esc(x.tentativas)+' tentativa(s)</div>').join('');
+    box.innerHTML='<div style="font-size:16px;font-weight:800">🤖 '+esc(d.resposta||'Análise concluída.')+'</div>'
+      +'<div class="row" style="margin-top:10px"><span class="badge neutral">📅 '+esc(d.periodo)+' dia(s)</span><span class="badge good">🟢 '+esc(m.sucessos)+' sucesso(s)</span><span class="badge bad">🔴 '+esc(m.erros)+' erro(s)</span><span class="badge neutral">📈 '+esc(m.taxaSucesso)+'% sucesso</span></div>'
+      +(fails?'<div style="margin-top:10px"><b>Principais problemas</b>'+fails+'</div>':'')
+      +(ranking?'<div style="margin-top:10px"><b>Desempenho dos links</b>'+ranking+'</div>':'');
+  }catch(e){box.innerHTML='<div class="error">🔴 '+esc(e.message||e)+'</div>'}
+}
 async function loadLogs(){try{const d=await jfetch('/api/logs');document.getElementById('logs').textContent=(d.logs||[]).join('\\n')}catch{}}
 async function loadDashboard(){try{const d=await jfetch('/api/dashboard');document.getElementById('today').textContent=d.hoje||0}catch{}}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
