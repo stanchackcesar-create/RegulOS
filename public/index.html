@@ -298,6 +298,11 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 .qr-modal .qr{display:block!important}
 .qr-modal .qr img{max-width:280px;width:100%;height:auto;margin:auto}
 </style>
+
+<style id="regulosNavSourcePanelStyle">
+.regulos-nav-source-panel{display:none}
+.regulos-nav-modal-body>.regulos-nav-source-panel{display:block}
+</style>
 </head>
 <body>
 <header><div class="wrap">
@@ -467,7 +472,7 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 </section>
 
 <aside>
-<div class="panel">
+<div class="panel regulos-nav-source-panel">
 <div class="row" style="justify-content:space-between"><div><h2>🔗 Gerenciador de links</h2><div class="muted">Crie ou edite uma programação. Depois de salvar, ela fica somente em Agendamentos.</div></div><button class="green" onclick="showForm()">+ Adicionar link</button></div>
 <div id="linkForm" class="hidden">
 <label>Nome do link <span class="muted">(somente para registro no painel)</span></label><input id="lnome" placeholder="Ex.: Impressora Epson L3250">
