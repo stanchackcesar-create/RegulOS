@@ -252,6 +252,16 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
   .message-float-panel{right:8px;bottom:calc(144px + env(safe-area-inset-bottom));width:calc(100vw - 16px)}
 }
 .account-mobile-toggle{display:none}
+.logs-modal{position:fixed;inset:0;z-index:10050;background:rgba(3,8,18,.72);display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}
+.logs-modal.logs-open{display:flex}
+.logs-modal-card{width:min(900px,calc(100vw - 40px));max-height:80vh;background:#111b2d;border:1px solid #34445c;border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,.55);overflow:hidden}
+.logs-modal-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #263653}
+.logs-modal-head h2{margin:0}
+.logs-modal-head button{border:0;border-radius:9px;background:#34455f;color:#fff;font-size:20px;min-width:42px;min-height:42px;cursor:pointer}
+.logs-modal-content{height:55vh;max-height:none;margin:0;border-radius:0}
+@media(min-width:561px){.logs-main-panel{display:none}}
+@media(max-width:560px){.desktop-logs-button{display:none}.logs-modal{display:none!important}}
+
 .account-modal{position:fixed;inset:0;z-index:10050;background:rgba(3,8,18,.72);display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}
 .account-modal.account-open{display:flex}
 .account-modal-card{width:min(760px,calc(100vw - 40px));max-height:min(86vh,760px);overflow:auto;background:#111b2d;border:1px solid #34445c;border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,.55);padding:16px}
@@ -278,6 +288,7 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 </div>
 <button class="red" onclick="novoQR()">📱 Novo QR</button>
 <button type="button" onclick="openAccountsPanel()">👤 Contas</button>
+<button type="button" class="desktop-logs-button" onclick="openLogsPanel()">📜 Logs</button>
 </div>
 </div></header>
 
@@ -482,7 +493,17 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
   </div>
 </section>
 
-<div class="panel" style="margin-top:14px">
+<section id="logsModal" class="logs-modal" aria-hidden="true">
+  <div class="logs-modal-card">
+    <div class="logs-modal-head">
+      <h2>📜 Logs do RegulOS</h2>
+      <button type="button" onclick="closeLogsPanel()" aria-label="Fechar">✕</button>
+    </div>
+    <div id="logsModalContent" class="logs logs-modal-content"></div>
+  </div>
+</section>
+
+<div class="panel logs-main-panel" style="margin-top:14px">
 <h2>📜 Logs</h2><div id="logs" class="logs"></div>
 </div>
 </aside>
@@ -1213,7 +1234,26 @@ async function runRegulosAssistant(acao){
       +(ranking?'<div style="margin-top:10px"><b>Desempenho dos links</b>'+ranking+'</div>':'');
   }catch(e){box.innerHTML='<div class="error">🔴 '+esc(e.message||e)+'</div>'}
 }
-async function loadLogs(){try{const d=await jfetch('/api/logs');document.getElementById('logs').textContent=(d.logs||[]).join('\\n')}catch{}}
+async function loadLogs(){
+  try{
+    const d=await jfetch('/api/logs');
+    const txt=(d.logs||[]).join('\\n');
+    const main=document.getElementById('logs'); if(main) main.textContent=txt;
+    const modal=document.getElementById('logsModalContent'); if(modal) modal.textContent=txt;
+  }catch{}
+}
+function openLogsPanel(){
+  const panel=document.getElementById('logsModal');
+  if(!panel)return;
+  panel.classList.add('logs-open');
+  panel.setAttribute('aria-hidden','false');
+}
+function closeLogsPanel(){
+  const panel=document.getElementById('logsModal');
+  if(!panel)return;
+  panel.classList.remove('logs-open');
+  panel.setAttribute('aria-hidden','true');
+}
 async function loadDashboard(){try{const d=await jfetch('/api/dashboard');document.getElementById('today').textContent=d.hoje||0}catch{}}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
 refreshAll();startPolling(false);
