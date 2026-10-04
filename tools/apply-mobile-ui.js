@@ -6,7 +6,7 @@ const file = path.join(__dirname, '..', 'public', 'index.html');
 try {
   let html = fs.readFileSync(file, 'utf8');
 
-  // Remove ajustes mobile antigos que criavam elementos/espacos extras.
+  // Limpa somente elementos/ajustes antigos que eram exclusivos do mobile.
   html = html.replace(/\n?\/\* REGULOS_MOBILE_SCROLL_V[0-9]+ \*\/[\s\S]*?(?=<\/style>)/g, '\n');
   html = html.replace(/\n?\/\* REGULOS_MOBILE_CONTROLS_V[0-9]+ \*\/[\s\S]*?(?=<\/style>)/g, '\n');
   html = html.replace(/\n?<script id="regulos-mobile-controls-script">[\s\S]*?<\/script>\s*/g, '\n');
@@ -16,31 +16,28 @@ try {
   html = html.replace(/\n?<div class="mobile-scroll-toggle"[\s\S]*?<\/div>\s*/g, '\n');
   html = html.replace(/<button[^>]*class="mobile-scroll-down"[^>]*>[\s\S]*?<\/button>/g, '');
 
-  // Remove somente a descrição abaixo do título.
-  html = html.replace(/<div class="sub">Links, programação, histórico e grupos<\/div>/g, '');
-
-  // Título: somente no celular. No PC fica oculto.
+  // Remove versões anteriores deste ajuste de cabeçalho, sem alterar o desktop.
   html = html.replace(/\n?\/\* REGULOS_HEADER_TITLE_V[0-9]+ \*\/[\s\S]*?(?=<\/style>)/g, '\n');
+
   const css = `
-/* REGULOS_HEADER_TITLE_V2 */
-@media(min-width:561px){
-  header .title{display:none!important}
-}
+/* REGULOS_MOBILE_ONLY_HEADER_V1 */
 @media(max-width:560px){
-  header .title{display:block!important}
+  /* Nenhuma regra abaixo altera o layout do PC. */
   header .wrap{width:100%!important;max-width:none!important;padding-left:0!important;padding-right:0!important}
   header .row{width:100%!important}
   header .actions{width:100%!important}
   header{padding-left:10px!important;padding-right:10px!important}
+  header .sub{display:none!important}
 }
 `;
-  if (!html.includes('REGULOS_HEADER_TITLE_V2')) {
+
+  if (!html.includes('REGULOS_MOBILE_ONLY_HEADER_V1')) {
     html = html.replace('</style>', css + '\n</style>');
   }
 
   fs.writeFileSync(file, html, 'utf8');
-  console.log('[RegulOS] Cabeçalho ajustado: título somente no celular e controles sem espaço lateral extra.');
+  console.log('[RegulOS] Layout desktop preservado; ajustes limitados ao mobile.');
 } catch (err) {
-  console.error('[RegulOS] Falha ao aplicar ajuste de cabeçalho:', err.message);
+  console.error('[RegulOS] Falha ao aplicar ajuste mobile:', err.message);
   process.exit(1);
 }
