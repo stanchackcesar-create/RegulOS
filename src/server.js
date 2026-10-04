@@ -639,11 +639,18 @@ function upsertLinkFailure(item, grupoId, erro, extra={}) {
     criadoEm: extra.criadoEm || new Date().toISOString(), atualizadoEm: new Date().toISOString()
   };
   const i = linkFailures.findIndex(x => String(x.id) === key);
-  if(i >= 0) linkFailures[i] = {...linkFailures[i], ...record}; else linkFailures.unshift(record);
+  if(i >= 0){
+    cancelLinkFailureExpiration(linkFailures[i]);
+    linkFailures[i] = {...linkFailures[i], ...record};
+  } else {
+    linkFailures.unshift(record);
+  }
   saveLinkFailures();
 }
 function removeLinkFailure(id) {
   const before = linkFailures.length;
+  const removed=linkFailures.filter(x => String(x.id) === String(id));
+  removed.forEach(cancelLinkFailureExpiration);
   linkFailures = linkFailures.filter(x => String(x.id) !== String(id));
   if(linkFailures.length !== before) saveLinkFailures();
 }
