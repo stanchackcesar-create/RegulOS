@@ -1930,6 +1930,7 @@ app.get('/api/link-historico',(req,res)=>{
   res.set('Expires','0');
   try {
     if(!Array.isArray(linkHistory)) linkHistory=[];
+    pruneLinkHistoryByLatestSentTime();
     res.json({ok:true,historico:linkHistory});
   } catch(e) {
     addLog(`Erro ao carregar histórico de links: ${e.message}`);
