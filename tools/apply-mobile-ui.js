@@ -23,6 +23,12 @@ try {
     html = html.replace('</head>', neonLink + '</head>');
   }
 
+
+  if (!html.includes('REGULOS_NAV_LINK_V1')) {
+    const navLinks = '<!-- REGULOS_NAV_LINK_V1 --><link rel="stylesheet" href="/regulos-nav.css"><script src="/regulos-nav.js" defer></script>';
+    html = html.replace('</head>', navLinks + '</head>');
+  }
+
   if (html.includes(marker)) {
     fs.writeFileSync(file, html, 'utf8');
     process.exit(0);
