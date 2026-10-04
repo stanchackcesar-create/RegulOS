@@ -2396,8 +2396,33 @@ app.get('/api/link-falhas',(req,res)=>{
 app.post('/api/link-falhas/:id/reenviar', async (req,res)=>{
   const failure=linkFailures.find(x=>String(x.id)===String(req.params.id));
   if(!failure) return res.status(404).json({ok:false,msg:'Falha não encontrada.'});
-  const item=linkSchedules.find(x=>String(x.id)===String(failure.agendamentoId));
-  if(!item) return res.status(404).json({ok:false,msg:'O link associado à falha não está mais no Gerenciador de Links.'});
+  let item=linkSchedules.find(x=>String(x.id)===String(failure.agendamentoId));
+  if(!item){
+    item={
+      id:String(failure.agendamentoId||('reenvio-'+failure.id)),
+      nome:String(failure.nome||'Reenvio de link'),
+      url:String(failure.url||'').trim(),
+      mensagem:String(failure.mensagem||''),
+      tituloProduto:String(failure.tituloProduto||''),
+      imagemUrl:String(failure.imagemUrl||'').trim(),
+      imagemAutomatica:true,
+      data:new Date().toISOString().slice(0,10),
+      horario:new Date().toTimeString().slice(0,5),
+      repeticao:'uma_vez',
+      intervaloMin:Number(failure.intervaloMin||1),
+      intervaloMax:Number(failure.intervaloMax||1),
+      grupoId:String(failure.grupoId||''),
+      reenvioGrupoId:String(failure.grupoId||''),
+      grupoIds:[String(failure.grupoId||'')],
+      grupoNome:String(failure.grupoNome||failure.grupoId||''),
+      grupoNomes:{[String(failure.grupoId||'')]:String(failure.grupoNome||failure.grupoId||'')},
+      ativo:true,
+      status:'agendado',
+      enviados:0,
+      sucessos:0,
+      erros:0
+    };
+  }
   const resendOccurrence='reenvio:'+String(failure.id||Date.now());
   ensureLinkDeliveries(item,resendOccurrence,[String(failure.grupoId||'')]);
   if(!online || !sock) return res.status(503).json({ok:false,msg:'WhatsApp não conectado.'});
