@@ -537,6 +537,7 @@ async function loadLinks(){
 async function loadSchedules(){
  try{
   const d=await jfetch('/api/link-agendamentos');
+  window.linkSchedules=Array.isArray(d.agendamentos)?d.agendamentos:[];
   const box=document.getElementById('schedules');
   if(!box)return;
   box.innerHTML='';
@@ -729,7 +730,7 @@ async function loadLinkDeliveries(){
     box.innerHTML='';
     [...groups.entries()].slice(0,10).forEach(([key,items])=>{
       const first=items[0]||{};
-      const scheduleName=(linkSchedules.find?.(x=>String(x?.id||'')===String(first.agendamentoId||''))?.nome)||first.agendamentoId||'Agendamento';
+      const scheduleName=((Array.isArray(window.linkSchedules)?window.linkSchedules:[]).find(x=>String(x?.id||'')===String(first.agendamentoId||''))?.nome)||first.agendamentoId||'Agendamento';
       const success=items.filter(x=>String(x.status||'').toUpperCase()==='SUCESSO').length;
       const errors=items.filter(x=>String(x.status||'').toUpperCase()==='ERRO').length;
       const pending=items.filter(x=>['PENDENTE','ENVIANDO'].includes(String(x.status||'').toUpperCase())).length;
