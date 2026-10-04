@@ -2554,7 +2554,24 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     }
 
     let resposta='';
-    if(intencaoAgendamentosHoje){
+    const horarioPedido=(q.match(/\b([01]?\d|2[0-3])[:h]([0-5]\d)\b/)||[]).slice(1);
+    const horarioNormalizado=horarioPedido.length?String(horarioPedido[0]).padStart(2,'0')+':'+horarioPedido[1]:null;
+    const perguntaAnteriorTexto=String(ultimaPerguntaUsuario?.content||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const horarioAnteriorMatch=perguntaAnteriorTexto.match(/\b([01]?\d|2[0-3])[:h]([0-5]\d)\b/);
+    const horarioAnterior=horarioAnteriorMatch?String(horarioAnteriorMatch[1]).padStart(2,'0')+':'+horarioAnteriorMatch[2]:null;
+    const intencaoAgendamentoEspecifico=Boolean(horarioNormalizado)&&/\b(link|links|agendamento|agendamentos)\b/.test(q)
+      &&/\b(qual|quais|onde|qual\s+link)\b/.test(q);
+    const intencaoStatusAgendamento=Boolean(horarioAnterior)&&/\b(status|situacao|situação|estado)\b/.test(q)
+      &&/\b(link|agendamento|agendado|programado|ele|esse|desse)\b/.test(q);
+    if(intencaoAgendamentoEspecifico){
+      const encontrados=schedules.filter(item=>String(item.horario||'').slice(0,5)===horarioNormalizado);
+      if(!encontrados.length) resposta='📅 Não encontrei nenhum link agendado para '+horarioNormalizado+' hoje.';
+      else resposta='📅 Encontrei '+encontrados.length+' agendamento(s) para '+horarioNormalizado+' hoje:\\n'+encontrados.map(formatSchedule).join('\\n');
+    }else if(intencaoStatusAgendamento){
+      const encontrados=schedules.filter(item=>String(item.horario||'').slice(0,5)===horarioAnterior);
+      if(!encontrados.length) resposta='📅 Não encontrei o agendamento das '+horarioAnterior+' para consultar o status.';
+      else resposta='📌 Status do agendamento das '+horarioAnterior+':\\n'+encontrados.map(formatSchedule).join('\\n');
+    }else if(intencaoAgendamentosHoje){
       const agendados=schedules.filter(scheduleOccursToday).sort((a,b)=>String(a.horario||'99:99').localeCompare(String(b.horario||'99:99')));
       if(!agendados.length){
         resposta='📅 Não encontrei links programados para hoje.';
