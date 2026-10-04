@@ -1616,5 +1616,56 @@ setTimeout(()=>{refreshAccountPresence();},1500);
 document.getElementById('qrModalClose')?.addEventListener('click',()=>document.getElementById('qrModal')?.classList.remove('open'));
 document.getElementById('qrModal')?.addEventListener('click',e=>{if(e.target.id==='qrModal')e.currentTarget.classList.remove('open')});
 </script>
+
+<style>
+/* REGULOS_FLOATING_BUTTONS_FINAL_FIX */
+/* Mantém os dois controles flutuantes separados e clicáveis em telas pequenas. */
+.message-float-launcher{
+  right:20px!important;
+  bottom:86px!important;
+  z-index:10001!important;
+}
+.assistant-float-launcher{
+  right:20px!important;
+  bottom:18px!important;
+  z-index:10003!important;
+}
+.message-float-panel{
+  right:20px!important;
+  bottom:154px!important;
+  z-index:10002!important;
+}
+.assistant-float-panel{
+  right:20px!important;
+  bottom:86px!important;
+  z-index:10004!important;
+}
+@media (max-width:700px){
+  .message-float-launcher{
+    right:12px!important;
+    bottom:calc(78px + env(safe-area-inset-bottom))!important;
+    width:54px!important;
+    height:54px!important;
+  }
+  .assistant-float-launcher{
+    right:12px!important;
+    bottom:calc(12px + env(safe-area-inset-bottom))!important;
+    width:54px!important;
+    height:54px!important;
+  }
+  .message-float-panel{
+    right:8px!important;
+    bottom:calc(144px + env(safe-area-inset-bottom))!important;
+    width:calc(100vw - 16px)!important;
+    max-width:390px;
+  }
+  .assistant-float-panel{
+    right:8px!important;
+    bottom:calc(74px + env(safe-area-inset-bottom))!important;
+    width:calc(100vw - 16px)!important;
+    max-width:390px;
+  }
+}
+</style>
 </body>
 </html>
