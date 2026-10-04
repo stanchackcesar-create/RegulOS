@@ -2898,8 +2898,8 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/responses';
 function buildRegulosAiContext(selecao){
   const normalizeStatus=x=>String(x?.status||'').toUpperCase();
   const selectedId=selecao?.agendamentoId||selecao?.id||null;
-  const selected=selectedId ? schedules.find(x=>String(x?.id||'')===String(selectedId))||null : null;
-  const agendamentos=schedules.slice().sort((a,b)=>String(a?.horario||'99:99').localeCompare(String(b?.horario||'99:99'))).slice(0,30).map(x=>({
+  const selected=selectedId ? linkSchedules.find(x=>String(x?.id||'')===String(selectedId))||null : null;
+  const agendamentos=linkSchedules.slice().sort((a,b)=>String(a?.horario||'99:99').localeCompare(String(b?.horario||'99:99'))).slice(0,30).map(x=>({
     id:x?.id||null,nome:x?.nome||'',horario:String(x?.horario||'').slice(0,5),data:x?.data||null,
     status:normalizeStatus(x),ativo:x?.ativo!==false,grupoId:x?.grupoId||null,
     grupoIds:normalizeScheduleGroupIds(x),grupoNomes:x?.grupoNomes||{}
