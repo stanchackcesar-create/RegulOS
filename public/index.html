@@ -592,10 +592,10 @@ let botScheduleInitialized=false;
 async function status(){
  try{
   const d=await jfetch('/api/status');
-  document.getElementById('conn').textContent=d.conectado?'🟢 Conectado':(d.temQR?'🟡 QR':'🔴 '+(d.status||'Desconectado'));
-  document.getElementById('connStatus').textContent=d.temQR?'📱 Escaneie o QR Code':d.status;
-  document.getElementById('number').textContent='Número: '+(d.numero||'—');
-  document.getElementById('numberBig').textContent='Número conectado: '+(d.numero||'—');
+  (document.getElementById('conn')||{}).textContent=d.conectado?'🟢 Conectado':(d.temQR?'🟡 QR':'🔴 '+(d.status||'Desconectado'));
+  (document.getElementById('connStatus')||{}).textContent=d.temQR?'📱 Escaneie o QR Code':d.status;
+  (document.getElementById('number')||{}).textContent='Número: '+(d.numero||'—');
+  (document.getElementById('numberBig')||{}).textContent='Número conectado: '+(d.numero||'—');
   document.getElementById('groupCount').textContent=d.grupos||0;
   document.getElementById('allowed').textContent=(d.permitidos||0)+' permitidos';
 const linked=Array.isArray(d.gruposLigados)?d.gruposLigados:[];
@@ -614,7 +614,7 @@ if(linkedBox) linkedBox.textContent=linked.length?'Ligados: '+linked.map(g=>g.no
     botScheduleInitialized=true;
   }
   if(d.qr){document.getElementById('qrImg').src=d.qr;document.getElementById('qrBox').classList.remove('hidden')}else document.getElementById('qrBox').classList.add('hidden');
- }catch(e){document.getElementById('connStatus').textContent=friendlyFetchError(e)}
+ }catch(e){(document.getElementById('connStatus')||{}).textContent=friendlyFetchError(e)}
 }
 async function refreshAll(){
   if(window.__regulosRefreshBusy)return;
