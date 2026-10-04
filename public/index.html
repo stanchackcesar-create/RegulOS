@@ -573,10 +573,8 @@ function toggleGroupsPanel(){
 }
 
 function openAllGroups(){
-  // Abre uma aba separada, nunca um painel abaixo do Gerenciador de grupos.
-  const url=new URL('/grupos',window.location.origin).href;
-  const tab=window.open(url,'_blank','noopener,noreferrer');
-  if(!tab) toast('O navegador bloqueou a nova aba. Permita pop-ups para o RegulOS.',true);
+  // Abre o gerenciamento de grupos na mesma aba do RegulOS.
+  window.location.href='/grupos';
 }
 
 async function sendMessage(){
