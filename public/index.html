@@ -54,17 +54,6 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 .history-filter-tools,.failure-filter-tools{align-items:stretch}.history-filter-tools input,.failure-filter-tools input{flex-basis:100%}.history-filter-tools select,.failure-filter-tools select{width:100%;min-height:44px}.history-filter-tools button,.failure-filter-tools button{min-height:44px}}
 
 
-/* REGULOS_IA_CHAT_V1 */
-.ai-chat{margin-top:14px;border-top:1px solid #263653;padding-top:14px}
-.ai-chat-messages{height:300px;overflow:auto;background:#07101f;border:1px solid #263653;border-radius:12px;padding:10px}
-.ai-chat-msg{max-width:90%;padding:10px 12px;border-radius:12px;margin:7px 0;line-height:1.5;white-space:pre-wrap;word-break:break-word}
-.ai-chat-user{margin-left:auto;background:#284f86}
-.ai-chat-bot{margin-right:auto;background:#19273e}
-.ai-chat-meta{font-size:11px;color:#9eb0ca;margin-bottom:3px}
-.ai-chat-form{display:flex;gap:8px;margin-top:8px}
-.ai-chat-form input{flex:1}
-.ai-chat-badge{background:#173b2a;color:#c9ffe0}
-@media(max-width:560px){.ai-chat-form{flex-direction:column}.ai-chat-form button{min-height:44px}.ai-chat-messages{height:320px}.ai-chat-msg{max-width:96%}}
 /* REGULOS_ASSISTENTE_CHAT_V2_1 */
 .assistant-chat{margin-top:14px;border-top:1px solid #263653;padding-top:14px}
 .assistant-chat-messages{height:280px;overflow:auto;background:#07101f;border:1px solid #263653;border-radius:12px;padding:10px}
@@ -139,24 +128,6 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
     <div class="assistant-chat-form">
       <input id="assistantChatInput" type="text" placeholder="Ex.: Quantos envios deram certo nos últimos 7 dias?" autocomplete="off">
       <button class="primary" type="button" onclick="sendAssistantChat()">📨 Perguntar</button>
-    </div>
-  </div>
-</section>
-<section class="panel" style="margin:18px 0">
-  <div class="row" style="justify-content:space-between;align-items:center">
-    <div>
-      <h2 style="margin:0">🧠 IA do RegulOS</h2>
-      <div class="muted">IA separada do Assistente. Analisa os dados reais do RegulOS e explica problemas, padrões e oportunidades.</div>
-    </div>
-    <span class="badge ai-chat-badge">IA V1 · somente leitura</span>
-  </div>
-  <div class="ai-chat">
-    <div id="aiChatMessages" class="ai-chat-messages" aria-live="polite">
-      <div class="ai-chat-msg ai-chat-bot"><div class="ai-chat-meta">🧠 IA do RegulOS</div>Olá! Posso analisar os dados reais do RegulOS, explicar problemas e sugerir melhorias. Nesta primeira versão eu não executo ações.</div>
-    </div>
-    <div class="ai-chat-form">
-      <input id="aiChatInput" type="text" placeholder="Ex.: Por que esse agendamento pausou e o que eu deveria verificar?" autocomplete="off">
-      <button class="primary" type="button" onclick="sendRegulosAi()">🧠 Perguntar à IA</button>
     </div>
   </div>
 </section>
@@ -1022,39 +993,6 @@ async function runCentralDiagnostic(){
     box.innerHTML='<div class="errorText">🔴 Não foi possível executar o diagnóstico: '+esc(e.message||e)+'</div>';
   }
 }
-
-let regulosAiContext=[];
-function appendRegulosAiMessage(tipo,texto){
-  const box=document.getElementById('aiChatMessages');if(!box)return;
-  const div=document.createElement('div');div.className='ai-chat-msg '+(tipo==='user'?'ai-chat-user':'ai-chat-bot');
-  const meta=document.createElement('div');meta.className='ai-chat-meta';meta.textContent=tipo==='user'?'👤 Você':'🧠 IA do RegulOS';
-  const body=document.createElement('div');body.textContent=String(texto||'');
-  div.appendChild(meta);div.appendChild(body);box.appendChild(div);box.scrollTop=box.scrollHeight;
-}
-async function sendRegulosAi(){
-  const input=document.getElementById('aiChatInput'),box=document.getElementById('aiChatMessages');
-  if(!input||!box)return;
-  const pergunta=String(input.value||'').trim();if(!pergunta)return;
-  appendRegulosAiMessage('user',pergunta);input.value='';input.disabled=true;
-  const btn=document.querySelector('.ai-chat-form button');if(btn){btn.disabled=true;btn.dataset.originalText=btn.textContent;btn.textContent='⏳ IA analisando...';}
-  try{
-    const selected=regulosAiContext.find(x=>x?.role==='assistant'&&x?.agendamentoSelecionado)?.agendamentoSelecionado||null;
-    const d=await jfetch('/api/ia/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pergunta,contexto:regulosAiContext,agendamentoSelecionado:selected})});
-    regulosAiContext.push({role:'user',content:pergunta});
-    regulosAiContext.push({role:'assistant',content:d.resposta||'',agendamentoSelecionado:d.agendamentoSelecionado||null});
-    regulosAiContext=regulosAiContext.slice(-8);
-    appendRegulosAiMessage('bot',d.resposta||'Não recebi uma resposta da IA.');
-  }catch(e){appendRegulosAiMessage('bot','⚠️ '+(e.message||'Não foi possível consultar a IA.'))}
-  finally{
-    input.disabled=false;
-    if(btn){btn.disabled=false;btn.textContent=btn.dataset.originalText||'🧠 Perguntar à IA';}
-    input.focus();
-  }
-}
-document.addEventListener('DOMContentLoaded',()=>{
-  const input=document.getElementById('aiChatInput');
-  input?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendRegulosAi();}});
-});
 
 let assistantConversationContext=[];
 async function sendAssistantChat(){
