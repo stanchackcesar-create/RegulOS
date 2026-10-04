@@ -1,8 +1,8 @@
 (() => {
   const ID = 'regulosSchedulerMonitor';
   const css = [
-    '#'+ID+'Btn{position:fixed;right:18px;bottom:18px;z-index:80;background:#3d83f6;color:#fff;border:0;border-radius:999px;padding:12px 16px;font-weight:800;box-shadow:0 8px 28px rgba(0,0,0,.35)}',
-    '#'+ID+'{position:fixed;inset:0;z-index:79;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;padding:16px}',
+    '#'+ID+'Btn{position:fixed;right:18px;bottom:18px;z-index:1250;background:#3d83f6;color:#fff;border:0;border-radius:999px;padding:12px 16px;font-weight:800;box-shadow:0 8px 28px rgba(0,0,0,.35)}',
+    '#'+ID+'{position:fixed;inset:0;z-index:1300;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;padding:16px}',
     '#'+ID+'.open{display:flex}',
     '#'+ID+' .sm-card{width:min(1100px,96vw);max-height:92vh;overflow:hidden;background:#111b2d;border:1px solid #34445c;border-radius:16px}',
     '#'+ID+' .sm-head{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:15px 18px;border-bottom:1px solid #263653}',
