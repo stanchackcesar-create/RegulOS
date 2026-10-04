@@ -59,6 +59,14 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 .schedule-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
 .schedule-tools input{flex:1 1 280px;min-width:180px}
 .schedule-scroll{max-height:520px;overflow-y:auto;overflow-x:hidden;padding-right:6px;overscroll-behavior:contain;scrollbar-width:thin}
+.schedule-mobile-toggle{display:none}
+.schedule-mobile-toggle button{width:100%;min-height:44px;padding:10px 14px;font-weight:700}
+@media(max-width:560px){
+  .schedule-mobile-toggle{display:block}
+  .schedule-panel-content{display:none}
+  .schedule-panel-content.open{display:block}
+  .schedule-panel-content .schedule-scroll{max-height:none;overflow:visible;padding-right:0}
+}
 .schedule-scroll .link{margin-right:2px}
 .schedule-filter-result{font-size:13px;color:#9eb0ca;min-height:18px;margin-top:4px}
 .history-filter-tools,.failure-filter-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
@@ -433,7 +441,11 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 <div id="links">Carregando links...</div>
 </div>
 
-<div class="panel" style="margin-top:14px">
+<div class="panel schedule-panel" style="margin-top:14px">
+<div class="schedule-mobile-toggle">
+  <button id="scheduleMobileToggle" type="button" onclick="toggleScheduleMobile()">📅 Mostrar agendamentos</button>
+</div>
+<div class="schedule-panel-content" id="schedulePanelContent">
 <h2>📅 Agendamentos</h2>
 <div class="muted">Aqui ficam somente os links que possuem envio agendado. A programação geral do bot fica em um painel separado.</div>
 <div class="schedule-tools" id="scheduleTools">
@@ -442,6 +454,7 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 </div>
 <div id="scheduleFilterResult" class="schedule-filter-result"></div>
 <div id="schedules" class="schedule-scroll" style="margin-top:10px">Carregando agendamentos...</div>
+</div>
 </div>
 
 <div class="panel" style="margin-top:14px">
@@ -746,6 +759,14 @@ async function loadLinks(){
   const box=document.getElementById('links');
   if(!box)return;
   box.innerHTML='<div class="muted">Os links salvos aparecem somente em <b>Agendamentos</b>. O Gerenciador de links serve para criar ou editar uma programação.</div>';
+}
+function toggleScheduleMobile(){
+  const content=document.getElementById('schedulePanelContent');
+  const btn=document.getElementById('scheduleMobileToggle');
+  if(!content||!btn)return;
+  const open=content.classList.toggle('open');
+  btn.textContent=open?'📅 Ocultar agendamentos':'📅 Mostrar agendamentos';
+  if(open)setTimeout(()=>document.getElementById('schedulePanelContent')?.scrollIntoView({behavior:'smooth',block:'start'}),40);
 }
 async function loadSchedules(){
  try{
