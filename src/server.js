@@ -1553,18 +1553,10 @@ async function start() {
         connectedNumber = normalizePhone(s.user?.id || '');
         status = 'Conectado';
         addLog(`WhatsApp conectado${connectedNumber ? ` — ${formatPhone(connectedNumber)}` : ''}`);
-        // Por segurança, toda nova conexão começa com todos os grupos desligados.
-        // O envio só fica permitido depois que o usuário clicar em 🟢 Ligado.
-        for (const id of Object.keys(groupConfig)) {
-          groupConfig[id].ativo = false;
-        }
-        // "Ligado" é a única seleção operacional do grupo.
-        // Ao iniciar uma nova conexão, nenhum grupo fica selecionado.
-        allowed = [];
-        writeJson(FILES.groups, allowed);
-        saveGroupsConfig();
-        // A descoberta dos grupos acontece uma vez por conexão.
-        // Depois disso, o painel trabalha com o cache até uma pesquisa explícita.
+        // Reconexão normal da mesma sessão não deve apagar os grupos selecionados.
+        // A limpeza de allowed/groupConfig acontece somente nos fluxos explícitos
+        // de troca de sessão (Desconectar / Novo QR / Deslogar).
+        // Assim, uma queda 408/428 seguida de reconexão mantém a seleção do painel.
         await loadGroups();
         armAutoLinkTimer();
         processLinkSchedules().catch(e => addLog(e.message));
