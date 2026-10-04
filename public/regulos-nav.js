@@ -3,7 +3,6 @@
   if(document.getElementById('regulosSidebar'))return;
   document.body.classList.add('regulos-has-sidebar');
   const nav=[
-    ['🏠','Dashboard',()=>closeNav()],
     ['📅','Agendamentos',()=>window.openSchedulesPanel?.()],
     ['🔗','Gerenciador de Links',()=>openPanelModalByTitle('🔗 Gerenciador de links')],
     ['📤','Entregas',()=>openPanelModalByTitle('📤 Status das Entregas')],
