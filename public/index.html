@@ -574,8 +574,8 @@ async function loadSchedules(){
 }
 
 async function clearLinkHistory(){
- if(!confirm('Apagar todo o histórico de links enviados? Esta ação não pode ser desfeita.')) return;
- try{ const d=await jfetch('/api/link-historico',{method:'DELETE'}); toast(d.msg); await loadLinkHistory(); }
+ if(!confirm('Apagar o histórico e os registros de entregas finalizadas? Entregas em andamento serão preservadas. Esta ação não pode ser desfeita.')) return;
+ try{ const d=await jfetch('/api/link-historico',{method:'DELETE'}); toast(d.msg); await Promise.all([loadLinkHistory(),loadLinkDeliveries(),loadLinkFailures()]); }
  catch(e){ toast(e.message,true); }
 }
 async function deleteLinkHistory(id){
