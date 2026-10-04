@@ -242,10 +242,12 @@ body.regulos-has-sidebar main.wrap{max-width:none;margin-left:18px}
 }
 
 
-/* REGULOS_MOBILE_REMOVE_DUPLICATE_SCHEDULE_V1 */
+
+
+/* REGULOS_MOBILE_REMOVE_DUPLICATE_SCHEDULE_BUTTON_V2 */
 @media(max-width:560px){
-  /* O agendamento oficial fica na Central de Automação. Remove apenas o bloco duplicado do cabeçalho mobile. */
-  header .header-bot-schedule{
+  /* Mantém a Central de Automação como único acesso a Agendamentos. */
+  .schedule-mobile-toggle{
     display:none!important;
   }
 }
