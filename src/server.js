@@ -2418,20 +2418,29 @@ app.get('/api/links',(req,res)=>{
   } catch(e) { res.status(500).json({ok:false,msg:'Não foi possível carregar os links.'}); }
 });
 
-// REGULOS_ASSISTENTE_CHAT_V2_1
+// REGULOS_ASSISTENTE_CHAT_V2_5
+// Contexto conversacional + consulta real de agendamentos/recorrências.
 app.post('/api/assistente/chat', requireAuth, (req,res)=>{
   try{
     const pergunta=String(req.body?.pergunta||'').trim();
     if(!pergunta) return res.status(400).json({ok:false,msg:'Digite uma pergunta.'});
+
     const q=pergunta.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     const contexto=Array.isArray(req.body?.contexto)?req.body.contexto.slice(-6):[];
     const ultimaResposta=contexto.slice().reverse().find(x=>x&&x.role==='assistant'&&x.periodoLabel);
-    const continuidade=/\b(e|tambem|também|eles|elas|os que|as que|esses|essas|mesmo periodo|mesmo período|nesse periodo|nesse período|destes|destas|desses|dessas)\b/.test(q);
+    const ultimaPerguntaUsuario=contexto.slice().reverse().find(x=>x&&x.role==='user'&&x.content);
+    const perguntaAnterior=String(ultimaPerguntaUsuario?.content||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const continuidade=/^\s*(e|tambem|eles|elas|os que|as que|esses|essas|mesmo periodo|nesse periodo|destes|destas|desses|dessas)\b/.test(q)
+      || /\b(os que|as que|esses|essas|mesmo periodo|nesse periodo|destes|destas|desses|dessas)\b/.test(q);
+    const contextoEraFalha=/\b(erro|erros|falha|falhas|falhou|falharam|falhar|problema|problemas|motivo|motivos)\b/.test(perguntaAnterior);
+    const contextoEraAgendamento=/\b(agendad|programad|agendamento|agendamentos|programacao|programacoes)\b/.test(perguntaAnterior);
 
     const now=new Date();
     const periodoSolicitado=Math.max(1,Math.min(90,Number(req.body?.periodoSolicitado||7)));
     const startOfDay=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();
     const addDays=(ms,n)=>ms+(n*86400000);
+    const localDateKey=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const todayKey=localDateKey(now);
     const todayStart=startOfDay(now);
     let startMs=todayStart, endMs=addDays(todayStart,1), periodo=1, periodoLabel='hoje';
 
@@ -2451,7 +2460,7 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
       }
     }else if(/\b(de ontem para hoje|de ontem ate hoje|de ontem a hoje|desde ontem|a partir de ontem)\b/.test(q)){
       startMs=addDays(todayStart,-1);endMs=addDays(todayStart,1);periodo=2;periodoLabel='ontem e hoje';
-    }else if(/\bontem\b/.test(q)&&!/\bhoje\b/.test(q)){
+    }else if(/\bontem\b/.test(q)&&!\bhoje\b/.test(q)){
       startMs=addDays(todayStart,-1);endMs=todayStart;periodo=1;periodoLabel='ontem';
     }else if(/\bhoje\b/.test(q)){
       startMs=todayStart;endMs=addDays(todayStart,1);periodo=1;periodoLabel='hoje';
@@ -2471,7 +2480,7 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
         startMs=ci;endMs=cf;periodo=Math.max(1,Math.round((cf-ci)/86400000));periodoLabel=String(ultimaResposta.periodoLabel);
       }
     }
-    
+
     const inPeriod=v=>{const t=Date.parse(v||'');return Number.isFinite(t)&&t>=startMs&&t<endMs;};
     const deliveries=Array.isArray(linkDeliveries)?linkDeliveries.filter(x=>inPeriod(x.concluidoEm||x.criadoEm||x.at)):[];
     const failures=Array.isArray(linkFailures)?linkFailures.filter(x=>inPeriod(x.at||x.updatedAt||x.createdAt||x.data)):[];
@@ -2504,42 +2513,67 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     });
     const failureList=Object.entries(topFailures).sort((a,b)=>b[1]-a[1]).slice(0,3);
 
-    // V2.3: transforma métricas em diagnóstico e recomendações, sem executar ações.
     const recomendacoes=[];
     if(errors>0){
       if(pct<70) recomendacoes.push('A taxa de sucesso está baixa; vale revisar os links que mais falharam antes de aumentar os envios.');
       else if(pct<90) recomendacoes.push('A taxa de sucesso está razoável, mas há espaço para reduzir as falhas dos links com maior recorrência.');
       else recomendacoes.push('A taxa de sucesso está alta; concentre a revisão nos poucos erros restantes.');
     }
-    if(failureList.length){
-      recomendacoes.push('A principal causa registrada é "'+failureList[0][0]+'". Recomendo verificar essa causa primeiro.');
-    }
-    if(ranking[0]?.erro>0){
-      recomendacoes.push('O link "'+ranking[0].nome+'" concentra '+ranking[0].erro+' erro(s). Recomendo revisar esse link antes de reenviar.');
-    }
+    if(failureList.length) recomendacoes.push('A principal causa registrada é "'+failureList[0][0]+'". Recomendo verificar essa causa primeiro.');
+    if(ranking[0]?.erro>0) recomendacoes.push('O link "'+ranking[0].nome+'" concentra '+ranking[0].erro+' erro(s). Recomendo revisar esse link antes de reenviar.');
     if(sending>0) recomendacoes.push('Há '+sending+' entrega(s) ainda em andamento; aguarde a conclusão antes de interpretar esse resultado como definitivo.');
-    if(!total && !failures.length) recomendacoes.push('Não há dados de entrega no período selecionado; confirme se houve envio nesse intervalo.');
+    if(!total&&!failures.length) recomendacoes.push('Não há dados de entrega no período selecionado; confirme se houve envio nesse intervalo.');
 
-    const intencaoAgendamentosHoje=/\b(quais|qual|mostre|mostrar|liste|listar)\b/.test(q)&&/\b(link|links)\b/.test(q)&&/\b(agendad|programad|programacao|programacoes)\b/.test(q);
+    const intencaoAgendamentos=/\b(quais|qual|mostre|mostrar|liste|listar|tem|tenho|estao|esta|estao|o que)\b/.test(q)
+      && /\b(link|links|agendamento|agendamentos)\b/.test(q)
+      && /\b(agendad|programad|programacao|programacoes|marcad|previst)\b/.test(q);
+    const intencaoAgendamentosHoje=intencaoAgendamentos || (continuidade&&contextoEraAgendamento);
     const intencaoComparar=/\b(compar|compare|comparar|melhorou|piorou|evolucao|evoluiu)\b/.test(q);
-    const intencaoAnalise=/\b(como esta|como estao|analise|analisar|desempenho|resultado|resultados|situacao|situacao)\b/.test(q);
+    const intencaoAnalise=/\b(como esta|como estao|analise|analisar|desempenho|resultado|resultados|situacao)\b/.test(q);
     const intencaoRecomendacao=/\b(recomenda|recomendacao|sugestao|sugira|o que devo|que devo|o que fazer|como melhorar)\b/.test(q);
+    const intencaoFalhas=/\b(erro|erros|falha|falhas|falhou|falharam|falhar|problema|problemas|por que|porque|motivo|motivos)\b/.test(q)
+      || (continuidade&&contextoEraFalha);
+
+    function scheduleOccursToday(item){
+      if(!item || !item.data || !item.horario) return false;
+      if(item.repeticao==='diariamente') return new Date(`${item.data}T${item.horario}:00`).getTime()<=now.getTime();
+      if(item.repeticao==='semanalmente'){
+        const base=new Date(`${item.data}T${item.horario}:00`);
+        return !Number.isNaN(base.getTime()) && now.getDay()===base.getDay() && base.getTime()<=now.getTime();
+      }
+      return String(item.data)===todayKey;
+    }
+
+    function formatSchedule(item){
+      const ids=normalizeScheduleGroupIds(item);
+      const groupNames=ids.map(id=>String(item.grupoNomes?.[id]||groups.find(g=>String(g.id)===String(id))?.name||id)).filter(Boolean);
+      const grupo=groupNames.length?groupNames.join(', '):String(item.grupoNome||item.grupoId||'grupo não informado');
+      const status=String(item.status|| (item.ativo===false?'pausado':'agendado')).toLowerCase();
+      const statusLabel={agendado:'AGENDADO',enviando:'ENVIANDO',concluido:'CONCLUÍDO',erro:'ERRO',aguardando_grupo:'AGUARDANDO GRUPO',pausado:'PAUSADO'}[status]||status.toUpperCase();
+      return '• '+String(item.nome||item.id)+' — '+String(item.horario||'sem horário')+' — '+grupo+' — '+statusLabel;
+    }
 
     let resposta='';
     if(intencaoAgendamentosHoje){
-      const agendados=schedules.filter(x=>String(x.data||'')===now.toISOString().slice(0,10));
-      if(!agendados.length) resposta='Não encontrei links agendados para hoje.';
-      else resposta='Encontrei '+agendados.length+' link(s) agendado(s) para hoje:\\n• '+agendados.map(x=>String(x.nome||x.id)+' — '+String(x.horario||'sem horário')).join('\\n• ');
+      const agendados=schedules.filter(scheduleOccursToday).sort((a,b)=>String(a.horario||'99:99').localeCompare(String(b.horario||'99:99')));
+      if(!agendados.length){
+        resposta='📅 Não encontrei links programados para hoje.';
+      }else{
+        resposta='📅 Encontrei '+agendados.length+' link(s) programado(s) para hoje:\n'+agendados.map(formatSchedule).join('\n');
+      }
+    }else if(intencaoFalhas){
+      if(!failures.length&&!errors){
+        resposta='Não encontrei falhas registradas em '+periodoLabel+'.';
+      }else{
+        resposta='Encontrei '+(failures.length||errors)+' ocorrência(s) relacionada(s) a falhas em '+periodoLabel+'.\n'+(failureList.map(x=>'• '+x[0]+' — '+x[1]+' ocorrência(s)').join('\n')||'• Há entregas com ERRO, mas sem motivo detalhado disponível.');
+      }
     }else if((intencaoAnalise||intencaoRecomendacao)&&/\b(link|links)\b/.test(q)){
       const top=ranking[0];
       if(top?.erro>0){
         resposta='O link que mais precisa de atenção em '+periodoLabel+' é "'+top.nome+'", com '+top.erro+' erro(s) e '+top.tentativas+' tentativa(s).';
-        if(failureList.length) resposta+='\\n\\n🔎 Principal causa registrada: '+failureList[0][0]+' ('+failureList[0][1]+' ocorrência(s)).';
-        if(recomendacoes.length) resposta+='\\n\\n💡 Recomendações:\\n• '+recomendacoes.join('\\n• ');
+        if(failureList.length) resposta+='\n\n🔎 Principal causa registrada: '+failureList[0][0]+' ('+failureList[0][1]+' ocorrência(s)).';
+        if(recomendacoes.length) resposta+='\n\n💡 Recomendações:\n• '+recomendacoes.join('\n• ');
       }else resposta='Não encontrei falhas suficientes em '+periodoLabel+' para apontar um link crítico. A taxa de sucesso foi '+pct+'%.';
-    }else if(/\b(erro|erros|falha|falhas|problema|problemas|por que|porque|motivo)\b/.test(q)){
-      if(!failures.length&&!errors) resposta='Não encontrei falhas registradas em '+periodoLabel+'.';
-      else resposta='Encontrei '+(failures.length||errors)+' ocorrência(s) relacionada(s) a falhas em '+periodoLabel+'.\n'+(failureList.map(x=>'• '+x[0]+' — '+x[1]+' ocorrência(s)').join('\n')||'• Há entregas com ERRO, mas sem motivo detalhado disponível.');
     }else if(/\b(agendamento|agendamentos|programacao|programacoes)\b/.test(q)){
       const ativos=schedules.filter(x=>x.ativo!==false).length;
       resposta='No momento há '+ativos+' agendamento(s) ativo(s) de '+schedules.length+' cadastrado(s).';
@@ -2565,7 +2599,8 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
       ok:true,resposta,periodo,periodoLabel,
       intervalo:{inicio:new Date(startMs).toISOString(),fim:new Date(endMs).toISOString()},
       metricas:{sucessos:success,erros:errors,emAndamento:sending,total,taxaSucesso:pct},
-      diagnostico:{principaisFalhas:failureList,linkMaisCritico:ranking[0]||null,recomendacoes}
+      diagnostico:{principaisFalhas:failureList,linkMaisCritico:ranking[0]||null,recomendacoes},
+      contextoResolvido:{continuidade,contextoEraFalha,contextoEraAgendamento}
     });
   }catch(e){res.status(500).json({ok:false,msg:'Não foi possível processar a pergunta: '+e.message});}
 });
