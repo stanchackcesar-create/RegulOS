@@ -2632,11 +2632,46 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
         if(status==='erro'||Number(item.erros||0)>0||errosEntrega||itemFailures.length){
           resposta+='\n\n🚨 Há indícios de problema neste agendamento.';
           const motivos=itemFailures.map(f=>String(f?.erro||f?.motivo||'').trim()).filter(Boolean);
-          if(motivos.length) resposta+='\n• Motivo registrado: '+motivos[0];
+          const motivoPrincipal=motivos[0]||'';
+          if(motivoPrincipal) resposta+='\n• Motivo registrado: '+motivoPrincipal;
           if(status==='erro') resposta+='\n• O agendamento terminou com ERRO.';
           if(!grupos.length) resposta+='\n• O agendamento não possui grupo identificado. Revise o destino antes de reenviar.';
           else if(grupos.some(g=>g.includes('(não está na lista de permitidos)'))) resposta+='\n• O grupo identificado não está na lista de permitidos. Verifique a autorização do grupo.';
-          resposta+='\n\n💡 Próxima ação recomendada: revisar o motivo registrado e o grupo de destino antes de reenviar.';
+
+          // Cadeia de causa: transforma os dados brutos do agendamento em uma explicação operacional.
+          const motivoNorm=motivoPrincipal.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+          let causa='falha na execução do envio';
+          let causaDetalhe='o RegulOS registrou uma ocorrência de erro para este agendamento';
+          let acao='revisar o histórico da entrega e o destino antes de reenviar';
+          if(!grupos.length){
+            causa='destino não identificado';
+            causaDetalhe='o agendamento não possui um grupo de destino resolvido';
+            acao='selecionar ou corrigir o grupo de destino e tentar novamente';
+          }else if(grupos.some(g=>g.includes('(não está na lista de permitidos)'))){
+            causa='grupo não autorizado';
+            causaDetalhe='o grupo existe, mas não está na lista de grupos permitidos';
+            acao='autorizar o grupo e depois reenviar o agendamento';
+          }else if(/imagem|foto|thumbnail|midia|media|download|http|https/.test(motivoNorm)){
+            causa='problema ao obter a mídia do link';
+            causaDetalhe=motivoPrincipal||'a imagem/mídia não pôde ser obtida ou validada';
+            acao='revisar o link ou a imagem automática e reenviar após corrigir';
+          }else if(/grupo|jid|group|participante|nao encontrado|not found|disponivel|conect/.test(motivoNorm)){
+            causa='problema no grupo de destino';
+            causaDetalhe=motivoPrincipal||'o grupo não estava disponível para o envio';
+            acao='confirmar se o grupo está carregado, permitido e conectado antes de reenviar';
+          }else if(/timeout|tempo|rate.?limit|429|limite/.test(motivoNorm)){
+            causa='indisponibilidade temporária';
+            causaDetalhe=motivoPrincipal||'o envio encontrou uma limitação ou demora temporária';
+            acao='aguardar a normalização e tentar novamente, evitando múltiplos reenvios simultâneos';
+          }else if(motivoPrincipal){
+            causa='erro registrado durante a entrega';
+            causaDetalhe=motivoPrincipal;
+            acao='corrigir a causa indicada e então reenviar';
+          }
+          resposta+='\n\n🧩 Causa provável: '+causa+'.';
+          resposta+='\n• Explicação: '+causaDetalhe+'.';
+          resposta+='\n• Fluxo: agendamento → grupo → tentativa → resultado ERRO.';
+          resposta+='\n\n💡 Próxima ação recomendada: '+acao+'.';
         }else if(status==='aguardando_grupo'){
           resposta+='\n\n⚠️ O agendamento está aguardando um grupo disponível.';
           resposta+='\n💡 Próxima ação recomendada: confirme se o grupo está conectado, carregado e permitido.';
