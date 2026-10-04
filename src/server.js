@@ -2424,6 +2424,10 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     const pergunta=String(req.body?.pergunta||'').trim();
     if(!pergunta) return res.status(400).json({ok:false,msg:'Digite uma pergunta.'});
     const q=pergunta.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const contexto=Array.isArray(req.body?.contexto)?req.body.contexto.slice(-6):[];
+    const ultimaResposta=contexto.slice().reverse().find(x=>x&&x.role==='assistant'&&x.periodoLabel);
+    const continuidade=/\b(e|tambem|também|eles|elas|os que|as que|esses|essas|mesmo periodo|mesmo período|nesse periodo|nesse período|destes|destas|desses|dessas)\b/.test(q);
+
     const now=new Date();
     const periodoSolicitado=Math.max(1,Math.min(90,Number(req.body?.periodoSolicitado||7)));
     const startOfDay=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();
@@ -2461,6 +2465,13 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
       else {periodo=periodoSolicitado;startMs=addDays(todayStart,-(periodo-1));endMs=addDays(todayStart,1);periodoLabel='ultimos '+periodo+' dias';}
     }
 
+    if(continuidade&&ultimaResposta?.intervalo?.inicio&&ultimaResposta?.intervalo?.fim&&!/\b(hoje|ontem|ultimos?|ultimas?|dias?|semana|mes|entre|de)\b/.test(q)){
+      const ci=Date.parse(ultimaResposta.intervalo.inicio), cf=Date.parse(ultimaResposta.intervalo.fim);
+      if(Number.isFinite(ci)&&Number.isFinite(cf)&&cf>ci){
+        startMs=ci;endMs=cf;periodo=Math.max(1,Math.round((cf-ci)/86400000));periodoLabel=String(ultimaResposta.periodoLabel);
+      }
+    }
+    
     const inPeriod=v=>{const t=Date.parse(v||'');return Number.isFinite(t)&&t>=startMs&&t<endMs;};
     const deliveries=Array.isArray(linkDeliveries)?linkDeliveries.filter(x=>inPeriod(x.concluidoEm||x.criadoEm||x.at)):[];
     const failures=Array.isArray(linkFailures)?linkFailures.filter(x=>inPeriod(x.at||x.updatedAt||x.createdAt||x.data)):[];
