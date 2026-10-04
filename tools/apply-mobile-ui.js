@@ -16,6 +16,13 @@ try {
   // Remove versões antigas do botão "Descer para o painel".
   html = html.replace(/<button[^>]*class="mobile-scroll-down"[\s\S]*?<\/button>/g, '');
 
+
+  // Carrega o Design System Neon do RegulOS sem alterar a lógica da aplicação.
+  if (!html.includes('REGULOS_NEON_LINK_V1')) {
+    const neonLink = '<!-- REGULOS_NEON_LINK_V1 --><link rel="stylesheet" href="/regulos-neon.css">';
+    html = html.replace('</head>', neonLink + '</head>');
+  }
+
   if (html.includes(marker)) {
     fs.writeFileSync(file, html, 'utf8');
     process.exit(0);
