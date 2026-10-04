@@ -990,14 +990,18 @@ async function runCentralDiagnostic(){
   }
 }
 
-async function sendAssistantChat(){
+async let assistantConversationContext=[];
+function sendAssistantChat(){
   const input=document.getElementById('assistantChatInput'), box=document.getElementById('assistantChatMessages');
   if(!input||!box)return;
   const pergunta=String(input.value||'').trim(); if(!pergunta)return;
   appendAssistantChatMessage('user',pergunta); input.value=''; input.disabled=true; const btn=document.querySelector('.assistant-chat-form button'); if(btn){btn.disabled=true;btn.dataset.originalText=btn.textContent;btn.textContent='⏳ Analisando...';}
   try{
     const periodoSelecionado=Number(document.getElementById('assistantPeriod')?.value||7);
-    const d=await jfetch('/api/assistente/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pergunta,periodoSolicitado:periodoSelecionado})});
+    const d=await jfetch('/api/assistente/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pergunta,periodoSolicitado:periodoSelecionado,contexto:assistantConversationContext})});
+    assistantConversationContext.push({role:'user',content:pergunta});
+    assistantConversationContext.push({role:'assistant',content:d.resposta||'',periodoLabel:d.periodoLabel,intervalo:d.intervalo});
+    assistantConversationContext=assistantConversationContext.slice(-6);
     appendAssistantChatMessage('bot',d.resposta||'Não consegui interpretar essa pergunta.');
   }catch(e){appendAssistantChatMessage('bot','⚠️ Não foi possível consultar o Assistente: '+(e.message||e));}
   finally{input.disabled=false;const btn=document.querySelector('.assistant-chat-form button');if(btn){btn.disabled=false;btn.textContent=btn.dataset.originalText||'📨 Perguntar';}input.focus();}
