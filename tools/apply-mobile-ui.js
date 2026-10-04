@@ -6,7 +6,7 @@ const file = path.join(__dirname, '..', 'public', 'index.html');
 try {
   let html = fs.readFileSync(file, 'utf8');
 
-  // Limpa somente elementos/ajustes antigos que eram exclusivos do mobile.
+  // Remove navegação/controles mobile antigos que ocupavam espaço desnecessário.
   html = html.replace(/\n?\/\* REGULOS_MOBILE_SCROLL_V[0-9]+ \*\/[\s\S]*?(?=<\/style>)/g, '\n');
   html = html.replace(/\n?\/\* REGULOS_MOBILE_CONTROLS_V[0-9]+ \*\/[\s\S]*?(?=<\/style>)/g, '\n');
   html = html.replace(/\n?<script id="regulos-mobile-controls-script">[\s\S]*?<\/script>\s*/g, '\n');
@@ -16,27 +16,33 @@ try {
   html = html.replace(/\n?<div class="mobile-scroll-toggle"[\s\S]*?<\/div>\s*/g, '\n');
   html = html.replace(/<button[^>]*class="mobile-scroll-down"[^>]*>[\s\S]*?<\/button>/g, '');
 
-  // Remove versões anteriores deste ajuste de cabeçalho, sem alterar o desktop.
-  html = html.replace(/\n?\/\* REGULOS_HEADER_TITLE_V[0-9]+ \*\/[\s\S]*?(?=<\/style>)/g, '\n');
+  // Mantém o Design System Neon e a navegação existente.
+  if (!html.includes('REGULOS_NEON_LINK_V1')) {
+    const neonLink = '<!-- REGULOS_NEON_LINK_V1 --><link rel="stylesheet" href="/regulos-neon.css">';
+    html = html.replace('</head>', neonLink + '</head>');
+  }
+  if (!html.includes('REGULOS_NAV_LINK_V1')) {
+    const navLinks = '<!-- REGULOS_NAV_LINK_V1 --><link rel="stylesheet" href="/regulos-nav.css"><script src="/regulos-nav.js" defer></script>';
+    html = html.replace('</head>', navLinks + '</head>');
+  }
 
+  // No celular, o conteúdo deve começar logo após os controles.
   const css = `
-/* REGULOS_MOBILE_ONLY_HEADER_V1 */
+/* REGULOS_MOBILE_SPACING_V2 */
 @media(max-width:560px){
-  /* Nenhuma regra abaixo altera o layout do PC. */
-  header .wrap{width:100%!important;max-width:none!important;padding-left:0!important;padding-right:0!important}
-  header .row{width:100%!important}
-  header .actions{width:100%!important}
-  header{padding-left:10px!important;padding-right:10px!important}
-  header .sub{display:none!important}
+  header .actions{margin-bottom:0!important}
+  header .mobile-controls-toggle{display:none!important}
+  main.wrap{margin-top:0!important;padding-top:0!important}
+  main.wrap>.cards:first-child{margin-top:8px!important;padding-top:0!important}
 }
 `;
-
-  if (!html.includes('REGULOS_MOBILE_ONLY_HEADER_V1')) {
+  html = html.replace(/\n?\/\* REGULOS_MOBILE_SPACING_V[0-9]+ \*\/[\s\S]*?(?=<\/style>)/g, '\n');
+  if (!html.includes('REGULOS_MOBILE_SPACING_V2')) {
     html = html.replace('</style>', css + '\n</style>');
   }
 
   fs.writeFileSync(file, html, 'utf8');
-  console.log('[RegulOS] Layout desktop preservado; ajustes limitados ao mobile.');
+  console.log('[RegulOS] Mobile corrigido: removido o botão Ocultar controles e eliminado o espaço vertical extra.');
 } catch (err) {
   console.error('[RegulOS] Falha ao aplicar ajuste mobile:', err.message);
   process.exit(1);
