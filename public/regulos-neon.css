@@ -116,7 +116,7 @@ input,textarea,select{
   box-shadow:inset 0 1px 10px rgba(0,0,0,.22);
   transition:border-color .18s ease,box-shadow .18s ease;
 }
-input:focus,textarea:focus,select:focus{
+select,select option,select optgroup{color:var(--rg-text);background-color:#0b1422;}\nselect{color-scheme:dark;}\n\ninput:focus,textarea:focus,select:focus{
   outline:none;
   border-color:var(--rg-cyan);
   box-shadow:0 0 0 2px rgba(34,211,238,.07),0 0 18px rgba(34,211,238,.09),inset 0 0 12px rgba(0,0,0,.2);
