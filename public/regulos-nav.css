@@ -269,3 +269,12 @@ body.regulos-has-sidebar main.wrap{max-width:none;margin-left:18px}
     display:flex!important;
   }
 }
+
+
+/* REGULOS_MOBILE_DIAGNOSTIC_NAV_FIX_V1 */
+@media(max-width:560px){
+  /* O diagnóstico aberto pela Central precisa vencer o estado oculto padrão do modal mobile. */
+  .diagnostic-modal.diagnostic-open{
+    display:flex!important;
+  }
+}
