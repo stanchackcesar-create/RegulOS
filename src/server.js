@@ -1865,7 +1865,17 @@ async function sendScheduledLink(item) {
         item.lastSentAt = new Date().toISOString();
         writeJson(FILES.schedules, linkSchedules);
         await new Promise(r => setTimeout(r, Math.max(700, Number(item.intervaloMin||1)*1000)));
-      }    }
+      } catch(e) {
+        errors++;
+        setLinkDeliveryStatus(item, item.progressKey, id, 'ERRO', e.message);
+        item.progressGroupIds = (item.progressGroupIds || []).filter(x => String(x) !== String(id));
+        item.erros = Number(item.erros||0) + 1;
+        addHistory({ grupoId:id, link:item.url, status:'erro', erro:e.message, agendamentoId:item.id, tipo:'agendado', ocorrencia:item.progressKey });
+        upsertLinkFailure(item, id, e.message);
+        addLog(`Falha agendamento ${item.nome}: ${e.message}`);
+        writeJson(FILES.schedules, linkSchedules);
+      }
+    }
 
     const allDone = (item.progressTargets || []).every(id => (item.progressGroupIds || []).includes(id) || getGroupConfig(id).ativo === false);
     if (allDone) {
