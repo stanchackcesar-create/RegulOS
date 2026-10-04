@@ -182,3 +182,12 @@ body.regulos-has-sidebar main.wrap{max-width:none;margin-left:18px}
   header .title{display:block!important;font-size:22px!important;white-space:nowrap!important;overflow:visible!important;text-overflow:clip!important}
   header .sub{display:block!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
 }
+
+/* REGULOS_DESKTOP_HIDE_TITLE_V1 */
+@media(min-width:561px){
+  header .title,header .title + .sub{display:none!important}
+}
+@media(max-width:560px){
+  header .title{display:block!important}
+  header .sub{display:block!important}
+}
