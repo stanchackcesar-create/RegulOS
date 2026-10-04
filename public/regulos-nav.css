@@ -39,18 +39,23 @@ body.regulos-has-sidebar main.wrap{max-width:none;margin-left:18px}
 }
 @media(max-width:700px){
   .regulos-sidebar{
-    left:auto;right:0;top:0;bottom:0;width:min(286px,88vw);border-radius:18px 0 0 18px;
-    transform:translateX(105%);transition:transform .22s ease;z-index:1201;
+    left:0;right:auto;top:0;bottom:0;width:min(286px,88vw);border-radius:0 18px 18px 0;
+    transform:translateX(-105%);transition:transform .22s ease;z-index:1201;
   }
   body.regulos-sidebar-open .regulos-sidebar{transform:translateX(0)}
-  .regulos-sidebar-toggle{display:flex;align-items:center;justify-content:center}
+  .regulos-sidebar-toggle{
+    left:12px;right:auto;top:12px;display:flex;align-items:center;justify-content:center;
+  }
   .regulos-sidebar-overlay{
     position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1200;
   }
   body.regulos-sidebar-open .regulos-sidebar-overlay{display:block}
-  body.regulos-has-sidebar{padding-right:0}
+  body.regulos-has-sidebar{padding-right:0;padding-left:0}
   body.regulos-has-sidebar main.wrap{margin-left:0}
-  header{padding-left:0!important;padding-right:64px!important}
+  header{padding-left:68px!important;padding-right:12px!important}
+  .regulos-sidebar-brand{padding-top:18px}
+  .regulos-nav{gap:3px}
+  .regulos-nav button{min-height:44px;padding:9px 10px}
 }
 
 /* REGULOS_NAV_MODAL_V1 */
@@ -95,4 +100,31 @@ body.regulos-has-sidebar main.wrap{max-width:none;margin-left:18px}
 .regulos-dashboard-metrics{display:none!important}
 @media(max-width:700px){
   .regulos-sidebar-metrics{grid-template-columns:repeat(3,1fr)}
+}
+
+/* REGULOS_MOBILE_LAYOUT_V2 */
+@media(max-width:560px){
+  header .row:first-child{align-items:center;gap:8px}
+  header .row:first-child>div:first-child{flex:1;min-width:0}
+  header .row:first-child>.row{flex:0 0 auto}
+  header .row:first-child>.row .badge{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  header .title{font-size:21px}
+  header .sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  header .actions{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  header .actions button{min-height:42px}
+  .header-bot-schedule{
+    grid-column:1 / -1;display:grid!important;grid-template-columns:1fr 1fr;gap:7px;
+    width:100%;margin:0;padding:8px;border-radius:11px;
+  }
+  .header-bot-schedule .badge{grid-column:1 / -1;justify-self:start}
+  .header-bot-schedule label{min-width:0!important;display:grid;grid-template-columns:auto 1fr;align-items:center;gap:5px}
+  .header-bot-schedule input[type=time]{width:100%!important;min-height:40px}
+  .header-bot-schedule .header-bot-active{grid-column:1 / -1;display:flex}
+  .header-bot-schedule button{grid-column:1 / -1;width:100%;min-height:42px}
+  main.wrap{padding-left:8px!important;padding-right:8px!important}
+  main.wrap>.cards{display:none}
+  main.wrap>.grid{margin-top:10px}
+  .panel{margin-top:10px!important}
+  .panel h2{font-size:18px}
+  .logs-main-panel{display:none!important}
 }
