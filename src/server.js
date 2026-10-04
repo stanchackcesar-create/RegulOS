@@ -1746,8 +1746,14 @@ async function sendScheduledLink(item) {
     } catch(e) {
       item.imagemStatus = 'erro'; item.imagemUltimaTentativa = new Date().toISOString();
       addLog(`Imagem manual inválida para "${item.nome}": ${e.message}`);
-      // A falha de imagem é uma falha real do envio: não enviamos somente texto.
-      for (const id of targets) upsertLinkFailure(item, id, `Imagem: ${e.message}`);
+      // A falha de imagem acontece antes do sendMessage(), então a entrega
+      // ainda está PENDENTE. Mesmo assim, ela precisa terminar como ERRO,
+      // para não ficar presa no painel indefinidamente.
+      for (const id of targets) {
+        const errorMsg = `Imagem: ${e.message}`;
+        setLinkDeliveryStatus(item, item.progressKey, id, 'ERRO', errorMsg);
+        upsertLinkFailure(item, id, errorMsg);
+      }
       item.status = 'erro'; item.ativo = false; writeJson(FILES.schedules, linkSchedules);
       return;
     }
@@ -1758,7 +1764,10 @@ async function sendScheduledLink(item) {
     writeJson(FILES.schedules, linkSchedules);
     if (!productImage) {
       const msg = 'Não foi possível encontrar ou baixar a imagem automaticamente.';
-      for (const id of targets) upsertLinkFailure(item, id, msg);
+      for (const id of targets) {
+        setLinkDeliveryStatus(item, item.progressKey, id, 'ERRO', msg);
+        upsertLinkFailure(item, id, msg);
+      }
       item.status = 'erro'; item.ativo = false; writeJson(FILES.schedules, linkSchedules);
       addLog(`Falha agendamento ${item.nome}: ${msg}`);
       return;
