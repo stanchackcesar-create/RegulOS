@@ -2424,25 +2424,56 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     const pergunta=String(req.body?.pergunta||'').trim();
     if(!pergunta) return res.status(400).json({ok:false,msg:'Digite uma pergunta.'});
     const q=pergunta.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    let periodo=1;
-    const pm=q.match(/(?:ultimos?|ultimas?)\s+(\d+)\s+dias?/);
-    if(pm) periodo=Math.max(1,Math.min(90,Number(pm[1])));
-    else if(/7 dias|semana/.test(q)) periodo=7;
-    else if(/15 dias/.test(q)) periodo=15;
-    else if(/30 dias|mes/.test(q)) periodo=30;
-    else if(/90 dias/.test(q)) periodo=90;
-    const cutoff=Date.now()-((periodo-1)*86400000);
-    const inPeriod=v=>{const t=Date.parse(v||'');return Number.isFinite(t)&&t>=cutoff;};
-    const deliveries=Array.isArray(linkDeliveries)?linkDeliveries.filter(x=>inPeriod(x.concluidoEm||x.criadoEm||x.at)):[];
+    const now=new Date();
+    const startOfDay=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();
+    const addDays=(ms,n)=>ms+(n*86400000);
+    const todayStart=startOfDay(now);
+    let startMs=todayStart, endMs=addDays(todayStart,1), periodo=1, periodoLabel='hoje';
+
+    const rangeMatch=q.match(/(?:de|entre)\s+(ontem|hoje)\s+(?:a|ate|para|e)\s+(ontem|hoje)/);
+    const numericRange=q.match(/(?:de|entre)\s+(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{4}))?\s+(?:a|ate|para|e)\s+(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{4}))?/);
+
+    if(rangeMatch){
+      const a=rangeMatch[1], b=rangeMatch[2];
+      const aStart=a==='ontem'?addDays(todayStart,-1):todayStart;
+      const bStart=b==='ontem'?addDays(todayStart,-1):todayStart;
+      startMs=Math.min(aStart,bStart);
+      endMs=addDays(Math.max(aStart,bStart),1);
+      periodo=Math.max(1,Math.round((endMs-startMs)/86400000));
+      periodoLabel=a+' para '+b;
+    }else if(numericRange){
+      const y1=Number(numericRange[3]||now.getFullYear()), y2=Number(numericRange[6]||y1);
+      const d1=new Date(y1,Number(numericRange[2])-1,Number(numericRange[1]));
+      const d2=new Date(y2,Number(numericRange[5])-1,Number(numericRange[4]));
+      if(!Number.isNaN(d1.getTime())&&!Number.isNaN(d2.getTime())){
+        startMs=startOfDay(d1); endMs=addDays(startOfDay(d2),1);
+        if(endMs<startMs){const t=startMs;startMs=endMs-86400000;endMs=t+86400000;}
+        periodo=Math.max(1,Math.round((endMs-startMs)/86400000));
+        periodoLabel=numericRange[1]+'/'+numericRange[2]+' a '+numericRange[4]+'/'+numericRange[5];
+      }
+    }else if(/\b(de ontem para hoje|de ontem ate hoje|de ontem a hoje|desde ontem|a partir de ontem)\b/.test(q)){
+      startMs=addDays(todayStart,-1); endMs=addDays(todayStart,1); periodo=2; periodoLabel='ontem e hoje';
+    }else if(/\bontem\b/.test(q) && !/\bhoje\b/.test(q)){
+      startMs=addDays(todayStart,-1); endMs=todayStart; periodo=1; periodoLabel='ontem';
+    }else if(/\bhoje\b/.test(q)){
+      startMs=todayStart; endMs=addDays(todayStart,1); periodo=1; periodoLabel='hoje';
+    }else{
+      const pm=q.match(/(?:ultimos?|ultimas?)\s+(\d+)\s+dias?/);
+      if(pm){periodo=Math.max(1,Math.min(90,Number(pm[1])));startMs=addDays(todayStart,-(periodo-1));endMs=addDays(todayStart,1);periodoLabel='ultimos '+periodo+' dias';}
+      else if(/7 dias|semana/.test(q)){periodo=7;startMs=addDays(todayStart,-6);endMs=addDays(todayStart,1);periodoLabel='ultimos 7 dias';}
+      else if(/15 dias/.test(q)){periodo=15;startMs=addDays(todayStart,-14);endMs=addDays(todayStart,1);periodoLabel='ultimos 15 dias';}
+      else if(/30 dias|mes/.test(q)){periodo=30;startMs=addDays(todayStart,-29);endMs=addDays(todayStart,1);periodoLabel='ultimos 30 dias';}
+      else if(/90 dias/.test(q)){periodo=90;startMs=addDays(todayStart,-89);endMs=addDays(todayStart,1);periodoLabel='ultimos 90 dias';}
+    }
+
+    const inPeriod=v=>{const t=Date.parse(v||'');return Number.isFinite(t)&&t>=startMs&&t<endMs;};
+    const deliveries=Array.isArray(linkDeliveries)?linkDeliveries.filter(x=>inPeriod(x.concluidoEm||x.criadoEm||x.at)):[]; 
     const failures=Array.isArray(linkFailures)?linkFailures.filter(x=>inPeriod(x.at||x.updatedAt||x.createdAt||x.data)):[]; 
     const schedules=Array.isArray(linkSchedules)?linkSchedules:[];
     const success=deliveries.filter(x=>String(x.status||'').toUpperCase()==='SUCESSO').length;
     const errors=deliveries.filter(x=>String(x.status||'').toUpperCase()==='ERRO').length;
     const sending=deliveries.filter(x=>String(x.status||'').toUpperCase()==='ENVIANDO').length;
     const total=success+errors+sending, pct=total?Math.round(success/total*100):0;
-    const todayKey=new Date().toISOString().slice(0,10);
-    const isToday=v=>{const t=Date.parse(v||'');return Number.isFinite(t)&&new Date(t).toISOString().slice(0,10)===todayKey;};
-    const todayDeliveries=deliveries.filter(x=>isToday(x.concluidoEm||x.criadoEm||x.at));
     const names=new Map();
     deliveries.forEach(x=>{
       const id=String(x.agendamentoId||x.linkId||''); if(!id)return;
@@ -2456,31 +2487,28 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     const topFailures={};
     failures.forEach(x=>{const k=String(x.erro||x.motivo||'Falha não informada');topFailures[k]=(topFailures[k]||0)+1;});
     const failureList=Object.entries(topFailures).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
     let resposta='';
     if(/\b(erro|erros|falha|falhas|problema|problemas|por que|porque|motivo)\b/.test(q)){
-      if(!failures.length&&!errors) resposta='Não encontrei falhas registradas no período analisado.';
-      else resposta='Encontrei '+(failures.length||errors)+' ocorrência(s) relacionada(s) a falhas no período de '+periodo+' dia(s).\n'+(failureList.map(x=>'• '+x[0]+' — '+x[1]+' ocorrência(s)').join('\n')||'• Há entregas com ERRO, mas sem motivo detalhado disponível.');
+      if(!failures.length&&!errors) resposta='Não encontrei falhas registradas em '+periodoLabel+'.';
+      else resposta='Encontrei '+(failures.length||errors)+' ocorrência(s) relacionada(s) a falhas em '+periodoLabel+'.\n'+(failureList.map(x=>'• '+x[0]+' — '+x[1]+' ocorrência(s)').join('\n')||'• Há entregas com ERRO, mas sem motivo detalhado disponível.');
     }else if(/\b(agendamento|agendamentos|programacao|programacoes)\b/.test(q)){
       const ativos=schedules.filter(x=>x.ativo!==false).length;
       resposta='No momento há '+ativos+' agendamento(s) ativo(s) de '+schedules.length+' cadastrado(s).';
     }else if(/\b(sucesso|sucessos|enviado|enviados|envios|entregas)\b/.test(q)){
-      resposta='No período de '+periodo+' dia(s), encontrei '+success+' sucesso(s), '+errors+' erro(s) e '+sending+' envio(s) em andamento.\nTaxa de sucesso: '+pct+'%.';
+      resposta='Em '+periodoLabel+', encontrei '+success+' sucesso(s), '+errors+' erro(s) e '+sending+' envio(s) em andamento.\nTaxa de sucesso: '+pct+'%.';
     }else if(/\b(tentativa|tentativas)\b/.test(q)){
       const tent=deliveries.reduce((n,x)=>n+Number(x.tentativas||0),0);
-      resposta='Foram registradas '+tent+' tentativa(s) de entrega no período de '+periodo+' dia(s).';
+      resposta='Foram registradas '+tent+' tentativa(s) de entrega em '+periodoLabel+'.';
     }else if(/\b(compar|compare|comparar)\b/.test(q)){
-      resposta='Comparação rápida do período de '+periodo+' dia(s): '+success+' sucesso(s), '+errors+' erro(s) e '+sending+' em andamento, com taxa de sucesso de '+pct+'%.';
+      resposta='Comparação rápida de '+periodoLabel+': '+success+' sucesso(s), '+errors+' erro(s) e '+sending+' em andamento, com taxa de sucesso de '+pct+'%.';
     }else if(/\b(link|links)\b/.test(q)&&/\b(mais|maior|pior)\b/.test(q)){
-      const top=ranking[0]; resposta=top?'O link com maior número de falhas no período é "'+top.nome+'", com '+top.erro+' erro(s) e '+top.tentativas+' tentativa(s).':'Não encontrei dados suficientes para apontar um link.';
-    }else if(/\b(hoje|agora)\b/.test(q)){
-      const ts=todayDeliveries.filter(x=>String(x.status||'').toUpperCase()==='SUCESSO').length;
-      const te=todayDeliveries.filter(x=>String(x.status||'').toUpperCase()==='ERRO').length;
-      resposta='Hoje, encontrei '+ts+' envio(s) com sucesso e '+te+' com erro no registro de entregas.';
+      const top=ranking[0]; resposta=top?'O link com maior número de falhas em '+periodoLabel+' é "'+top.nome+'", com '+top.erro+' erro(s) e '+top.tentativas+' tentativa(s).':'Não encontrei dados suficientes para apontar um link.';
     }else{
-      resposta='Posso analisar erros, sucessos, tentativas, agendamentos e comparações.\nExemplo: "Quais links deram erro hoje?" ou "Quantos envios deram certo nos últimos 7 dias?"';
+      resposta='Posso analisar erros, sucessos, tentativas, agendamentos e comparações.\nExemplo: "Quais links deram erro hoje?", "Quantos envios deram certo ontem?" ou "Quantos envios deram certo de ontem para hoje?"';
     }
     res.set('Cache-Control','no-store');
-    res.json({ok:true,resposta,periodo,metricas:{sucessos:success,erros:errors,emAndamento:sending,taxaSucesso:pct}});
+    res.json({ok:true,resposta,periodo,periodoLabel,intervalo:{inicio:new Date(startMs).toISOString(),fim:new Date(endMs).toISOString()},metricas:{sucessos:success,erros:errors,emAndamento:sending,taxaSucesso:pct}});
   }catch(e){res.status(500).json({ok:false,msg:'Não foi possível processar a pergunta: '+e.message});}
 });
 
