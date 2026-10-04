@@ -730,28 +730,41 @@ function pruneLinkHistoryByLatestSentTime({persist=true}={}){
 }
 
 function normalizeLinkHistory(){
-  if(!Array.isArray(linkHistory) || !linkHistory.length)return;
+  if(!Array.isArray(linkHistory) || !linkHistory.length)return false;
+
   const seenOneTime=new Set();
   const normalized=[];
+  let changed=false;
+
   for(const item of linkHistory){
-    // Registros de links "uma vez" usam o próprio agendamento como ID.
-    // Se o servidor for reiniciado ou a conclusão for processada novamente,
-    // o mesmo agendamento não deve aparecer duas vezes no histórico visual.
+    // Execuções únicas usam o ID do agendamento como identidade estável.
+    // O motivo não entra na chave: se um registro legado perdeu o motivo,
+    // mas mantém o mesmo ID, ainda assim não pode virar um segundo cartão.
     const oneTimeKey = item?.motivo === 'envio concluído — uma vez' && item?.id
       ? String(item.id)
       : '';
+
     if(oneTimeKey){
-      if(seenOneTime.has(oneTimeKey))continue;
+      if(seenOneTime.has(oneTimeKey)){
+        changed=true;
+        continue;
+      }
       seenOneTime.add(oneTimeKey);
     }
+
     normalized.push(item);
   }
+
+  if(normalized.length !== linkHistory.length) changed=true;
   linkHistory=normalized;
+  return changed;
 }
 
 function saveLinkHistory(){
   normalizeLinkHistory();
-  linkHistory=linkHistory.slice(-500);
+  // Os novos registros entram com unshift(), portanto os primeiros 500
+  // são os mais recentes. slice(-500) mantinha justamente os mais antigos.
+  linkHistory=linkHistory.slice(0,500);
   pruneLinkHistoryByLatestSentTime({persist:false});
   linkHistory.forEach(scheduleLinkHistoryExpiration);
   writeJson(FILES.linkHistory,linkHistory);
@@ -766,11 +779,10 @@ function clearLinkHistory(){
 
 // Cada registro recebe seu próprio timer de expiração. Ao reiniciar o servidor,
 // os timers são reconstruídos a partir do horário salvo no histórico.
-const linkHistoryCountBeforeNormalize = linkHistory.length;
-normalizeLinkHistory();
-if(linkHistory.length !== linkHistoryCountBeforeNormalize) {
+const linkHistoryNormalizedAtStartup = normalizeLinkHistory();
+if(linkHistoryNormalizedAtStartup) {
   writeJson(FILES.linkHistory, linkHistory);
-  addLog(`Limpeza automática do histórico: ${linkHistoryCountBeforeNormalize - linkHistory.length} registro(s) duplicado(s) removido(s).`);
+  addLog('Limpeza automática do histórico: registro(s) duplicado(s) removido(s) na inicialização.');
 }
 pruneLinkHistoryByLatestSentTime();
 linkHistory.forEach(scheduleLinkHistoryExpiration);
@@ -790,7 +802,8 @@ function archiveCompletedOneTimeLink(item) {
     mensagemAleatoriaAtiva: item.mensagemAleatoriaAtiva === true,
     enviados: Number(item.enviados || 0), sucessos: Number(item.sucessos || 0), erros: Number(item.erros || 0),
     lastRunAt: item.lastRunAt || new Date().toISOString(), lastDurationMs: Number(item.lastDurationMs || 0),
-    concluidoAt: new Date().toISOString(), motivo: 'envio concluído — uma vez'
+    concluidoAt: new Date().toISOString(), status: 'sucesso',
+    agendamentoId: String(item.id || ''), motivo: 'envio concluído — uma vez'
   };
 
   // Um agendamento de execução única tem um único registro de histórico.
@@ -2093,7 +2106,10 @@ app.get('/api/link-historico',(req,res)=>{
   res.set('Expires','0');
   try {
     if(!Array.isArray(linkHistory)) linkHistory=[];
+    const normalized=normalizeLinkHistory();
+    const beforePrune=linkHistory.length;
     pruneLinkHistoryByLatestSentTime();
+    if(normalized && linkHistory.length===beforePrune) writeJson(FILES.linkHistory,linkHistory);
     res.json({ok:true,historico:linkHistory});
   } catch(e) {
     addLog(`Erro ao carregar histórico de links: ${e.message}`);
