@@ -284,3 +284,19 @@ body.regulos-has-sidebar main.wrap{max-width:none;margin-left:18px}
 .diagnostic-main-panel{
   display:none!important;
 }
+
+
+/* REGULOS_MOBILE_FLOATERS_INSIDE_CENTRAL_V1 */
+@media(max-width:700px){
+  body.regulos-sidebar-open .message-float-launcher,
+  body.regulos-sidebar-open .assistant-float-launcher{
+    left:214px!important;
+    right:auto!important;
+  }
+  body.regulos-sidebar-open .message-float-launcher{
+    bottom:calc(78px + env(safe-area-inset-bottom))!important;
+  }
+  body.regulos-sidebar-open .assistant-float-launcher{
+    bottom:calc(14px + env(safe-area-inset-bottom))!important;
+  }
+}
