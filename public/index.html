@@ -303,14 +303,10 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 .regulos-nav-source-panel{display:none}
 .regulos-nav-modal-body>.regulos-nav-source-panel{display:block}
 </style>
-<style id="regulosDesktopBrandStyle">
-@media(min-width:701px){.regulos-desktop-brand{display:block}}
-@media(max-width:700px){.regulos-desktop-brand{display:none}}
-</style>
 </head>
 <body>
 <header><div class="wrap">
-<div class="row" style="justify-content:space-between"><div class="regulos-desktop-brand"><div class="title">⚙️ RegulOS <span class="sub">v12.11.0</span></div><div class="sub">Links, programação, histórico e grupos</div></div><div class="row"><span id="accountInfo" class="badge neutral">...</span><button onclick="logoutRegulos()">🚪 Sair</button></div></div>
+<div class="row" style="justify-content:space-between"><div class="row"><span id="accountInfo" class="badge neutral">...</span><button onclick="logoutRegulos()">🚪 Sair</button></div></div>
 <div class="actions">
 <button class="primary" onclick="refreshAll()">🔄 Atualizar</button>
 <button onclick="apiAction('/api/reconectar')">🔌 Reconectar</button>
