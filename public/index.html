@@ -1634,5 +1634,23 @@ document.getElementById('qrModal')?.addEventListener('click',e=>{if(e.target.id=
     bottom:calc(12px + env(safe-area-inset-bottom))!important;
   }
 }
-</style></body>
+</style><script>
+/* REGULOS_FLOATING_BUTTONS_ROOT_FIX */
+(function(){
+  function moveFloatingControlsToRoot(){
+    const ids=['messageFloatLauncher','messageFloatPanel','assistantFloatLauncher','assistantFloatPanel'];
+    ids.forEach(function(id){
+      const el=document.getElementById(id);
+      if(el && el.parentElement!==document.documentElement){
+        document.documentElement.appendChild(el);
+      }
+    });
+  }
+  if(document.readyState==='loading'){
+    document.addEventListener('DOMContentLoaded',moveFloatingControlsToRoot,{once:true});
+  }else{
+    moveFloatingControlsToRoot();
+  }
+})();
+</script></body>
 </html>
