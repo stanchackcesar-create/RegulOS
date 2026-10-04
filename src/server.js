@@ -2566,13 +2566,14 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
       &&/\b(qual|quais|onde|qual\s+link)\b/.test(q);
     const intencaoStatusAgendamento=Boolean(horarioAnterior)&&/\b(status|situacao|situação|estado)\b/.test(q)
       &&/\b(link|agendamento|agendado|programado|ele|esse|desse)\b/.test(q);
-    const intencaoRecomendacaoAgendamento=Boolean(horarioAnterior)&&/\b(recomenda|recomendacao|sugestao|sugira|o que devo|que devo|o que fazer|como melhorar)\b/.test(q)
+    const intencaoRecomendacaoAgendamento=(Boolean(horarioAnterior)||Boolean(horarioNormalizado))&&/\b(recomenda|recomendacao|sugestao|sugira|o que devo|o que eu deveria|que devo|o que fazer|o que eu faco|como melhorar|devo fazer)\b/.test(q)
       &&/\b(link|agendamento|agendado|programado|ele|esse|desse)\b/.test(q);
     if(intencaoRecomendacaoAgendamento){
-      const encontrados=schedules.filter(item=>String(item.horario||'').slice(0,5)===horarioAnterior);
-      if(!encontrados.length) resposta='📅 Não encontrei o agendamento das '+horarioAnterior+' para recomendar uma ação.';
+      const horarioAlvo=horarioNormalizado||horarioAnterior;
+      const encontrados=schedules.filter(item=>String(item.horario||'').slice(0,5)===horarioAlvo);
+      if(!encontrados.length) resposta='📅 Não encontrei o agendamento das '+horarioAlvo+' para recomendar uma ação.';
       else {
-        resposta='💡 Recomendo manter o agendamento das '+horarioAnterior+' ativo e acompanhar a execução.';
+        resposta='💡 Recomendo manter o agendamento das '+horarioAlvo+' ativo e acompanhar a execução.';
         encontrados.forEach(item=>{
           const st=String(item.status||'').toLowerCase();
           if(st==='erro') resposta+='\n• O agendamento está com ERRO: revise o link e o grupo antes de reenviar.';
