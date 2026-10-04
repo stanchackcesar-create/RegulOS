@@ -2719,19 +2719,37 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
       resposta='Posso analisar o desempenho do RegulOS e explicar padrões de falha.\nExemplo: "Como estão meus envios nos últimos 7 dias?" ou "O que devo melhorar nos meus envios?"';
     }
 
+    const textosContexto=contexto.filter(x=>x&&x.role==='user'&&x.content).map(x=>String(x.content).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
+    const acoesAgendamentoRespondidas={
+      status:textosContexto.some(t=>/\b(status|situacao|estado)\b/.test(t)&&/\b(link|agendamento|agendado|programado|ele|esse|desse)\b/.test(t)),
+      recomendacao:textosContexto.some(t=>/\b(recomenda|recomendacao|sugestao|sugira|o que devo|o que eu deveria|que devo|o que fazer|como melhorar|devo fazer)\b/.test(t)),
+      grupo:textosContexto.some(t=>/\b(grupo|grupos)\b/.test(t)&&/\b(ver|mostrar|mostre|qual|quais|onde|desse|deste|agendamento|link|links)\b/.test(t)),
+      detalhes:textosContexto.some(t=>/\b(detalhes|informacoes|dados)\b/.test(t)&&/\b(link|agendamento|agendado|programado|ele|esse|desse|deste)\b/.test(t)),
+      outros:textosContexto.some(t=>/\b(outros|outras)\b/.test(t)&&/\b(horarios|links|agendamentos)\b/.test(t))
+    };
     let sugestoes=[];
-    const respostaFoiStatus=/\bstatus do agendamento\b|\bstatus desse link\b/.test(q);
-    const respostaFoiGrupo=/\bver o grupo\b|\bgrupo do agendamento\b/.test(q);
+    const respostaFoiStatus=intencaoStatusAgendamento||/\bstatus do agendamento\b|\bstatus desse link\b/.test(q);
+    const respostaFoiGrupo=intencaoGrupoAgendamento||/\bver o grupo\b|\bgrupo do agendamento\b/.test(q);
     const respostaFoiDetalhes=intencaoDetalhesAgendamento;
     const respostaFoiOutros=intencaoOutrosHorarios||intencaoVoltarAgendamentos;
+
+    const candidatosAgendamento=[];
+    if(!acoesAgendamentoRespondidas.status) candidatosAgendamento.push('Qual é o status desse link?');
+    if(!acoesAgendamentoRespondidas.recomendacao) candidatosAgendamento.push('O que eu deveria fazer com esse link?');
+    if(!acoesAgendamentoRespondidas.grupo) candidatosAgendamento.push('Ver o grupo desse agendamento');
+    if(!acoesAgendamentoRespondidas.detalhes) candidatosAgendamento.push('Ver detalhes desse link');
+    if(!acoesAgendamentoRespondidas.outros) candidatosAgendamento.push('Quais outros links estão programados hoje?');
+
     if(agendamentoSelecionado && respostaFoiStatus){
-      sugestoes=['O que eu deveria fazer com esse link?','Ver o grupo desse agendamento','Ver detalhes desse link','Quais outros links estão programados hoje?'];
+      sugestoes=candidatosAgendamento.filter(s=>s!=='Qual é o status desse link?').slice(0,4);
     }else if(agendamentoSelecionado && (respostaFoiGrupo||respostaFoiDetalhes)){
-      sugestoes=['Qual é o status desse link?','O que eu deveria fazer com esse link?','Quais outros links estão programados hoje?','Voltar aos agendamentos'];
+      sugestoes=candidatosAgendamento.slice(0,4);
+      if(!sugestoes.includes('Voltar aos agendamentos') && sugestoes.length<4) sugestoes.push('Voltar aos agendamentos');
     }else if(agendamentoSelecionado && respostaFoiOutros){
       sugestoes=['Qual é o próximo link a ser enviado?','Existe algum agendamento com problema?','Quais links estão pausados?','Voltar aos agendamentos'];
     }else if(agendamentoSelecionado){
-      sugestoes=['Qual é o status desse link?','O que eu deveria fazer com esse link?','Ver o grupo desse agendamento','Ver detalhes desse link'];
+      sugestoes=candidatosAgendamento.slice(0,4);
+      if(!sugestoes.length) sugestoes=['Qual é o próximo link a ser enviado?','Existe algum agendamento com problema?','Quais links estão pausados?','Voltar aos agendamentos'];
     }else if(intencaoAgendamentosHoje||intencaoAgendamentoEspecifico){
       sugestoes=['Qual é o próximo link a ser enviado?','Existe algum agendamento com problema?','Quais links estão pausados?','O que você recomenda?'];
     }else if(intencaoFalhas){
