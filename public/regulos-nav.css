@@ -1,0 +1,54 @@
+/* REGULOS_NAV_V1 */
+.regulos-sidebar{
+  position:fixed;left:14px;top:92px;bottom:14px;width:236px;z-index:900;
+  padding:14px;background:rgba(7,16,30,.94);border:1px solid rgba(34,211,238,.28);
+  border-radius:18px;box-shadow:0 20px 55px rgba(0,0,0,.42),0 0 22px rgba(34,211,238,.06);
+  backdrop-filter:blur(16px);display:flex;flex-direction:column;gap:8px;
+}
+.regulos-sidebar-brand{padding:8px 10px 12px;border-bottom:1px solid rgba(34,211,238,.14);margin-bottom:2px}
+.regulos-sidebar-brand b{font-size:18px}.regulos-sidebar-brand small{display:block;color:#8fa6c5;margin-top:3px}
+.regulos-nav-label{font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:#6f86a8;padding:8px 10px 3px}
+.regulos-nav{
+  display:flex;flex-direction:column;gap:5px;overflow:auto;padding-right:2px;
+}
+.regulos-nav button{
+  width:100%;display:flex;align-items:center;gap:10px;justify-content:flex-start;
+  min-height:42px;padding:9px 11px;border-radius:11px;background:transparent;
+  border:1px solid transparent;box-shadow:none;color:#cbd8eb;text-align:left;
+}
+.regulos-nav button:hover,.regulos-nav button.active{
+  background:linear-gradient(90deg,rgba(34,211,238,.11),rgba(61,131,246,.08));
+  border-color:rgba(34,211,238,.28);color:#fff;box-shadow:0 0 15px rgba(34,211,238,.07);
+}
+.regulos-nav-icon{width:22px;text-align:center;font-size:17px}
+.regulos-sidebar-status{
+  margin-top:auto;padding:10px;border:1px solid rgba(34,197,94,.22);border-radius:11px;
+  background:rgba(18,62,41,.24);font-size:12px;color:#bfe8cf;
+}
+.regulos-sidebar-status .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 10px rgba(34,197,94,.7);margin-right:6px}
+.regulos-sidebar-toggle{
+  position:fixed;left:14px;top:16px;z-index:1200;display:none;
+  width:44px;height:44px;padding:0;border-radius:12px;background:#10233b;border:1px solid rgba(34,211,238,.38);
+}
+.regulos-sidebar-overlay{display:none}
+body.regulos-has-sidebar{padding-left:264px}
+body.regulos-has-sidebar header .wrap{max-width:none}
+body.regulos-has-sidebar main.wrap{max-width:none;margin-right:18px}
+@media(max-width:1100px) and (min-width:701px){
+  .regulos-sidebar{width:210px}.regulos-sidebar-toggle{display:none}body.regulos-has-sidebar{padding-left:226px}
+}
+@media(max-width:700px){
+  .regulos-sidebar{
+    left:0;top:0;bottom:0;width:min(286px,88vw);border-radius:0 18px 18px 0;
+    transform:translateX(-105%);transition:transform .22s ease;z-index:1201;
+  }
+  body.regulos-sidebar-open .regulos-sidebar{transform:translateX(0)}
+  .regulos-sidebar-toggle{display:flex;align-items:center;justify-content:center}
+  .regulos-sidebar-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1200;
+  }
+  body.regulos-sidebar-open .regulos-sidebar-overlay{display:block}
+  body.regulos-has-sidebar{padding-left:0}
+  body.regulos-has-sidebar main.wrap{margin-right:0}
+  header{padding-left:64px!important}
+}
