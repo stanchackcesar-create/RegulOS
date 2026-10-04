@@ -500,8 +500,8 @@ async function loadSchedules(){
     const chave=(x)=>{
       const data=String(x?.data||'').trim();
       const horario=String(x?.horario||'').trim();
-      const dataISO=/^\\d{4}-\\d{2}-\\d{2}$/.test(data)?data:'9999-12-31';
-      const hora=/^\\d{2}:\\d{2}/.test(horario)?horario.slice(0,5):'99:99';
+      const dataISO=/^\d{4}-\d{2}-\d{2}$/.test(data)?data:'9999-12-31';
+      const hora=/^\d{2}:\d{2}/.test(horario)?horario.slice(0,5):'99:99';
       return dataISO+'T'+hora;
     };
     return chave(a).localeCompare(chave(b));
