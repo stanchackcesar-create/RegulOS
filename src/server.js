@@ -544,8 +544,88 @@ let history = Array.isArray(readJson(FILES.history, [])) ? readJson(FILES.histor
 let linkSchedules = Array.isArray(readJson(FILES.schedules, [])) ? readJson(FILES.schedules, []) : [];
 let linkHistory = Array.isArray(readJson(FILES.linkHistory, [])) ? readJson(FILES.linkHistory, []) : [];
 let linkFailures = Array.isArray(readJson(FILES.linkFailures, [])) ? readJson(FILES.linkFailures, []) : [];
-function saveLinkFailures() { linkFailures = linkFailures.slice(-500); writeJson(FILES.linkFailures, linkFailures); }
-function clearLinkFailures() { linkFailures = []; writeJson(FILES.linkFailures, linkFailures); }
+
+const LINK_FAILURE_MAX_WINDOW_MS = 10 * 60 * 60 * 1000;
+const linkFailureExpirationTimers = new Map();
+
+function linkFailureRecordedAt(item){
+  const values=[item?.atualizadoEm,item?.criadoEm].map(v=>Date.parse(String(v||''))).filter(Number.isFinite);
+  return values.length ? Math.max(...values) : NaN;
+}
+
+function cancelLinkFailureExpiration(item){
+  const timer=linkFailureExpirationTimers.get(item);
+  if(timer){
+    clearTimeout(timer);
+    linkFailureExpirationTimers.delete(item);
+  }
+}
+
+function expireLinkFailureRecord(item){
+  linkFailureExpirationTimers.delete(item);
+  const index=linkFailures.findIndex(x=>x===item);
+  if(index<0)return false;
+
+  linkFailures.splice(index,1);
+  writeJson(FILES.linkFailures,linkFailures);
+  addLog(`Limpeza automática das falhas: ${item.nome||item.id||'registro'} removido após 10h da última falha registrada.`);
+  return true;
+}
+
+function scheduleLinkFailureExpiration(item){
+  cancelLinkFailureExpiration(item);
+  const failedAt=linkFailureRecordedAt(item);
+  if(!Number.isFinite(failedAt))return;
+
+  const expiresAt=failedAt+LINK_FAILURE_MAX_WINDOW_MS;
+  const delay=Math.max(0,expiresAt-Date.now());
+  const timer=setTimeout(()=>expireLinkFailureRecord(item),delay);
+  if(typeof timer.unref==='function')timer.unref();
+  linkFailureExpirationTimers.set(item,timer);
+}
+
+function pruneLinkFailuresByLatestFailureTime({persist=true}={}){
+  if(!Array.isArray(linkFailures) || !linkFailures.length)return 0;
+
+  const now=Date.now();
+  const cutoff=now-LINK_FAILURE_MAX_WINDOW_MS;
+  const before=linkFailures.length;
+  const previous=linkFailures;
+
+  linkFailures=linkFailures.filter(item=>{
+    const failedAt=linkFailureRecordedAt(item);
+    return !Number.isFinite(failedAt) || failedAt>=cutoff;
+  });
+
+  const kept=new Set(linkFailures);
+  previous.forEach(item=>{
+    if(!kept.has(item))cancelLinkFailureExpiration(item);
+  });
+
+  const removed=before-linkFailures.length;
+  if(removed && persist)writeJson(FILES.linkFailures,linkFailures);
+  if(removed)addLog(`Limpeza automática das falhas: ${removed} registro(s) com mais de 10h desde a última falha foram removidos.`);
+  return removed;
+}
+
+function saveLinkFailures() {
+  linkFailures = linkFailures.slice(-500);
+  pruneLinkFailuresByLatestFailureTime({persist:false});
+  linkFailures.forEach(scheduleLinkFailureExpiration);
+  writeJson(FILES.linkFailures, linkFailures);
+}
+
+function clearLinkFailures() {
+  linkFailureExpirationTimers.forEach(timer=>clearTimeout(timer));
+  linkFailureExpirationTimers.clear();
+  linkFailures = [];
+  writeJson(FILES.linkFailures, linkFailures);
+}
+
+// Cada falha recebe seu próprio timer de expiração. Ao reiniciar o servidor,
+// os timers são reconstruídos a partir do horário salvo no histórico de falhas.
+pruneLinkFailuresByLatestFailureTime();
+linkFailures.forEach(scheduleLinkFailureExpiration);
 function upsertLinkFailure(item, grupoId, erro, extra={}) {
   const key = `${item.id}:${String(grupoId)}`;
   const record = {
