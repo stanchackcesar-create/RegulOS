@@ -996,7 +996,8 @@ async function sendAssistantChat(){
   const pergunta=String(input.value||'').trim(); if(!pergunta)return;
   appendAssistantChatMessage('user',pergunta); input.value=''; input.disabled=true;
   try{
-    const d=await jfetch('/api/assistente/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pergunta})});
+    const periodoSelecionado=Number(document.getElementById('assistantPeriod')?.value||7);
+    const d=await jfetch('/api/assistente/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pergunta,periodoSolicitado:periodoSelecionado})});
     appendAssistantChatMessage('bot',d.resposta||'Não consegui interpretar essa pergunta.');
   }catch(e){appendAssistantChatMessage('bot','⚠️ Não foi possível consultar o Assistente: '+(e.message||e));}
   finally{input.disabled=false;input.focus();}
