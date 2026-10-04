@@ -48,93 +48,10 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 .schedule-filter-result{font-size:13px;color:#9eb0ca;min-height:18px;margin-top:4px}
 @media(max-width:560px){.schedule-scroll{max-height:60vh}.schedule-tools{align-items:stretch}.schedule-tools input{flex-basis:100%}.schedule-tools button{min-height:44px}}
 
-
-/* REGULOS MOBILE UI V1 — mobile only; desktop rules remain unchanged */
-@media(max-width:560px){
-  html{scroll-behavior:smooth}
-  body{background:#070d18;overflow-x:hidden}
-  header{padding:14px 12px 12px 62px!important;min-height:78px}
-  header .wrap{position:relative}
-  header .row:first-child{align-items:flex-start!important;gap:8px}
-  header .row:first-child>div:first-child{min-width:0;padding-top:2px}
-  header .title{font-size:21px;line-height:1.15}
-  header .sub{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
-  header .row:first-child>.row{gap:5px}
-  header #accountInfo{font-size:11px;padding:5px 7px}
-  header .row:first-child>.row>button{font-size:12px;padding:8px 9px;min-height:38px}
-  .mobile-menu-toggle{
-    display:flex!important;position:absolute;left:10px;top:10px;width:42px;height:42px;
-    align-items:center;justify-content:center;padding:0!important;border-radius:12px;
-    background:#10233d;border:1px solid #2f8cff;color:#eef3ff;font-size:24px;z-index:10;
-    box-shadow:0 6px 18px rgba(0,0,0,.28)
-  }
-  header .actions{display:none!important}
-  main.wrap{padding:10px 10px 28px}
-  .cards{grid-template-columns:1fr 1fr!important;gap:8px!important;margin-top:2px}
-  .card,.panel{background:#0d1728;border-color:#203a5e;border-radius:14px;padding:13px}
-  .metric{min-width:0}
-  .metric small{font-size:12px}
-  .metric b{font-size:22px;margin-top:5px}
-  .metric span{font-size:11px;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-  .grid{grid-template-columns:1fr!important;gap:10px!important;margin-top:10px}
-  section,aside{min-width:0}
-  h2{font-size:18px}
-  .panel{overflow:hidden}
-  .panel>.row{align-items:stretch}
-  .panel>.row>button{min-height:44px}
-  .qr{padding-top:14px}
-  .qr img{width:min(72vw,250px)}
-  textarea{min-height:110px}
-  .link{padding:11px;border-radius:12px}
-  .link h3{font-size:16px;line-height:1.3}
-  .link .row{grid-template-columns:1fr 1fr!important}
-  .link .row button{min-height:44px}
-  .schedule-tools{display:grid!important;grid-template-columns:1fr auto;gap:7px}
-  .schedule-tools input{min-width:0!important;width:100%}
-  .schedule-tools button{min-width:72px}
-  .schedule-scroll{max-height:none!important}
-  .groups{max-height:none!important}
-  .logs{height:190px}
-  #linkHistory,#linkFailures,#schedules,#links{min-width:0}
-  #accountPanel .two{grid-template-columns:1fr!important}
-  #accountPanel .group{padding:10px}
-  .mobile-only-connection{display:block!important}
-  .mobile-menu-overlay{
-    position:fixed;inset:0;background:rgba(0,0,0,.62);z-index:1999;
-    opacity:0;pointer-events:none;transition:opacity .18s ease
-  }
-  .mobile-menu-overlay.open{opacity:1;pointer-events:auto}
-  .mobile-drawer{
-    position:fixed;left:0;top:0;bottom:0;width:min(86vw,340px);z-index:2000;
-    background:#0b1423;border-right:1px solid #2b5f96;
-    box-shadow:18px 0 45px rgba(0,0,0,.45);
-    transform:translateX(-105%);transition:transform .2s ease;
-    padding:18px 14px calc(18px + env(safe-area-inset-bottom));overflow:auto
-  }
-  .mobile-drawer.open{transform:translateX(0)}
-  .mobile-drawer-head{display:flex;justify-content:space-between;align-items:center;padding:4px 2px 14px;border-bottom:1px solid #203a5e}
-  .mobile-drawer-title{font-size:20px;font-weight:800}
-  .mobile-drawer-sub{font-size:12px;color:#9eb0ca;margin-top:2px}
-  .mobile-nav-group{margin-top:14px}
-  .mobile-nav-label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:#7188a8;margin:0 4px 7px}
-  .mobile-nav-btn{
-    width:100%;display:flex;align-items:center;gap:11px;text-align:left;
-    background:#101d31;border:1px solid #203a5e;margin:6px 0;padding:12px 13px;
-    border-radius:11px;color:#eef3ff;font-size:15px;min-height:46px
-  }
-  .mobile-nav-btn:active{transform:scale(.99)}
-  .mobile-nav-btn.danger{background:#351922;border-color:#6e2b36}
-  .mobile-nav-btn.primary{background:#173d73;border-color:#2f8cff}
-  .mobile-nav-divider{height:1px;background:#203a5e;margin:13px 0}
-  body.mobile-menu-open{overflow:hidden}
-}
-.mobile-menu-toggle,.mobile-drawer,.mobile-menu-overlay{display:none}
-
 </style>
 </head>
 <body>
 <header><div class="wrap">
-<button class="mobile-menu-toggle" type="button" aria-label="Abrir menu" onclick="toggleMobileMenu()">☰</button>
 <div class="row" style="justify-content:space-between"><div><div class="title">⚙️ RegulOS <span class="sub">v12.11.0</span></div><div class="sub">Links, programação, histórico e grupos</div></div><div class="row"><span id="accountInfo" class="badge neutral">...</span><button onclick="logoutRegulos()">🚪 Sair</button></div></div>
 <div class="actions">
 <button class="primary" onclick="refreshAll()">🔄 Atualizar</button>
@@ -144,38 +61,9 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 <button class="red" onclick="novoQR()">📱 Novo QR</button>
 </div>
 </div></header>
-<div id="mobileMenuOverlay" class="mobile-menu-overlay" onclick="toggleMobileMenu(false)"></div>
-<aside id="mobileDrawer" class="mobile-drawer" aria-hidden="true">
-  <div class="mobile-drawer-head">
-    <div><div class="mobile-drawer-title">⚙️ RegulOS</div><div class="mobile-drawer-sub">Navegação rápida</div></div>
-    <button type="button" onclick="toggleMobileMenu(false)" aria-label="Fechar menu">✕</button>
-  </div>
-  <div class="mobile-nav-group">
-    <div class="mobile-nav-label">Navegação</div>
-    <button class="mobile-nav-btn primary" onclick="mobileScroll('mobileDashboard')">🏠 Dashboard</button>
-    <button class="mobile-nav-btn" onclick="mobileScroll('mobileLinks')">🔗 Gerenciador de links</button>
-    <button class="mobile-nav-btn" onclick="mobileScroll('mobileSchedules')">⏱️ Agendamentos</button>
-    <button class="mobile-nav-btn" onclick="mobileScroll('mobileFailures')">⚠️ Links com falha</button>
-    <button class="mobile-nav-btn" onclick="mobileScroll('mobileHistory')">📚 Histórico</button>
-    <button class="mobile-nav-btn" onclick="mobileScroll('mobileGroups')">👥 Grupos</button>
-    <button class="mobile-nav-btn" onclick="mobileScroll('mobileAccounts')">👤 Contas</button>
-    <button class="mobile-nav-btn" onclick="mobileScroll('mobileLogs')">📜 Logs</button>
-  </div>
-  <div class="mobile-nav-divider"></div>
-  <div class="mobile-nav-group">
-    <div class="mobile-nav-label">Conexão</div>
-    <button class="mobile-nav-btn" onclick="mobileAction('/api/reconectar')">🔌 Reconectar</button>
-    <button class="mobile-nav-btn" onclick="mobileAction('/api/novo-qr','qr')">📱 Gerar novo QR</button>
-    <button class="mobile-nav-btn danger" onclick="mobileAction('/api/desconectar')">⛔ Desconectar</button>
-    <button class="mobile-nav-btn" onclick="mobileScroll('mobileConnection')">📷 Ver conexão</button>
-  </div>
-  <div class="mobile-nav-divider"></div>
-  <button class="mobile-nav-btn" onclick="mobileRefresh()">🔄 Atualizar RegulOS</button>
-  <button class="mobile-nav-btn danger" onclick="logoutRegulos()">🚪 Sair</button>
-</aside>
 
 <main class="wrap">
-<div id="mobileDashboard" class="cards">
+<div class="cards">
 <div class="card metric"><small>WhatsApp</small><b id="conn">...</b><span id="number" class="muted">Número: —</span></div>
 <div class="card metric"><small>Mensagens hoje</small><b id="today">0</b></div>
 <div class="card metric"><small>Grupos</small><b id="groupCount">0</b><span id="allowed" class="muted">0 permitidos</span><span id="linkedGroups" class="muted" style="display:block;margin-top:4px">Ligados: nenhum</span></div>
@@ -184,21 +72,21 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 
 <div class="grid">
 <section>
-<div id="mobileConnection" class="panel qr">
+<div class="panel qr">
 <h2>📷 Conexão</h2>
 <div id="connStatus" class="statusline">Aguardando...</div>
 <div id="qrBox" class="qr hidden"><p>Escaneie com o WhatsApp:</p><img id="qrImg" alt="QR Code"></div>
 <div id="numberBig" class="statusline" style="margin-top:8px">Número conectado: —</div>
 </div>
 
-<div id="mobileMessage" class="panel" style="margin-top:14px">
+<div class="panel" style="margin-top:14px">
 <h2>💬 Enviar mensagem</h2>
 <div class="muted">A mensagem é enviada somente aos grupos que estiverem <b>Ligados</b>.</div>
 <textarea id="message" placeholder="Digite sua mensagem..."></textarea>
 <div class="row" style="margin-top:8px"><button class="green" onclick="sendMessage()">📤 Enviar mensagem</button><span id="sendResult" class="muted"></span></div>
 </div>
 
-<div id="mobileHistory" class="panel" style="margin-top:14px">
+<div class="panel" style="margin-top:14px">
 <h2>📚 Histórico de links enviados</h2>
 <div class="row" style="justify-content:space-between;align-items:center">
  <div class="muted">Aqui ficam somente os links que já foram concluídos e arquivados. Este painel é apenas para controle interno.</div>
@@ -208,7 +96,7 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 <div id="linkHistory" style="margin-top:10px"></div>
 </div>
 
-<div id="mobileFailures" class="panel" style="margin-top:14px">
+<div class="panel" style="margin-top:14px">
 <div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:0">⚠️ Links com falha</h2><button class="red" onclick="clearLinkFailures()">🗑️ Limpar falhas</button></div>
 <div class="muted">Se o envio falhar ou a imagem não puder ser obtida, o link aparece aqui. <b>Reenviar</b> tenta novamente. <b>Editar</b> abre o Gerenciador de Links com os dados preenchidos.</div>
 <div id="linkFailures" style="margin-top:10px"></div>
@@ -216,7 +104,7 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 </section>
 
 <aside>
-<div id="mobileLinks" class="panel">
+<div class="panel">
 <div class="row" style="justify-content:space-between"><div><h2>🔗 Gerenciador de links</h2><div class="muted">Crie ou edite uma programação. Depois de salvar, ela fica somente em Agendamentos.</div></div><button class="green" onclick="showForm()">+ Adicionar link</button></div>
 <div id="linkForm" class="hidden">
 <label>Nome do link <span class="muted">(somente para registro no painel)</span></label><input id="lnome" placeholder="Ex.: Impressora Epson L3250">
@@ -253,7 +141,7 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 <div id="links">Carregando links...</div>
 </div>
 
-<div id="mobileSchedules" class="panel" style="margin-top:14px">
+<div class="panel" style="margin-top:14px">
 <h2>📅 Agendamentos</h2>
 <div class="muted">Aqui ficam somente os links que possuem envio agendado. A programação geral do bot fica em um painel separado.</div>
 <div class="schedule-tools" id="scheduleTools">
@@ -264,7 +152,7 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 <div id="schedules" class="schedule-scroll" style="margin-top:10px">Carregando agendamentos...</div>
 </div>
 
-<div id="mobileBotSchedule" class="panel" style="margin-top:14px">
+<div class="panel" style="margin-top:14px">
 <h2>🤖 Programação do bot <span id="windowBadge" class="badge neutral">...</span></h2>
 <div class="muted">Controla somente a janela geral em que o bot pode enviar. Escolha manualmente o início e a parada; nenhum horário é definido automaticamente.</div>
 <div class="two"><div><label>Horário liga</label><input id="botInicio" type="time"></div><div><label>Horário desliga</label><input id="botFim" type="time"></div></div>
@@ -273,7 +161,7 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 <div id="botResult" class="muted">Nenhum horário definido.</div>
 </div>
 
-<div id="mobileGroups" class="panel" style="margin-top:14px">
+<div class="panel" style="margin-top:14px">
 <div class="row" style="justify-content:space-between;align-items:center">
   <div><h2 style="margin:0">👥 Gerenciador de grupos</h2><div class="muted">Os grupos ficam ocultos até você clicar no botão.</div></div>
   <button class="primary" id="toggleGroupsBtn" onclick="toggleGroupsPanel()">👥 Mostrar todos os grupos</button>
@@ -287,12 +175,12 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 </div>
 </div>
 
-<div id="mobileAccounts" class="panel" style="margin-top:14px">
+<div class="panel" style="margin-top:14px">
 <h2>👤 Contas do RegulOS</h2>
 <div id="accountPanel" class="muted">Carregando conta...</div>
 </div>
 
-<div id="mobileLogs" class="panel" style="margin-top:14px">
+<div class="panel" style="margin-top:14px">
 <h2>📜 Logs</h2><div id="logs" class="logs"></div>
 </div>
 </aside>
@@ -767,32 +655,6 @@ window.addEventListener('pagehide',markPresenceOffline);
 window.addEventListener('load',loadAccount);
 setInterval(()=>{refreshAccountPresence();},5000);
 setTimeout(()=>{refreshAccountPresence();},1500);
-
-function toggleMobileMenu(force){
-  const drawer=document.getElementById('mobileDrawer');
-  const overlay=document.getElementById('mobileMenuOverlay');
-  if(!drawer||!overlay)return;
-  const open=typeof force==='boolean'?force:!drawer.classList.contains('open');
-  drawer.classList.toggle('open',open);
-  overlay.classList.toggle('open',open);
-  drawer.setAttribute('aria-hidden',open?'false':'true');
-  document.body.classList.toggle('mobile-menu-open',open);
-}
-function mobileScroll(id){
-  toggleMobileMenu(false);
-  setTimeout(()=>document.getElementById(id)?.scrollIntoView({behavior:'smooth',block:'start'}),80);
-}
-async function mobileAction(url,kind){
-  toggleMobileMenu(false);
-  if(kind==='qr'){await novoQR();return;}
-  await apiAction(url);
-}
-async function mobileRefresh(){
-  toggleMobileMenu(false);
-  await refreshAll();
-  toast('RegulOS atualizado.');
-}
-
 </script>
 <script src="/history-stability-fix.js"></script>
 <script src="/auto-offer.js"></script>
