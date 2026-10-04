@@ -588,14 +588,11 @@ function linkHistorySentAt(item){
 function pruneLinkHistoryByLatestSentTime({persist=true}={}){
   if(!Array.isArray(linkHistory) || !linkHistory.length) return 0;
 
-  // A janela é relativa ao envio mais recente registrado.
-  // Ex.: se o último envio foi 10:00, mantemos somente registros
-  // entre 00:00 e 10:00. Um novo envio desloca a janela para frente.
-  const sentTimes=linkHistory.map(linkHistorySentAt).filter(Number.isFinite);
-  if(!sentTimes.length) return 0;
-
-  const latestSentAt=Math.max(...sentTimes);
-  const cutoff=latestSentAt-LINK_HISTORY_MAX_WINDOW_MS;
+  // Cada registro permanece por no máximo 10 horas a partir do seu próprio
+  // último horário de envio/conclusão. Assim a hora mostrada no painel é
+  // exatamente a hora em que aquele registro será removido.
+  const now=Date.now();
+  const cutoff=now-LINK_HISTORY_MAX_WINDOW_MS;
   const before=linkHistory.length;
 
   linkHistory=linkHistory.filter(item=>{
@@ -605,7 +602,7 @@ function pruneLinkHistoryByLatestSentTime({persist=true}={}){
 
   const removed=before-linkHistory.length;
   if(removed && persist) writeJson(FILES.linkHistory,linkHistory);
-  if(removed) addLog(`Limpeza automática do histórico: ${removed} registro(s) com mais de 10h foram removidos. Janela baseada no último envio.`);
+  if(removed) addLog(`Limpeza automática do histórico: ${removed} registro(s) com mais de 10h desde o envio foram removidos.`);
   return removed;
 }
 
