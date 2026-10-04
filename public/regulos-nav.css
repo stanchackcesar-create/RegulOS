@@ -240,3 +240,12 @@ body.regulos-has-sidebar main.wrap{max-width:none;margin-left:18px}
     min-height:44px;
   }
 }
+
+
+/* REGULOS_MOBILE_REMOVE_DUPLICATE_SCHEDULE_V1 */
+@media(max-width:560px){
+  /* O agendamento oficial fica na Central de Automação. Remove apenas o bloco duplicado do cabeçalho mobile. */
+  header .header-bot-schedule{
+    display:none!important;
+  }
+}
