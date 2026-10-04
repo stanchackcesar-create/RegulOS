@@ -2557,20 +2557,37 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     const horarioPedido=(q.match(/\b([01]?\d|2[0-3])[:h]([0-5]\d)\b/)||[]).slice(1);
     const horarioNormalizado=horarioPedido.length?String(horarioPedido[0]).padStart(2,'0')+':'+horarioPedido[1]:null;
     const perguntaAnteriorTexto=String(ultimaPerguntaUsuario?.content||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    const horarioAnteriorMatch=perguntaAnteriorTexto.match(/\b([01]?\d|2[0-3])[:h]([0-5]\d)\b/);
+    const ultimaRespostaTexto=String(ultimaResposta?.content||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+    const horarioAnteriorMatch=(perguntaAnteriorTexto.match(/\b([01]?\d|2[0-3])[:h]([0-5]\d)\b/)||ultimaRespostaTexto.match(/\b([01]?\d|2[0-3])[:h]([0-5]\d)\b/));
     const horarioAnterior=horarioAnteriorMatch?String(horarioAnteriorMatch[1]).padStart(2,'0')+':'+horarioAnteriorMatch[2]:null;
     const intencaoAgendamentoEspecifico=Boolean(horarioNormalizado)&&/\b(link|links|agendamento|agendamentos)\b/.test(q)
       &&/\b(qual|quais|onde|qual\s+link)\b/.test(q);
     const intencaoStatusAgendamento=Boolean(horarioAnterior)&&/\b(status|situacao|situação|estado)\b/.test(q)
       &&/\b(link|agendamento|agendado|programado|ele|esse|desse)\b/.test(q);
-    if(intencaoAgendamentoEspecifico){
+    const intencaoRecomendacaoAgendamento=Boolean(horarioAnterior)&&/\b(recomenda|recomendacao|sugestao|sugira|o que devo|que devo|o que fazer|como melhorar)\b/.test(q)
+      &&/\b(link|agendamento|agendado|programado|ele|esse|desse)\b/.test(q);
+    if(intencaoRecomendacaoAgendamento){
+      const encontrados=schedules.filter(item=>String(item.horario||'').slice(0,5)===horarioAnterior);
+      if(!encontrados.length) resposta='📅 Não encontrei o agendamento das '+horarioAnterior+' para recomendar uma ação.';
+      else {
+        resposta='💡 Recomendo manter o agendamento das '+horarioAnterior+' ativo e acompanhar a execução.';
+        encontrados.forEach(item=>{
+          const st=String(item.status||'').toLowerCase();
+          if(st==='erro') resposta+='\n• O agendamento está com ERRO: revise o link e o grupo antes de reenviar.';
+          else if(st==='aguardando_grupo') resposta+='\n• O agendamento está aguardando o grupo: confirme se o grupo está disponível e ativo.';
+          else if(st==='pausado'||item.ativo===false) resposta+='\n• O agendamento está PAUSADO: confirme se deve ser reativado.';
+          else if(st==='enviando') resposta+='\n• O envio está EM ANDAMENTO: aguarde a conclusão antes de reenviar.';
+          else resposta+='\n• Situação atual: '+String(item.status||'AGENDADO').toUpperCase()+'. Não há indicação de intervenção imediata.';
+        });
+      }
+    }else if(intencaoAgendamentoEspecifico){
       const encontrados=schedules.filter(item=>String(item.horario||'').slice(0,5)===horarioNormalizado);
       if(!encontrados.length) resposta='📅 Não encontrei nenhum link agendado para '+horarioNormalizado+' hoje.';
-      else resposta='📅 Encontrei '+encontrados.length+' agendamento(s) para '+horarioNormalizado+' hoje:\\n'+encontrados.map(formatSchedule).join('\\n');
+      else resposta='📅 Encontrei '+encontrados.length+' agendamento(s) para '+horarioNormalizado+' hoje:\n'+encontrados.map(formatSchedule).join('\n');
     }else if(intencaoStatusAgendamento){
       const encontrados=schedules.filter(item=>String(item.horario||'').slice(0,5)===horarioAnterior);
       if(!encontrados.length) resposta='📅 Não encontrei o agendamento das '+horarioAnterior+' para consultar o status.';
-      else resposta='📌 Status do agendamento das '+horarioAnterior+':\\n'+encontrados.map(formatSchedule).join('\\n');
+      else resposta='📌 Status do agendamento das '+horarioAnterior+':\n'+encontrados.map(formatSchedule).join('\n');
     }else if(intencaoAgendamentosHoje){
       const agendados=schedules.filter(scheduleOccursToday).sort((a,b)=>String(a.horario||'99:99').localeCompare(String(b.horario||'99:99')));
       if(!agendados.length){
