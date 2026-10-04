@@ -216,3 +216,27 @@ body.regulos-has-sidebar main.wrap{max-width:none;margin-left:18px}
   }
   .regulos-sidebar-toggle:active{transform:scale(.97)!important}
 }
+
+/* REGULOS_MOBILE_PANEL_EDGE_V1 */
+@media(max-width:560px){
+  main.wrap{
+    width:100%!important;
+    max-width:none!important;
+    margin-left:0!important;
+    margin-right:0!important;
+    padding-left:0!important;
+    padding-right:0!important;
+  }
+  main.wrap>.grid{
+    width:100%!important;
+    margin-left:0!important;
+    margin-right:0!important;
+  }
+  main.wrap>.grid>.panel,
+  main.wrap>.grid>.card{
+    width:100%!important;
+    max-width:none!important;
+    margin-left:0!important;
+    margin-right:0!important;
+  }
+}
