@@ -2625,8 +2625,7 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
       }
     }else if(intencaoProximoAgendamento){
       const futuros=schedules.filter(item=>{
-        if(item.ativo===false) return false;
-        if(!item.data||!item.horario) return false;
+        if(item.ativo===false||!item.data||!item.horario) return false;
         const dt=new Date(String(item.data)+'T'+String(item.horario).slice(0,5)+':00');
         if(Number.isNaN(dt.getTime())) return false;
         if(item.repeticao==='diariamente') return true;
@@ -2634,15 +2633,24 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
         return dt.getTime()>=now.getTime();
       }).map(item=>{
         let dt=new Date(String(item.data)+'T'+String(item.horario).slice(0,5)+':00');
-        if(item.repeticao==='diariamente' && dt.getTime()<now.getTime()) dt=new Date(now.getFullYear(),now.getMonth(),now.getDate(),Number(String(item.horario).slice(0,2)),Number(String(item.horario).slice(3,5)));
+        if(item.repeticao==='diariamente'&&dt.getTime()<now.getTime()) dt=new Date(now.getFullYear(),now.getMonth(),now.getDate(),Number(String(item.horario).slice(0,2)),Number(String(item.horario).slice(3,5)));
         return {item,dt};
       }).filter(x=>x.dt.getTime()>=now.getTime()).sort((a,b)=>a.dt-b.dt);
       if(!futuros.length) resposta='📅 Não encontrei nenhum próximo link agendado.';
       else {
-        agendamentoSelecionado=futuros[0].item;
-        resposta='⏭️ O próximo link programado é:\n'+formatSchedule(futuros[0].item);
+        const selecionadoId=agendamentoContexto?.id||agendamentoSelecionado?.id||null;
+        let indice=0;
+        if(selecionadoId){
+          const atual=futuros.findIndex(x=>String(x.item.id)===String(selecionadoId));
+          if(atual>=0) indice=atual+1;
+        }
+        if(indice>=futuros.length) resposta='📅 Não há outro agendamento depois do atual.';
+        else {
+          agendamentoSelecionado=futuros[indice].item;
+          resposta=(indice>0?'⏭️ O próximo agendamento na sequência é:\n':'⏭️ O próximo link programado é:\n')+formatSchedule(futuros[indice].item);
+        }
       }
-    }else if(intencaoPausados){
+    }    }else if(intencaoPausados){
       const pausados=schedules.filter(item=>item.ativo===false || String(item.status||'').toLowerCase()==='pausado');
       if(!pausados.length) resposta='✅ Não encontrei links ou agendamentos pausados.';
       else resposta='⏸️ Encontrei '+pausados.length+' agendamento(s) pausado(s):\n'+pausados.map(formatSchedule).join('\n');
