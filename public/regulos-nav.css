@@ -278,3 +278,9 @@ body.regulos-has-sidebar main.wrap{max-width:none;margin-left:18px}
     display:flex!important;
   }
 }
+
+
+/* REGULOS_REMOVE_DUPLICATE_DIAGNOSTIC_PANEL_V1 */
+.diagnostic-main-panel{
+  display:none!important;
+}
