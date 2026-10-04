@@ -38,7 +38,12 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 .notice{padding:9px 11px;border-radius:9px;background:#19273e;margin:8px 0}.error{background:#481c27;color:#ffd3d8}.success{background:#123e29;color:#c9ffe0}
 .logs{height:260px;overflow:auto;background:#030811;border-radius:9px;padding:10px;font:12px Consolas,monospace;white-space:pre-wrap}
 @media(max-width:900px){.grid{grid-template-columns:1fr}.cards{grid-template-columns:repeat(2,1fr)}header{padding:14px 16px}.wrap{width:100%}.modal-card{width:100%}}
-@media(max-width:560px){body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:sticky;top:0;padding:12px 12px}.title{font-size:22px}.sub{font-size:12px}.wrap{padding-left:10px;padding-right:10px}.cards{grid-template-columns:1fr 1fr;gap:8px}.card,.panel{padding:12px;border-radius:12px}.metric b{font-size:22px}.actions{gap:6px}.actions button{flex:1 1 calc(50% - 6px);min-height:44px;padding:11px 9px}.row>button{min-height:44px}.two{grid-template-columns:1fr}.group{align-items:stretch;flex-direction:column}.group .toggle{width:100%;min-height:44px}.groups{max-height:55vh;overflow:auto}.qr img{width:min(78vw,280px)}input,textarea,select{font-size:16px;min-height:44px}.link .row{display:grid;grid-template-columns:1fr 1fr}.link .row button{width:100%;min-height:44px}.checks{grid-template-columns:1fr}.modal{padding:8px}.modal-card{max-height:94vh}.modal-head{padding:12px}.modal-body{padding:10px;max-height:82vh}.all-groups{grid-template-columns:1fr}.all-group{flex-direction:column;align-items:stretch}.all-group button{width:100%;min-height:44px}.logs{height:220px}.notice{position:relative;z-index:1000}.accountPanel,.panel{overflow-wrap:anywhere}}
+@media(max-width:560px){
+.account-mobile-toggle{display:block;margin-top:14px}
+.account-mobile-toggle button{width:100%;min-height:44px;padding:10px 14px;font-weight:700}
+.account-panel{display:none}
+.account-panel.account-open{display:block}
+body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:sticky;top:0;padding:12px 12px}.title{font-size:22px}.sub{font-size:12px}.wrap{padding-left:10px;padding-right:10px}.cards{grid-template-columns:1fr 1fr;gap:8px}.card,.panel{padding:12px;border-radius:12px}.metric b{font-size:22px}.actions{gap:6px}.actions button{flex:1 1 calc(50% - 6px);min-height:44px;padding:11px 9px}.row>button{min-height:44px}.two{grid-template-columns:1fr}.group{align-items:stretch;flex-direction:column}.group .toggle{width:100%;min-height:44px}.groups{max-height:55vh;overflow:auto}.qr img{width:min(78vw,280px)}input,textarea,select{font-size:16px;min-height:44px}.link .row{display:grid;grid-template-columns:1fr 1fr}.link .row button{width:100%;min-height:44px}.checks{grid-template-columns:1fr}.modal{padding:8px}.modal-card{max-height:94vh}.modal-head{padding:12px}.modal-body{padding:10px;max-height:82vh}.all-groups{grid-template-columns:1fr}.all-group{flex-direction:column;align-items:stretch}.all-group button{width:100%;min-height:44px}.logs{height:220px}.notice{position:relative;z-index:1000}.accountPanel,.panel{overflow-wrap:anywhere}}
 .presence-dot{display:inline-block;width:11px;height:11px;border-radius:50%;flex:0 0 11px;box-shadow:0 0 0 2px rgba(255,255,255,.05)}
 .presence-online{background:#22c55e;box-shadow:0 0 8px rgba(34,197,94,.45)}
 .presence-offline{background:#ef4444;box-shadow:0 0 8px rgba(239,68,68,.25)}
@@ -247,6 +252,7 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
   .message-float-launcher{right:12px;bottom:calc(78px + env(safe-area-inset-bottom));width:54px;height:54px}
   .message-float-panel{right:8px;bottom:calc(144px + env(safe-area-inset-bottom));width:calc(100vw - 16px)}
 }
+.account-mobile-toggle{display:none}
 </style>
 </head>
 <body>
@@ -266,6 +272,7 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
   <button class="primary" type="button" onclick="saveBotSchedule()">💾 Salvar</button>
 </div>
 <button class="red" onclick="novoQR()">📱 Novo QR</button>
+<button type="button" onclick="openAccountsPanel()">👤 Contas</button>
 </div>
 </div></header>
 
@@ -457,7 +464,10 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 </div>
 </div>
 
-<div class="panel" style="margin-top:14px">
+<div class="account-mobile-toggle">
+  <button id="accountMobileToggle" type="button" onclick="toggleAccountsMobile()">👤 Mostrar contas do RegulOS</button>
+</div>
+<div class="panel account-panel" id="accountSection" style="margin-top:14px">
 <h2>👤 Contas do RegulOS</h2>
 <div id="accountPanel" class="muted">Carregando conta...</div>
 </div>
@@ -1198,6 +1208,22 @@ async function loadDashboard(){try{const d=await jfetch('/api/dashboard');docume
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
 refreshAll();startPolling(false);
 
+function openAccountsPanel(){
+  const panel=document.getElementById('accountSection');
+  if(!panel)return;
+  panel.classList.add('account-open');
+  panel.scrollIntoView({behavior:'smooth',block:'start'});
+  const btn=document.getElementById('accountMobileToggle');
+  if(btn)btn.textContent='✖ Ocultar contas do RegulOS';
+}
+function toggleAccountsMobile(){
+  const panel=document.getElementById('accountSection');
+  const btn=document.getElementById('accountMobileToggle');
+  if(!panel||!btn)return;
+  const open=panel.classList.toggle('account-open');
+  btn.textContent=open?'✖ Ocultar contas do RegulOS':'👤 Mostrar contas do RegulOS';
+  if(open)setTimeout(()=>panel.scrollIntoView({behavior:'smooth',block:'start'}),40);
+}
 async function loadAccount(){
  try{
   const me=await jfetch('/api/auth/me');
