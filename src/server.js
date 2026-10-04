@@ -2566,9 +2566,36 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
       &&/\b(qual|quais|onde|qual\s+link)\b/.test(q);
     const intencaoStatusAgendamento=Boolean(horarioAnterior)&&/\b(status|situacao|situação|estado)\b/.test(q)
       &&/\b(link|agendamento|agendado|programado|ele|esse|desse)\b/.test(q);
+    const intencaoProximoAgendamento=/\b(proximo|proxima|seguinte)\b/.test(q)
+      &&/\b(link|agendamento|agendamentos|envio|enviado|enviar)\b/.test(q);
+    const intencaoPausados=/\b(pausad|pausados|pausadas|pausa)\w*\b/.test(q)
+      &&/\b(link|links|agendamento|agendamentos)\b/.test(q);
     const intencaoRecomendacaoAgendamento=(Boolean(horarioAnterior)||Boolean(horarioNormalizado))&&/\b(recomenda|recomendacao|sugestao|sugira|o que devo|o que eu deveria|que devo|o que fazer|o que eu faco|como melhorar|devo fazer)\b/.test(q)
       &&/\b(link|agendamento|agendado|programado|ele|esse|desse)\b/.test(q);
-    if(intencaoRecomendacaoAgendamento){
+    if(intencaoProximoAgendamento){
+      const futuros=schedules.filter(item=>{
+        if(item.ativo===false) return false;
+        if(!item.data||!item.horario) return false;
+        const dt=new Date(String(item.data)+'T'+String(item.horario).slice(0,5)+':00');
+        if(Number.isNaN(dt.getTime())) return false;
+        if(item.repeticao==='diariamente') return true;
+        if(item.repeticao==='semanalmente') return dt.getDay()===now.getDay();
+        return dt.getTime()>=now.getTime();
+      }).map(item=>{
+        let dt=new Date(String(item.data)+'T'+String(item.horario).slice(0,5)+':00');
+        if(item.repeticao==='diariamente' && dt.getTime()<now.getTime()) dt=new Date(now.getFullYear(),now.getMonth(),now.getDate(),Number(String(item.horario).slice(0,2)),Number(String(item.horario).slice(3,5)));
+        return {item,dt};
+      }).filter(x=>x.dt.getTime()>=now.getTime()).sort((a,b)=>a.dt-b.dt);
+      if(!futuros.length) resposta='📅 Não encontrei nenhum próximo link agendado.';
+      else {
+        agendamentoSelecionado=futuros[0].item;
+        resposta='⏭️ O próximo link programado é:\n'+formatSchedule(futuros[0].item);
+      }
+    }else if(intencaoPausados){
+      const pausados=schedules.filter(item=>item.ativo===false || String(item.status||'').toLowerCase()==='pausado');
+      if(!pausados.length) resposta='✅ Não encontrei links ou agendamentos pausados.';
+      else resposta='⏸️ Encontrei '+pausados.length+' agendamento(s) pausado(s):\n'+pausados.map(formatSchedule).join('\n');
+    }else if(intencaoRecomendacaoAgendamento){
       const horarioAlvo=horarioNormalizado||horarioAnterior;
       const encontrados=schedules.filter(item=>String(item.horario||'').slice(0,5)===horarioAlvo);
       if(!encontrados.length) resposta='📅 Não encontrei o agendamento das '+horarioAlvo+' para recomendar uma ação.';
