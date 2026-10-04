@@ -252,6 +252,15 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
   .message-float-panel{right:8px;bottom:calc(144px + env(safe-area-inset-bottom));width:calc(100vw - 16px)}
 }
 .account-mobile-toggle{display:none}
+.schedules-modal{position:fixed;inset:0;z-index:10045;background:rgba(3,8,18,.72);display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}
+.schedules-modal.schedules-open{display:flex}
+.schedules-modal-card{width:min(1100px,calc(100vw - 40px));max-height:86vh;background:#111b2d;border:1px solid #34445c;border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,.55);overflow:hidden}
+.schedules-modal-head{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #263653}
+.schedules-modal-head h2{margin:0}
+.schedules-modal-head button{border:0;border-radius:9px;background:#34455f;color:#fff;font-size:20px;min-width:42px;min-height:42px;cursor:pointer}
+.schedules-modal-body{padding:12px 16px;max-height:calc(86vh - 70px);overflow:auto}
+@media(min-width:561px){.schedule-main-panel{display:none}}
+@media(max-width:560px){.desktop-schedules-button{display:none}.schedules-modal{display:none!important}}
 .logs-modal{position:fixed;inset:0;z-index:10050;background:rgba(3,8,18,.72);display:none;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}
 .logs-modal.logs-open{display:flex}
 .logs-modal-card{width:min(900px,calc(100vw - 40px));max-height:80vh;background:#111b2d;border:1px solid #34445c;border-radius:16px;box-shadow:0 24px 80px rgba(0,0,0,.55);overflow:hidden}
@@ -289,6 +298,7 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 <button class="red" onclick="novoQR()">📱 Novo QR</button>
 <button type="button" onclick="openAccountsPanel()">👤 Contas</button>
 <button type="button" class="desktop-logs-button" onclick="openLogsPanel()">📜 Logs</button>
+<button type="button" class="desktop-schedules-button" onclick="openSchedulesPanel()">📅 Agendamentos</button>
 </div>
 </div></header>
 
@@ -464,7 +474,7 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 <div id="links">Carregando links...</div>
 </div>
 
-<div class="panel schedule-panel" style="margin-top:14px">
+<div class="panel schedule-panel schedule-main-panel" id="scheduleMainPanel" style="margin-top:14px">
 <div class="schedule-mobile-toggle">
   <button id="scheduleMobileToggle" type="button" onclick="toggleScheduleMobile()">📅 Mostrar agendamentos</button>
 </div>
@@ -479,6 +489,16 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 <div id="schedules" class="schedule-scroll" style="margin-top:10px">Carregando agendamentos...</div>
 </div>
 </div>
+
+<section id="schedulesModal" class="schedules-modal" aria-hidden="true">
+  <div class="schedules-modal-card">
+    <div class="schedules-modal-head">
+      <h2>📅 Agendamentos</h2>
+      <button type="button" onclick="closeSchedulesPanel()" aria-label="Fechar">✕</button>
+    </div>
+    <div id="schedulesModalBody" class="schedules-modal-body"></div>
+  </div>
+</section>
 
 <div class="account-mobile-toggle">
   <button id="accountMobileToggle" type="button" onclick="openAccountsPanel()">👤 Mostrar contas do RegulOS</button>
@@ -1241,6 +1261,26 @@ async function loadLogs(){
     const main=document.getElementById('logs'); if(main) main.textContent=txt;
     const modal=document.getElementById('logsModalContent'); if(modal) modal.textContent=txt;
   }catch{}
+}
+function openSchedulesPanel(){
+  const panel=document.getElementById('schedulesModal');
+  const content=document.getElementById('schedulePanelContent');
+  const body=document.getElementById('schedulesModalBody');
+  if(!panel||!content||!body)return;
+  body.appendChild(content);
+  content.classList.add('open');
+  panel.classList.add('schedules-open');
+  panel.setAttribute('aria-hidden','false');
+}
+function closeSchedulesPanel(){
+  const panel=document.getElementById('schedulesModal');
+  const content=document.getElementById('schedulePanelContent');
+  const main=document.getElementById('scheduleMainPanel');
+  if(!panel||!content||!main)return;
+  const toggle=main.querySelector('.schedule-mobile-toggle');
+  if(toggle)main.insertBefore(content,toggle.nextSibling);else main.appendChild(content);
+  panel.classList.remove('schedules-open');
+  panel.setAttribute('aria-hidden','true');
 }
 function openLogsPanel(){
   const panel=document.getElementById('logsModal');
