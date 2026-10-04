@@ -220,6 +220,7 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 <button onclick="apiAction('/api/reconectar')">🔌 Reconectar</button>
 <button onclick="apiAction('/api/desconectar')">⛔ Desconectar</button>
 <button onclick="document.getElementById('regulosSchedulerMonitorBtn')?.click()">📊 Monitor</button>
+<button onclick="openAllGroups()">👥 Grupos</button>
 <button class="red" onclick="novoQR()">📱 Novo QR</button>
 </div>
 </div></header>
@@ -407,20 +408,6 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 <div id="botResult" class="muted">Nenhum horário definido.</div>
 </div>
 
-<div class="panel" style="margin-top:14px">
-<div class="row" style="justify-content:space-between;align-items:center">
-  <div><h2 style="margin:0">👥 Gerenciador de grupos</h2><div class="muted">Os grupos são descobertos uma vez por conexão e depois ficam no cache. Pesquise novamente somente quando precisar atualizar a lista.</div></div>
-  <button class="primary" id="toggleGroupsBtn" onclick="toggleGroupsPanel()">👥 Mostrar todos os grupos</button>
-</div>
-<div id="groupsPanel" class="hidden" style="margin-top:12px">
-  <div class="row" style="align-items:center">
-    <input id="search" placeholder="🔎 Pesquisar grupo..." oninput="renderGroups()" style="flex:1">
-    <button id="searchGroupsBtn" onclick="updateGroups()">🔄 Pesquisar grupos</button>
-    <span id="groupSearchStatus" class="muted">Cache atual</span>
-  </div>
-  <div id="groups" class="groups" style="max-height:420px;overflow:auto;margin-top:10px">Carregando grupos...</div>
-</div>
-</div>
 
 <div class="panel" style="margin-top:14px">
 <h2>👤 Contas do RegulOS</h2>
