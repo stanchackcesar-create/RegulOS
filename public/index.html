@@ -68,6 +68,16 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 </div></header>
 
 <main class="wrap">
+<section class="panel" style="margin:18px 0">
+  <div class="row" style="justify-content:space-between;align-items:center">
+    <div>
+      <h2 style="margin:0">🩺 Diagnóstico Central</h2>
+      <div class="muted">Verificação rápida da conexão, grupos, scheduler, fila e persistência.</div>
+    </div>
+    <button class="primary" onclick="runCentralDiagnostic()">🔍 Executar diagnóstico</button>
+  </div>
+  <div id="centralDiagnostic" class="muted" style="margin-top:14px">Clique em “Executar diagnóstico” para verificar o RegulOS.</div>
+</section>
 <div class="cards">
 <div class="card metric"><small>WhatsApp</small><b id="conn">...</b><span id="number" class="muted">Número: —</span></div>
 <div class="card metric"><small>Mensagens hoje</small><b id="today">0</b></div>
@@ -830,6 +840,32 @@ async function saveBotSchedule(){
  el.addEventListener('input',()=>{botScheduleDirty=true});
  el.addEventListener('change',()=>{botScheduleDirty=true});
 });
+async function runCentralDiagnostic(){
+  const box=document.getElementById('centralDiagnostic');
+  if(!box)return;
+  box.innerHTML='<div class="muted">🔎 Executando diagnóstico...</div>';
+  try{
+    const d=await jfetch('/api/diagnostico');
+    const icon=level=>level==='ok'?'🟢':level==='warn'?'🟡':'🔴';
+    const fmtDate=v=>{const x=new Date(v||'');return !Number.isNaN(x.getTime())?x.toLocaleString('pt-BR'):'—'};
+    const checks=(d.checks||[]).map(x=>'<div class="stats">'+icon(x.level)+' <b>'+esc(x.label)+'</b> — '+esc(x.value)+'</div>').join('');
+    const lastSend=d.ultimoEnvio?.nome?'<div class="stats">📤 Último envio: <b>'+esc(d.ultimoEnvio.nome)+'</b> · '+fmtDate(d.ultimoEnvio.em)+'</div>':'<div class="stats">📤 Último envio: —</div>';
+    const lastError=d.ultimoErro?.motivo?'<div class="stats">⚠️ Último erro: <b>'+esc(d.ultimoErro.nome||'Link')+'</b> — '+esc(d.ultimoErro.motivo)+' · '+fmtDate(d.ultimoErro.em)+'</div>':'<div class="stats">⚠️ Último erro: nenhum registrado</div>';
+    box.innerHTML='<div class="panel" style="padding:12px">'
+      +'<div style="font-size:18px;margin-bottom:8px">'+(d.resultado==='ok'?'🟢':d.resultado==='atencao'?'🟡':'🔴')+' <b>'+esc(d.resultadoLabel)+'</b></div>'
+      +'<div class="stats">📱 WhatsApp: '+icon(d.checks?.find(x=>x.key==='whatsapp')?.level||'error')+' '+esc(d.whatsapp?.conectado?'Conectado':d.whatsapp?.status||'Desconectado')+(d.whatsapp?.numero?' · '+esc(d.whatsapp.numero):'')+'</div>'
+      +'<div class="stats">👥 Grupos: '+esc(d.grupos?.carregados||0)+' carregados · '+esc(d.grupos?.selecionados||0)+' selecionados · '+esc(d.grupos?.ligados||0)+' ligados</div>'
+      +'<div class="stats">⚙️ Scheduler: '+icon(d.scheduler?.ativo?'ok':'warn')+' '+esc(d.scheduler?.ativo?'Ativo':'Desativado')+' · '+esc(d.scheduler?.agendamentos||0)+' agendamento(s) · fila '+esc(d.scheduler?.fila||0)+'</div>'
+      +'<div class="stats">🗃️ Histórico: '+icon((d.checks||[]).find(x=>x.key==='history')?.level||'error')+' '+esc((d.scheduler?.pendentes||0))+' pendente(s)</div>'
+      +lastSend+lastError
+      +'<details style="margin-top:10px"><summary>Detalhes da verificação</summary>'+checks+'</details>'
+      +'<div class="muted" style="margin-top:8px">Executado em: '+fmtDate(d.executadoEm)+'</div>'
+      +'</div>';
+  }catch(e){
+    box.innerHTML='<div class="errorText">🔴 Não foi possível executar o diagnóstico: '+esc(e.message||e)+'</div>';
+  }
+}
+
 async function loadLogs(){try{const d=await jfetch('/api/logs');document.getElementById('logs').textContent=(d.logs||[]).join('\\n')}catch{}}
 async function loadDashboard(){try{const d=await jfetch('/api/dashboard');document.getElementById('today').textContent=d.hoje||0}catch{}}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
