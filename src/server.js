@@ -618,6 +618,11 @@ function clearLinkHistory() {
   linkHistory = [];
   writeJson(FILES.linkHistory, linkHistory);
 }
+
+// Mesmo sem novos envios, a limpeza acontece sozinha periodicamente.
+setInterval(()=>pruneLinkHistoryByLatestSentTime(),5*60*1000);
+pruneLinkHistoryByLatestSentTime();
+
 function archiveCompletedOneTimeLink(item) {
   const snapshot = {
     id: item.id, nome: item.nome, url: item.url, mensagem: item.mensagem || '',
