@@ -511,6 +511,9 @@ function saveHistory() {
   writeJson(FILES.history, history);
 }
 
+const MAX_DELIVERY_ATTEMPTS = 3;
+const DELIVERY_RETRY_DELAYS_MS = [1000, 2000];
+
 function deliveryId(item, occurrence, groupId) {
   return crypto.createHash('sha256')
     .update([String(item?.id || ''), String(occurrence || ''), String(groupId || '')].join('|'))
@@ -1779,22 +1782,22 @@ async function sendScheduledLink(item) {
         if(!isValidGroupJid(id)){
           throw new Error('JID do grupo de destino inválido.');
         }
-        // Registramos a intenção antes do envio. Isso privilegia a regra do
-        // RegulOS de nunca duplicar um envio após uma queda/reinício.
-        // Em caso de erro, removemos a marca para permitir nova tentativa.
-        item.progressGroupIds = [...new Set([...(item.progressGroupIds || []), id])];
-        writeJson(FILES.schedules, linkSchedules);
-        setLinkDeliveryStatus(item, item.progressKey, id, 'ENVIANDO');
+
+        // Idempotência básica: uma entrega já confirmada como SUCESSO nesta
+        // ocorrência nunca é enviada novamente.
+        const existingDelivery = getLinkDelivery(item, item.progressKey, id);
+        if (existingDelivery?.status === 'SUCESSO') {
+          item.progressGroupIds = [...new Set([...(item.progressGroupIds || []), id])];
+          writeJson(FILES.schedules, linkSchedules);
+          addLog(`Entrega já confirmada para "${item.nome}" no grupo ${id}; envio duplicado evitado.`);
+          continue;
+        }
 
         const randomIntro = chooseRandomMessage(item);
         const titleLine = productTitle ? `📦 ${productTitle}` : '';
         const linkUrl = String(item.url||'').trim();
         let customMessage = String(item.mensagem || '').trim();
 
-        // No modo "Montar oferta automaticamente", título e link são
-        // responsabilidade do montador do envio e aparecem uma única vez.
-        // Removemos apenas linhas que sejam duplicatas exatas, preservando
-        // qualquer texto personalizado que o usuário tenha escrito.
         if (item.autoOfertaAutomatica === true && customMessage) {
           const duplicateLines = new Set([
             productTitle,
@@ -1813,13 +1816,46 @@ async function sendScheduledLink(item) {
 
         const guaranteeLine = linkUrl ? '👉 Garanta agora:' : '';
         const text = [randomIntro, titleLine, customMessage, guaranteeLine, linkUrl].filter(Boolean).join('\n\n');
-        if (productImage) {
-          await sock.sendMessage(id, { image: productImage.buffer, caption: text });
-        } else {
-          await sock.sendMessage(id, { text });
+
+        let delivered = false;
+        let lastError = null;
+
+        for (let attempt = 1; attempt <= MAX_DELIVERY_ATTEMPTS; attempt++) {
+          setLinkDeliveryStatus(item, item.progressKey, id, 'ENVIANDO');
+
+          try {
+            if (productImage) {
+              await sock.sendMessage(id, { image: productImage.buffer, caption: text });
+            } else {
+              await sock.sendMessage(id, { text });
+            }
+            delivered = true;
+            break;
+          } catch(e) {
+            lastError = e;
+            setLinkDeliveryStatus(item, item.progressKey, id, 'ERRO', e.message);
+
+            if (attempt < MAX_DELIVERY_ATTEMPTS) {
+              const retryDelay = DELIVERY_RETRY_DELAYS_MS[attempt - 1] || 2000;
+              addLog(`Falha na entrega "${item.nome}" para ${id} (tentativa ${attempt}/${MAX_DELIVERY_ATTEMPTS}). Nova tentativa em ${retryDelay}ms: ${e.message}`);
+              await new Promise(r => setTimeout(r, retryDelay));
+            }
+          }
         }
+
+        if (!delivered) {
+          errors++;
+          item.erros = Number(item.erros||0) + 1;
+          addHistory({ grupoId:id, link:item.url, status:'erro', erro:lastError?.message||'Falha no envio.', agendamentoId:item.id, tipo:'agendado', ocorrencia:item.progressKey });
+          upsertLinkFailure(item, id, lastError?.message||'Falha no envio.');
+          addLog(`Falha agendamento ${item.nome}: ${lastError?.message||'Falha no envio.'} após ${MAX_DELIVERY_ATTEMPTS} tentativa(s).`);
+          writeJson(FILES.schedules, linkSchedules);
+          continue;
+        }
+
         sent++;
         setLinkDeliveryStatus(item, item.progressKey, id, 'SUCESSO');
+        item.progressGroupIds = [...new Set([...(item.progressGroupIds || []), id])];
         addHistory({ grupoId:id, link:item.url, status:'sucesso', agendamentoId:item.id, tipo:'agendado', ocorrencia:item.progressKey });
         removeLinkFailure(`${item.id}:${String(id)}`);
         item.enviados = Number(item.enviados||0) + 1;
@@ -1827,17 +1863,7 @@ async function sendScheduledLink(item) {
         item.lastSentAt = new Date().toISOString();
         writeJson(FILES.schedules, linkSchedules);
         await new Promise(r => setTimeout(r, Math.max(700, Number(item.intervaloMin||1)*1000)));
-      } catch(e) {
-        errors++;
-        setLinkDeliveryStatus(item, item.progressKey, id, 'ERRO', e.message);
-        item.progressGroupIds = (item.progressGroupIds || []).filter(x => String(x) !== String(id));
-        item.erros = Number(item.erros||0) + 1;
-        addHistory({ grupoId:id, link:item.url, status:'erro', erro:e.message, agendamentoId:item.id, tipo:'agendado', ocorrencia:item.progressKey });
-        upsertLinkFailure(item, id, e.message);
-        addLog(`Falha agendamento ${item.nome}: ${e.message}`);
-        writeJson(FILES.schedules, linkSchedules);
-      }
-    }
+      }    }
 
     const allDone = (item.progressTargets || []).every(id => (item.progressGroupIds || []).includes(id) || getGroupConfig(id).ativo === false);
     if (allDone) {
