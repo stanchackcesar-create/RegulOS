@@ -2531,6 +2531,7 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     const intencaoComparar=/\b(compar|compare|comparar|melhorou|piorou|evolucao|evoluiu)\b/.test(q);
     const intencaoAnalise=/\b(como esta|como estao|analise|analisar|desempenho|resultado|resultados|situacao)\b/.test(q);
     const intencaoRecomendacao=/\b(recomenda|recomendacao|sugestao|sugira|o que devo|que devo|o que fazer|como melhorar)\b/.test(q);
+    const agendamentoContexto=ultimaResposta?.agendamentoSelecionado||null;
     const intencaoFalhas=/\b(erro|erros|falha|falhas|falhou|falharam|falhar|problema|problemas|por que|porque|motivo|motivos)\b/.test(q)
       || (continuidade&&contextoEraFalha)
       || (agendamentoContexto && /\b(problema|problemas|erro|erros|falha|falhas)\b/.test(q));
@@ -2559,7 +2560,6 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     const horarioNormalizado=horarioPedido.length?String(horarioPedido[0]).padStart(2,'0')+':'+horarioPedido[1]:null;
     const perguntaAnteriorTexto=String(ultimaPerguntaUsuario?.content||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     const ultimaRespostaTexto=String(ultimaResposta?.content||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    const agendamentoContexto=ultimaResposta?.agendamentoSelecionado||null;
     let agendamentoSelecionado=agendamentoContexto||null;
     const horarioAnteriorMatch=(perguntaAnteriorTexto.match(/\b([01]?\d|2[0-3])[:h]([0-5]\d)\b/)||ultimaRespostaTexto.match(/\b([01]?\d|2[0-3])[:h]([0-5]\d)\b/));
     const horarioAnterior=agendamentoContexto?.horario|| (horarioAnteriorMatch?String(horarioAnteriorMatch[1]).padStart(2,'0')+':'+horarioAnteriorMatch[2]:null);
