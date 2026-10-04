@@ -102,6 +102,19 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 </div>
 
 <div class="panel" style="margin-top:14px">
+<div class="row" style="justify-content:space-between;align-items:center">
+  <div>
+    <h2 style="margin:0">📤 Status das Entregas</h2>
+    <div class="muted">Acompanhe o estado individual de cada grupo nos envios recentes.</div>
+  </div>
+  <button type="button" onclick="loadLinkDeliveries()">🔄 Atualizar</button>
+</div>
+<div id="linkDeliveries" style="margin-top:10px">
+  <div class="muted">Nenhuma entrega registrada ainda.</div>
+</div>
+</div>
+
+<div class="panel" style="margin-top:14px">
 <h2>📚 Histórico de links enviados</h2>
 <div class="row" style="justify-content:space-between;align-items:center">
  <div class="muted">Aqui ficam somente os links que já foram concluídos e arquivados. Este painel é apenas para controle interno.</div>
@@ -297,7 +310,7 @@ async function refreshAll(){
   const btn=document.querySelector('.actions button.primary');
   const oldText=btn?.textContent||'🔄 Atualizar';
   if(btn){btn.disabled=true;btn.textContent='🔄 Atualizando...';}
-  const tasks=[status,loadGroups,loadLinks,loadSchedules,loadLinkHistory,loadLinkFailures,loadLogs,loadDashboard,refreshAccountPresence];
+  const tasks=[status,loadGroups,loadLinks,loadSchedules,loadLinkDeliveries,loadLinkHistory,loadLinkFailures,loadLogs,loadDashboard,refreshAccountPresence];
   const results=await Promise.all(tasks.map(async fn=>{
     try{
       await Promise.race([Promise.resolve().then(fn),new Promise((_,reject)=>setTimeout(()=>reject(new Error('timeout')),8000))]);
@@ -309,7 +322,7 @@ async function refreshAll(){
   window.__regulosRefreshBusy=false;
   try{toast(failed?`Atualização concluída; ${failed} item(ns) não responderam.`:'Atualizado com sucesso.',failed>0);}catch{}
 }
-let poll=null;let lastLinksUiRefresh=0;function startPolling(fast=false){if(poll)clearInterval(poll);poll=setInterval(async()=>{await status();const now=Date.now();if(now-lastGroupUiRefresh>5000)await loadGroups();if(now-lastLinksUiRefresh>3500 && document.getElementById('linkForm')?.classList.contains('hidden')){lastLinksUiRefresh=now;await loadLinks();await loadSchedules();await loadLinkHistory();}},fast?1200:3000);status()}
+let poll=null;let lastLinksUiRefresh=0;function startPolling(fast=false){if(poll)clearInterval(poll);poll=setInterval(async()=>{await status();const now=Date.now();if(now-lastGroupUiRefresh>5000)await loadGroups();if(now-lastLinksUiRefresh>3500 && document.getElementById('linkForm')?.classList.contains('hidden')){lastLinksUiRefresh=now;await loadLinks();await loadSchedules();await loadLinkDeliveries();await loadLinkHistory();}},fast?1200:3000);status()}
 async function loadGroups(){try{const d=await jfetch('/api/grupos');groups=d.grupos||[];lastGroupUiRefresh=Date.now();renderGroups();populateScheduleGroupSelect();}catch(e){const box=document.getElementById('groups');if(!groups.length)box.innerHTML='<div class="muted errorText">'+esc(friendlyFetchError(e))+'</div>'}}
 function populateScheduleGroupSelect(selectedIds=[]){
   const box=document.getElementById('lgrupos');
@@ -681,6 +694,67 @@ function renderLinkHistory(records){
       +'<div class="row"><button class="red" onclick="deleteLinkHistory(\''+esc(x.id)+'\')">🗑️ Excluir registro</button></div>';
     box.appendChild(el);
   });
+}
+
+async function loadLinkDeliveries(){
+  const box=document.getElementById('linkDeliveries');
+  if(!box)return;
+  try{
+    const d=await jfetch('/api/entregas');
+    const deliveries=Array.isArray(d.entregas)?d.entregas:[];
+    if(!deliveries.length){
+      box.innerHTML='<div class="muted">Nenhuma entrega registrada ainda.</div>';
+      return;
+    }
+
+    const groups=new Map();
+    deliveries.forEach(x=>{
+      const key=String(x.agendamentoId||'')+'|'+String(x.ocorrencia||'');
+      if(!groups.has(key))groups.set(key,[]);
+      groups.get(key).push(x);
+    });
+
+    const statusBadge=status=>{
+      const s=String(status||'').toUpperCase();
+      if(s==='SUCESSO')return '<span class="badge good">🟢 SUCESSO</span>';
+      if(s==='ENVIANDO')return '<span class="badge warn">🟡 ENVIANDO</span>';
+      if(s==='ERRO')return '<span class="badge bad">🔴 ERRO</span>';
+      return '<span class="badge neutral">⚪ PENDENTE</span>';
+    };
+    const fmt=v=>{
+      const date=new Date(v||'');
+      return !Number.isNaN(date.getTime())?date.toLocaleString('pt-BR'):'—';
+    };
+
+    box.innerHTML='';
+    [...groups.entries()].slice(0,10).forEach(([key,items])=>{
+      const first=items[0]||{};
+      const scheduleName=(linkSchedules.find?.(x=>String(x?.id||'')===String(first.agendamentoId||''))?.nome)||first.agendamentoId||'Agendamento';
+      const success=items.filter(x=>String(x.status||'').toUpperCase()==='SUCESSO').length;
+      const errors=items.filter(x=>String(x.status||'').toUpperCase()==='ERRO').length;
+      const pending=items.filter(x=>['PENDENTE','ENVIANDO'].includes(String(x.status||'').toUpperCase())).length;
+
+      const card=document.createElement('div');
+      card.className='group';
+      card.style.display='block';
+      card.innerHTML='<div class="row" style="justify-content:space-between;align-items:flex-start">'
+        +'<div><div class="name">📦 '+esc(scheduleName)+'</div>'
+        +'<small>Ocorrência: '+esc(first.ocorrencia||'—')+' · Criada em: '+esc(fmt(first.criadoEm))+'</small></div>'
+        +'<div class="stats">🟢 '+success+' · 🔴 '+errors+' · ⚪ '+pending+'</div></div>'
+        +'<div style="margin-top:8px">'+items.map(x=>{
+          const status=String(x.status||'PENDENTE').toUpperCase();
+          const when=x.concluidoEm||x.iniciadoEm||x.criadoEm;
+          const error=status==='ERRO'&&x.erro?'<div class="muted errorText">Motivo: '+esc(x.erro)+'</div>':'';
+          return '<div class="group" style="margin:6px 0;padding:9px;background:#07101f">'
+            +'<div class="row" style="justify-content:space-between">'
+            +'<div><b>'+esc(x.grupoNome||x.grupoId||'Grupo')+'</b><div class="muted" style="font-size:12px">'+esc(fmt(when))+' · tentativas: '+esc(x.tentativas||0)+'</div></div>'
+            +statusBadge(status)+'</div>'+error+'</div>';
+        }).join('')+'</div>';
+      box.appendChild(card);
+    });
+  }catch(e){
+    box.innerHTML='<div class="muted errorText">⚠️ Não foi possível carregar os estados das entregas: '+esc(e.message||e)+'</div>';
+  }
 }
 
 async function loadLinkHistory(){
