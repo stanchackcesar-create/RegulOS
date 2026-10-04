@@ -2432,31 +2432,24 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
 
     const rangeMatch=q.match(/(?:de|entre)\s+(ontem|hoje)\s+(?:a|ate|para|e)\s+(ontem|hoje)/);
     const numericRange=q.match(/(?:de|entre)\s+(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{4}))?\s+(?:a|ate|para|e)\s+(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{4}))?/);
-
     if(rangeMatch){
-      const a=rangeMatch[1], b=rangeMatch[2];
-      const aStart=a==='ontem'?addDays(todayStart,-1):todayStart;
-      const bStart=b==='ontem'?addDays(todayStart,-1):todayStart;
-      startMs=Math.min(aStart,bStart);
-      endMs=addDays(Math.max(aStart,bStart),1);
-      periodo=Math.max(1,Math.round((endMs-startMs)/86400000));
-      periodoLabel=a+' para '+b;
+      const a=rangeMatch[1],b=rangeMatch[2];
+      const as=a==='ontem'?addDays(todayStart,-1):todayStart, bs=b==='ontem'?addDays(todayStart,-1):todayStart;
+      startMs=Math.min(as,bs); endMs=addDays(Math.max(as,bs),1); periodo=Math.max(1,Math.round((endMs-startMs)/86400000)); periodoLabel=a+' para '+b;
     }else if(numericRange){
-      const y1=Number(numericRange[3]||now.getFullYear()), y2=Number(numericRange[6]||y1);
-      const d1=new Date(y1,Number(numericRange[2])-1,Number(numericRange[1]));
-      const d2=new Date(y2,Number(numericRange[5])-1,Number(numericRange[4]));
+      const y1=Number(numericRange[3]||now.getFullYear()),y2=Number(numericRange[6]||y1);
+      const d1=new Date(y1,Number(numericRange[2])-1,Number(numericRange[1])),d2=new Date(y2,Number(numericRange[5])-1,Number(numericRange[4]));
       if(!Number.isNaN(d1.getTime())&&!Number.isNaN(d2.getTime())){
-        startMs=startOfDay(d1); endMs=addDays(startOfDay(d2),1);
+        startMs=startOfDay(d1);endMs=addDays(startOfDay(d2),1);
         if(endMs<startMs){const t=startMs;startMs=endMs-86400000;endMs=t+86400000;}
-        periodo=Math.max(1,Math.round((endMs-startMs)/86400000));
-        periodoLabel=numericRange[1]+'/'+numericRange[2]+' a '+numericRange[4]+'/'+numericRange[5];
+        periodo=Math.max(1,Math.round((endMs-startMs)/86400000));periodoLabel=numericRange[1]+'/'+numericRange[2]+' a '+numericRange[4]+'/'+numericRange[5];
       }
     }else if(/\b(de ontem para hoje|de ontem ate hoje|de ontem a hoje|desde ontem|a partir de ontem)\b/.test(q)){
-      startMs=addDays(todayStart,-1); endMs=addDays(todayStart,1); periodo=2; periodoLabel='ontem e hoje';
-    }else if(/\bontem\b/.test(q) && !/\bhoje\b/.test(q)){
-      startMs=addDays(todayStart,-1); endMs=todayStart; periodo=1; periodoLabel='ontem';
+      startMs=addDays(todayStart,-1);endMs=addDays(todayStart,1);periodo=2;periodoLabel='ontem e hoje';
+    }else if(/\bontem\b/.test(q)&&!/\bhoje\b/.test(q)){
+      startMs=addDays(todayStart,-1);endMs=todayStart;periodo=1;periodoLabel='ontem';
     }else if(/\bhoje\b/.test(q)){
-      startMs=todayStart; endMs=addDays(todayStart,1); periodo=1; periodoLabel='hoje';
+      startMs=todayStart;endMs=addDays(todayStart,1);periodo=1;periodoLabel='hoje';
     }else{
       const pm=q.match(/(?:ultimos?|ultimas?)\s+(\d+)\s+dias?/);
       if(pm){periodo=Math.max(1,Math.min(90,Number(pm[1])));startMs=addDays(todayStart,-(periodo-1));endMs=addDays(todayStart,1);periodoLabel='ultimos '+periodo+' dias';}
@@ -2467,26 +2460,55 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     }
 
     const inPeriod=v=>{const t=Date.parse(v||'');return Number.isFinite(t)&&t>=startMs&&t<endMs;};
-    const deliveries=Array.isArray(linkDeliveries)?linkDeliveries.filter(x=>inPeriod(x.concluidoEm||x.criadoEm||x.at)):[]; 
-    const failures=Array.isArray(linkFailures)?linkFailures.filter(x=>inPeriod(x.at||x.updatedAt||x.createdAt||x.data)):[]; 
+    const deliveries=Array.isArray(linkDeliveries)?linkDeliveries.filter(x=>inPeriod(x.concluidoEm||x.criadoEm||x.at)):[];
+    const failures=Array.isArray(linkFailures)?linkFailures.filter(x=>inPeriod(x.at||x.updatedAt||x.createdAt||x.data)):[];
     const schedules=Array.isArray(linkSchedules)?linkSchedules:[];
     const success=deliveries.filter(x=>String(x.status||'').toUpperCase()==='SUCESSO').length;
     const errors=deliveries.filter(x=>String(x.status||'').toUpperCase()==='ERRO').length;
     const sending=deliveries.filter(x=>String(x.status||'').toUpperCase()==='ENVIANDO').length;
-    const total=success+errors+sending, pct=total?Math.round(success/total*100):0;
+    const total=success+errors+sending;
+    const pct=total?Math.round(success/total*100):0;
+
     const names=new Map();
     deliveries.forEach(x=>{
-      const id=String(x.agendamentoId||x.linkId||''); if(!id)return;
+      const id=String(x.agendamentoId||x.linkId||'');if(!id)return;
       const item=schedules.find(s=>String(s.id)===id);
       const nome=String(x.nome||item?.nome||id);
       const cur=names.get(id)||{nome,sucesso:0,erro:0,tentativas:0};
-      const st=String(x.status||'').toUpperCase(); cur.tentativas+=Number(x.tentativas||1);
-      if(st==='SUCESSO')cur.sucesso++; if(st==='ERRO')cur.erro++; names.set(id,cur);
+      const st=String(x.status||'').toUpperCase();
+      cur.tentativas+=Number(x.tentativas||1);
+      if(st==='SUCESSO')cur.sucesso++;
+      if(st==='ERRO')cur.erro++;
+      names.set(id,cur);
     });
     const ranking=[...names.values()].sort((a,b)=>(b.erro-a.erro)||(b.tentativas-a.tentativas)).slice(0,5);
+
     const topFailures={};
-    failures.forEach(x=>{const k=String(x.erro||x.motivo||'Falha não informada');topFailures[k]=(topFailures[k]||0)+1;});
+    failures.forEach(x=>{
+      const k=String(x.erro||x.motivo||'Falha não informada').trim()||'Falha não informada';
+      topFailures[k]=(topFailures[k]||0)+1;
+    });
     const failureList=Object.entries(topFailures).sort((a,b)=>b[1]-a[1]).slice(0,3);
+
+    // V2.3: transforma métricas em diagnóstico e recomendações, sem executar ações.
+    const recomendacoes=[];
+    if(errors>0){
+      if(pct<70) recomendacoes.push('A taxa de sucesso está baixa; vale revisar os links que mais falharam antes de aumentar os envios.');
+      else if(pct<90) recomendacoes.push('A taxa de sucesso está razoável, mas há espaço para reduzir as falhas dos links com maior recorrência.');
+      else recomendacoes.push('A taxa de sucesso está alta; concentre a revisão nos poucos erros restantes.');
+    }
+    if(failureList.length){
+      recomendacoes.push('A principal causa registrada é "'+failureList[0][0]+'". Recomendo verificar essa causa primeiro.');
+    }
+    if(ranking[0]?.erro>0){
+      recomendacoes.push('O link "'+ranking[0].nome+'" concentra '+ranking[0].erro+' erro(s). Recomendo revisar esse link antes de reenviar.');
+    }
+    if(sending>0) recomendacoes.push('Há '+sending+' entrega(s) ainda em andamento; aguarde a conclusão antes de interpretar esse resultado como definitivo.');
+    if(!total && !failures.length) recomendacoes.push('Não há dados de entrega no período selecionado; confirme se houve envio nesse intervalo.');
+
+    const intencaoComparar=/\b(compar|compare|comparar|melhorou|piorou|evolucao|evoluiu)\b/.test(q);
+    const intencaoAnalise=/\b(como esta|como estao|analise|analisar|desempenho|resultado|resultados|situacao|situacao)\b/.test(q);
+    const intencaoRecomendacao=/\b(recomenda|recomendacao|sugestao|sugira|o que devo|que devo|o que fazer|como melhorar)\b/.test(q);
 
     let resposta='';
     if(/\b(erro|erros|falha|falhas|problema|problemas|por que|porque|motivo)\b/.test(q)){
@@ -2495,20 +2517,30 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     }else if(/\b(agendamento|agendamentos|programacao|programacoes)\b/.test(q)){
       const ativos=schedules.filter(x=>x.ativo!==false).length;
       resposta='No momento há '+ativos+' agendamento(s) ativo(s) de '+schedules.length+' cadastrado(s).';
+    }else if(intencaoComparar||intencaoAnalise||intencaoRecomendacao){
+      resposta='Em '+periodoLabel+', foram registrados '+total+' envio(s): '+success+' sucesso(s), '+errors+' erro(s) e '+sending+' em andamento.\nTaxa de sucesso: '+pct+'%.';
+      if(failureList.length) resposta+='\n\n🔎 Principal padrão: '+failureList[0][0]+' ('+failureList[0][1]+' ocorrência(s)).';
+      if(ranking[0]?.erro>0) resposta+='\n🔎 Link que mais precisa de atenção: "'+ranking[0].nome+'" ('+ranking[0].erro+' erro(s)).';
+      if(recomendacoes.length) resposta+='\n\n💡 Recomendações:\n• '+recomendacoes.join('\n• ');
     }else if(/\b(sucesso|sucessos|enviado|enviados|envios|entregas)\b/.test(q)){
       resposta='Em '+periodoLabel+', encontrei '+success+' sucesso(s), '+errors+' erro(s) e '+sending+' envio(s) em andamento.\nTaxa de sucesso: '+pct+'%.';
     }else if(/\b(tentativa|tentativas)\b/.test(q)){
       const tent=deliveries.reduce((n,x)=>n+Number(x.tentativas||0),0);
       resposta='Foram registradas '+tent+' tentativa(s) de entrega em '+periodoLabel+'.';
-    }else if(/\b(compar|compare|comparar)\b/.test(q)){
-      resposta='Comparação rápida de '+periodoLabel+': '+success+' sucesso(s), '+errors+' erro(s) e '+sending+' em andamento, com taxa de sucesso de '+pct+'%.';
     }else if(/\b(link|links)\b/.test(q)&&/\b(mais|maior|pior)\b/.test(q)){
-      const top=ranking[0]; resposta=top?'O link com maior número de falhas em '+periodoLabel+' é "'+top.nome+'", com '+top.erro+' erro(s) e '+top.tentativas+' tentativa(s).':'Não encontrei dados suficientes para apontar um link.';
+      const top=ranking[0];
+      resposta=top?'O link com maior número de falhas em '+periodoLabel+' é "'+top.nome+'", com '+top.erro+' erro(s) e '+top.tentativas+' tentativa(s).':'Não encontrei dados suficientes para apontar um link.';
     }else{
-      resposta='Posso analisar erros, sucessos, tentativas, agendamentos e comparações.\nExemplo: "Quais links deram erro hoje?", "Quantos envios deram certo ontem?" ou "Quantos envios deram certo de ontem para hoje?"';
+      resposta='Posso analisar o desempenho do RegulOS e explicar padrões de falha.\nExemplo: "Como estão meus envios nos últimos 7 dias?" ou "O que devo melhorar nos meus envios?"';
     }
+
     res.set('Cache-Control','no-store');
-    res.json({ok:true,resposta,periodo,periodoLabel,intervalo:{inicio:new Date(startMs).toISOString(),fim:new Date(endMs).toISOString()},metricas:{sucessos:success,erros:errors,emAndamento:sending,taxaSucesso:pct}});
+    res.json({
+      ok:true,resposta,periodo,periodoLabel,
+      intervalo:{inicio:new Date(startMs).toISOString(),fim:new Date(endMs).toISOString()},
+      metricas:{sucessos:success,erros:errors,emAndamento:sending,total,taxaSucesso:pct},
+      diagnostico:{principaisFalhas:failureList,linkMaisCritico:ranking[0]||null,recomendacoes}
+    });
   }catch(e){res.status(500).json({ok:false,msg:'Não foi possível processar a pergunta: '+e.message});}
 });
 
