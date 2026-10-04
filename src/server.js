@@ -2465,6 +2465,7 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     const deliveries=Array.isArray(linkDeliveries)?linkDeliveries.filter(x=>inPeriod(x.concluidoEm||x.criadoEm||x.at)):[];
     const failures=Array.isArray(linkFailures)?linkFailures.filter(x=>inPeriod(x.at||x.updatedAt||x.createdAt||x.data)):[];
     const schedules=Array.isArray(linkSchedules)?linkSchedules:[];
+    const scheduleById=new Map(schedules.map(s=>[String(s.id),s]));
     const success=deliveries.filter(x=>String(x.status||'').toUpperCase()==='SUCESSO').length;
     const errors=deliveries.filter(x=>String(x.status||'').toUpperCase()==='ERRO').length;
     const sending=deliveries.filter(x=>String(x.status||'').toUpperCase()==='ENVIANDO').length;
@@ -2474,7 +2475,7 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     const names=new Map();
     deliveries.forEach(x=>{
       const id=String(x.agendamentoId||x.linkId||'');if(!id)return;
-      const item=schedules.find(s=>String(s.id)===id);
+      const item=scheduleById.get(id);
       const nome=String(x.nome||item?.nome||id);
       const cur=names.get(id)||{nome,sucesso:0,erro:0,tentativas:0};
       const st=String(x.status||'').toUpperCase();
