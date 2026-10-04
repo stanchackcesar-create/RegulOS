@@ -2569,13 +2569,43 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     const intencaoGrupoAgendamento=(Boolean(agendamentoContexto)||Boolean(horarioAnterior)||Boolean(horarioNormalizado))
       &&/\b(grupo|grupos)\b/.test(q)
       &&/\b(ver|mostrar|mostre|qual|quais|onde|desse|deste|agendamento|link|links)\b/.test(q);
+    const intencaoDetalhesAgendamento=(Boolean(agendamentoContexto)||Boolean(horarioAnterior)||Boolean(horarioNormalizado))
+      &&/\b(detalhes|detalhes completos|informacoes|informações|dados)\b/.test(q)
+      &&/\b(link|agendamento|agendado|programado|ele|esse|desse|deste)\b/.test(q);
+    const intencaoOutrosHorarios=/\b(outros|outras)\b/.test(q)
+      &&/\b(horarios|horários|links|agendamentos)\b/.test(q)
+      &&/\b(programados|programadas|agendados|agendadas|hoje)\b/.test(q);
+    const intencaoVoltarAgendamentos=/\b(voltar|volte|voltemos)\b/.test(q)
+      &&/\b(agendamento|agendamentos|programacao|programação|horarios|horários)\b/.test(q);
     const intencaoProximoAgendamento=/\b(proximo|proxima|seguinte)\b/.test(q)
       &&/\b(link|agendamento|agendamentos|envio|enviado|enviar)\b/.test(q);
     const intencaoPausados=/\b(pausad|pausados|pausadas|pausa)\w*\b/.test(q)
       &&/\b(link|links|agendamento|agendamentos)\b/.test(q);
     const intencaoRecomendacaoAgendamento=(Boolean(horarioAnterior)||Boolean(horarioNormalizado))&&/\b(recomenda|recomendacao|sugestao|sugira|o que devo|o que eu deveria|que devo|o que fazer|o que eu faco|como melhorar|devo fazer)\b/.test(q)
       &&/\b(link|agendamento|agendado|programado|ele|esse|desse)\b/.test(q);
-    if(intencaoGrupoAgendamento){
+    if(intencaoDetalhesAgendamento){
+      const horarioAlvo=horarioNormalizado||horarioAnterior;
+      let encontrados=agendamentoContexto?[agendamentoContexto]:(horarioAlvo?schedules.filter(item=>String(item.horario||'').slice(0,5)===horarioAlvo):[]);
+      if(!encontrados.length) resposta='🔎 Não consegui identificar o agendamento para mostrar os detalhes.';
+      else{
+        agendamentoSelecionado=encontrados.length===1?encontrados[0]:agendamentoSelecionado;
+        resposta=encontrados.map(item=>{
+          const ids=normalizeScheduleGroupIds(item);
+          const nomes=ids.map(id=>String(item.grupoNomes?.[id]||groups.find(g=>String(g.id)===String(id))?.name||id)).filter(Boolean);
+          return '🔎 Detalhes do agendamento:\n• Link: '+String(item.nome||item.id)+'\n• Horário: '+String(item.horario||'sem horário')+'\n• Grupo(s): '+(nomes.length?nomes.join(', '):'não informado')+'\n• Status: '+String(item.status|| (item.ativo===false?'PAUSADO':'AGENDADO')).toUpperCase()+'\n• Ativo: '+(item.ativo===false?'NÃO':'SIM')+'\n• Repetição: '+String(item.repeticao||'uma vez');
+        }).join('\n\n');
+      }
+    }else if(intencaoOutrosHorarios){
+      const lista=schedules.filter(scheduleOccursToday).sort((a,b)=>String(a.horario||'99:99').localeCompare(String(b.horario||'99:99')));
+      const selecionadoId=agendamentoContexto?.id||agendamentoSelecionado?.id;
+      const outros=selecionadoId?lista.filter(item=>String(item.id)!==String(selecionadoId)):lista;
+      if(!outros.length) resposta='📅 Não encontrei outros links programados para hoje.';
+      else resposta='📅 Outros links programados para hoje:\n'+outros.map(formatSchedule).join('\n');
+    }else if(intencaoVoltarAgendamentos){
+      const lista=schedules.filter(scheduleOccursToday).sort((a,b)=>String(a.horario||'99:99').localeCompare(String(b.horario||'99:99')));
+      if(!lista.length) resposta='📅 Não encontrei links programados para hoje.';
+      else resposta='📅 Links programados para hoje:\n'+lista.map(formatSchedule).join('\n');
+    }else if(intencaoGrupoAgendamento){
       const horarioAlvo=horarioNormalizado||horarioAnterior;
       let encontrados=[];
       if(agendamentoContexto){
@@ -2680,8 +2710,18 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     }
 
     let sugestoes=[];
-    if(agendamentoSelecionado){
-      sugestoes=['Qual é o status desse link?','O que eu deveria fazer com esse link?','Ver o grupo desse agendamento','Quais outros links estão programados hoje?'];
+    const respostaFoiStatus=/\bstatus do agendamento\b|\bstatus desse link\b/.test(q);
+    const respostaFoiGrupo=/\bver o grupo\b|\bgrupo do agendamento\b/.test(q);
+    const respostaFoiDetalhes=intencaoDetalhesAgendamento;
+    const respostaFoiOutros=intencaoOutrosHorarios||intencaoVoltarAgendamentos;
+    if(agendamentoSelecionado && respostaFoiStatus){
+      sugestoes=['O que eu deveria fazer com esse link?','Ver o grupo desse agendamento','Ver detalhes desse link','Quais outros links estão programados hoje?'];
+    }else if(agendamentoSelecionado && (respostaFoiGrupo||respostaFoiDetalhes)){
+      sugestoes=['Qual é o status desse link?','O que eu deveria fazer com esse link?','Quais outros links estão programados hoje?','Voltar aos agendamentos'];
+    }else if(agendamentoSelecionado && respostaFoiOutros){
+      sugestoes=['Qual é o próximo link a ser enviado?','Existe algum agendamento com problema?','Quais links estão pausados?','Voltar aos agendamentos'];
+    }else if(agendamentoSelecionado){
+      sugestoes=['Qual é o status desse link?','O que eu deveria fazer com esse link?','Ver o grupo desse agendamento','Ver detalhes desse link'];
     }else if(intencaoAgendamentosHoje||intencaoAgendamentoEspecifico){
       sugestoes=['Qual é o próximo link a ser enviado?','Existe algum agendamento com problema?','Quais links estão pausados?','O que você recomenda?'];
     }else if(intencaoFalhas){
