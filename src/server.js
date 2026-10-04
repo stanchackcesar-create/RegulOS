@@ -2759,20 +2759,32 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     }else if(intencaoPausados){
       const pausados=schedules.filter(item=>item.ativo===false || String(item.status||'').toLowerCase()==='pausado');
       if(!pausados.length) resposta='✅ Não encontrei links ou agendamentos pausados.';
-      else resposta='⏸️ Encontrei '+pausados.length+' agendamento(s) pausado(s):\n'+pausados.map(formatSchedule).join('\n');
+      else{
+        // Quando existe apenas um pausado, ele passa a ser o agendamento selecionado.
+        // Assim, perguntas como "o que eu deveria fazer com esse link?" continuam
+        // apontando para o mesmo link, sem cair em outro horário por contexto anterior.
+        if(pausados.length===1) agendamentoSelecionado=pausados[0];
+        resposta='⏸️ Encontrei '+pausados.length+' agendamento(s) pausado(s):\n'+pausados.map(formatSchedule).join('\n');
+      }
     }else if(intencaoRecomendacaoAgendamento){
       const horarioAlvo=horarioNormalizado||horarioAnterior;
-      const encontrados=schedules.filter(item=>String(item.horario||'').slice(0,5)===horarioAlvo);
-      if(!encontrados.length) resposta='📅 Não encontrei o agendamento das '+horarioAlvo+' para recomendar uma ação.';
+      // Prioriza o agendamento que veio do contexto da conversa. Só usa o horário
+      // anterior como fallback quando não existe um agendamento selecionado.
+      const selecionado=agendamentoContexto||agendamentoSelecionado||null;
+      const encontrados=selecionado
+        ? [selecionado]
+        : schedules.filter(item=>String(item.horario||'').slice(0,5)===horarioAlvo);
+      if(!encontrados.length) resposta='📅 Não consegui identificar qual agendamento você quer avaliar. Selecione um agendamento primeiro.';
       else {
-        resposta='💡 Recomendo manter o agendamento das '+horarioAlvo+' ativo e acompanhar a execução.';
+        agendamentoSelecionado=encontrados.length===1?encontrados[0]:agendamentoSelecionado;
+        resposta='💡 Recomendação para o agendamento das '+String(encontrados[0].horario||horarioAlvo||'').slice(0,5)+':';
         encontrados.forEach(item=>{
           const st=String(item.status||'').toLowerCase();
-          if(st==='erro') resposta+='\n• O agendamento está com ERRO: revise o link e o grupo antes de reenviar.';
-          else if(st==='aguardando_grupo') resposta+='\n• O agendamento está aguardando o grupo: confirme se o grupo está disponível e ativo.';
-          else if(st==='pausado'||item.ativo===false) resposta+='\n• O agendamento está PAUSADO: confirme se deve ser reativado.';
-          else if(st==='enviando') resposta+='\n• O envio está EM ANDAMENTO: aguarde a conclusão antes de reenviar.';
-          else resposta+='\n• Situação atual: '+String(item.status||'AGENDADO').toUpperCase()+'. Não há indicação de intervenção imediata.';
+          if(st==='erro') resposta+='\n• 🚨 O agendamento está com ERRO: revise o link, o grupo e o motivo registrado antes de reenviar.';
+          else if(st==='aguardando_grupo') resposta+='\n• ⚠️ O agendamento está aguardando o grupo: confirme se o grupo está disponível e ativo.';
+          else if(st==='pausado'||item.ativo===false) resposta+='\n• ⏸️ O agendamento está PAUSADO: verifique o motivo da pausa e só reative se esse envio ainda for necessário.';
+          else if(st==='enviando') resposta+='\n• ⏳ O envio está EM ANDAMENTO: aguarde a conclusão antes de reenviar.';
+          else resposta+='\n• ✅ Situação atual: '+String(item.status||'AGENDADO').toUpperCase()+'. Não há indicação de intervenção imediata.';
         });
       }
     }else if(intencaoAgendamentoEspecifico){
