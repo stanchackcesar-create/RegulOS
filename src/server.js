@@ -766,6 +766,12 @@ function clearLinkHistory(){
 
 // Cada registro recebe seu próprio timer de expiração. Ao reiniciar o servidor,
 // os timers são reconstruídos a partir do horário salvo no histórico.
+const linkHistoryCountBeforeNormalize = linkHistory.length;
+normalizeLinkHistory();
+if(linkHistory.length !== linkHistoryCountBeforeNormalize) {
+  writeJson(FILES.linkHistory, linkHistory);
+  addLog(`Limpeza automática do histórico: ${linkHistoryCountBeforeNormalize - linkHistory.length} registro(s) duplicado(s) removido(s).`);
+}
 pruneLinkHistoryByLatestSentTime();
 linkHistory.forEach(scheduleLinkHistoryExpiration);
 
