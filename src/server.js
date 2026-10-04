@@ -1770,11 +1770,33 @@ async function sendScheduledLink(item) {
     if (!productImage) {
       const msg = 'Não foi possível encontrar ou baixar a imagem automaticamente.';
       for (const id of targets) {
+        // Falha de imagem também encerra a tentativa de entrega como uma
+        // tentativa efetiva, evitando ficar com tentativas: 0 no painel.
+        setLinkDeliveryStatus(item, item.progressKey, id, 'ENVIANDO');
         setLinkDeliveryStatus(item, item.progressKey, id, 'ERRO', msg);
         upsertLinkFailure(item, id, msg);
       }
-      item.status = 'erro'; item.ativo = false; writeJson(FILES.schedules, linkSchedules);
-      addLog(`Falha agendamento ${item.nome}: ${msg}`);
+
+      // Uma ocorrência "uma_vez" que falhou definitivamente não pode
+      // permanecer na fila nem carregar progressKey para um próximo ciclo.
+      item.status = 'erro';
+      item.ativo = false;
+      item.lastRunKey = item.progressKey || occurrenceKey(item, new Date());
+      item.lastRunAt = new Date().toISOString();
+      item.progressKey = '';
+      item.progressTargets = [];
+      item.progressGroupIds = [];
+      item.progressStartedAt = '';
+
+      if (item.repeticao === 'uma_vez') {
+        linkSchedules = linkSchedules.filter(x => String(x?.id || '') !== String(item.id || ''));
+        syncLinkQueue();
+        writeJson(FILES.schedules, linkSchedules);
+        addLog(`Agendamento "${item.nome}" removido dos agendamentos após falha de imagem; mantido em Links com Falha.`);
+      } else {
+        writeJson(FILES.schedules, linkSchedules);
+        addLog(`Agendamento "${item.nome}" finalizou a ocorrência com falha de imagem; próxima ocorrência permanece agendada.`);
+      }
       return;
     }
     addLog(`Imagem encontrada para "${item.nome}".`);
