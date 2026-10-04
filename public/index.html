@@ -53,6 +53,17 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
 @media(max-width:560px){.schedule-scroll{max-height:60vh}.schedule-tools{align-items:stretch}.schedule-tools input{flex-basis:100%}.schedule-tools button{min-height:44px}
 .history-filter-tools,.failure-filter-tools{align-items:stretch}.history-filter-tools input,.failure-filter-tools input{flex-basis:100%}.history-filter-tools select,.failure-filter-tools select{width:100%;min-height:44px}.history-filter-tools button,.failure-filter-tools button{min-height:44px}}
 
+
+/* REGULOS_ASSISTENTE_CHAT_V2_1 */
+.assistant-chat{margin-top:14px;border-top:1px solid #263653;padding-top:14px}
+.assistant-chat-messages{height:280px;overflow:auto;background:#07101f;border:1px solid #263653;border-radius:12px;padding:10px}
+.assistant-chat-msg{max-width:88%;padding:10px 12px;border-radius:12px;margin:7px 0;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+.assistant-chat-user{margin-left:auto;background:#234b83}
+.assistant-chat-bot{margin-right:auto;background:#19273e}
+.assistant-chat-meta{font-size:11px;color:#9eb0ca;margin-bottom:3px}
+.assistant-chat-form{display:flex;gap:8px;margin-top:8px}
+.assistant-chat-form input{flex:1}
+@media(max-width:560px){.assistant-chat-form{flex-direction:column}.assistant-chat-form button{min-height:44px}.assistant-chat-messages{height:300px}.assistant-chat-msg{max-width:96%}}
 </style>
 </head>
 <body>
@@ -102,6 +113,19 @@ label{display:block;color:#c6d2e7;font-size:13px;margin:8px 0 5px}.two{display:g
     </label>
   </div>
   <div id="assistantResult" class="notice" style="margin-top:12px">Escolha uma ação para o Assistente analisar os dados reais do RegulOS.</div>
+  <div class="assistant-chat">
+    <div class="row" style="justify-content:space-between;align-items:center">
+      <div><b>💬 Conversa com o Assistente</b><div class="muted">Pergunte sobre erros, sucessos, tentativas, agendamentos e resultados.</div></div>
+      <span class="badge neutral">V2.1</span>
+    </div>
+    <div id="assistantChatMessages" class="assistant-chat-messages" aria-live="polite">
+      <div class="assistant-chat-msg assistant-chat-bot"><div class="assistant-chat-meta">🤖 RegulOS</div>Olá! Estou pronto para analisar os dados do seu RegulOS. Experimente perguntar: “Quais links deram erro hoje?”</div>
+    </div>
+    <div class="assistant-chat-form">
+      <input id="assistantChatInput" type="text" placeholder="Ex.: Quantos envios deram certo nos últimos 7 dias?" autocomplete="off">
+      <button class="primary" type="button" onclick="sendAssistantChat()">📨 Perguntar</button>
+    </div>
+  </div>
 </section>
 <div class="cards">
 <div class="card metric"><small>WhatsApp</small><b id="conn">...</b><span id="number" class="muted">Número: —</span></div>
@@ -965,6 +989,29 @@ async function runCentralDiagnostic(){
     box.innerHTML='<div class="errorText">🔴 Não foi possível executar o diagnóstico: '+esc(e.message||e)+'</div>';
   }
 }
+
+async function sendAssistantChat(){
+  const input=document.getElementById('assistantChatInput'), box=document.getElementById('assistantChatMessages');
+  if(!input||!box)return;
+  const pergunta=String(input.value||'').trim(); if(!pergunta)return;
+  appendAssistantChatMessage('user',pergunta); input.value=''; input.disabled=true;
+  try{
+    const d=await jfetch('/api/assistente/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pergunta})});
+    appendAssistantChatMessage('bot',d.resposta||'Não consegui interpretar essa pergunta.');
+  }catch(e){appendAssistantChatMessage('bot','⚠️ Não foi possível consultar o Assistente: '+(e.message||e));}
+  finally{input.disabled=false;input.focus();}
+}
+function appendAssistantChatMessage(tipo,texto){
+  const box=document.getElementById('assistantChatMessages'); if(!box)return;
+  const div=document.createElement('div'); div.className='assistant-chat-msg '+(tipo==='user'?'assistant-chat-user':'assistant-chat-bot');
+  const meta=document.createElement('div'); meta.className='assistant-chat-meta'; meta.textContent=tipo==='user'?'👤 Você':'🤖 RegulOS';
+  const body=document.createElement('div'); body.textContent=String(texto||'');
+  div.appendChild(meta);div.appendChild(body);box.appendChild(div);box.scrollTop=box.scrollHeight;
+}
+document.addEventListener('DOMContentLoaded',()=>{
+  const input=document.getElementById('assistantChatInput');
+  input?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();sendAssistantChat();}});
+});
 
 async function runRegulosAssistant(acao){
   const box=document.getElementById('assistantResult'); if(!box)return;
