@@ -2554,12 +2554,12 @@ app.post('/api/assistente/chat', requireAuth, (req,res)=>{
     }
 
     let resposta='';
-    let agendamentoSelecionado=agendamentoContexto||null;
     const horarioPedido=(q.match(/\b([01]?\d|2[0-3])[:h]([0-5]\d)\b/)||[]).slice(1);
     const horarioNormalizado=horarioPedido.length?String(horarioPedido[0]).padStart(2,'0')+':'+horarioPedido[1]:null;
     const perguntaAnteriorTexto=String(ultimaPerguntaUsuario?.content||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     const ultimaRespostaTexto=String(ultimaResposta?.content||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
     const agendamentoContexto=ultimaResposta?.agendamentoSelecionado||null;
+    let agendamentoSelecionado=agendamentoContexto||null;
     const horarioAnteriorMatch=(perguntaAnteriorTexto.match(/\b([01]?\d|2[0-3])[:h]([0-5]\d)\b/)||ultimaRespostaTexto.match(/\b([01]?\d|2[0-3])[:h]([0-5]\d)\b/));
     const horarioAnterior=agendamentoContexto?.horario|| (horarioAnteriorMatch?String(horarioAnteriorMatch[1]).padStart(2,'0')+':'+horarioAnteriorMatch[2]:null);
     const intencaoAgendamentoEspecifico=Boolean(horarioNormalizado)&&/\b(link|links|agendamento|agendamentos)\b/.test(q)
