@@ -13,7 +13,7 @@
   ];
   const aside=document.createElement('aside');
   aside.id='regulosSidebar';aside.className='regulos-sidebar';aside.setAttribute('aria-label','Navegação RegulOS');
-  aside.innerHTML='<div class="regulos-sidebar-brand"><b>⚙️ RegulOS</b><small>Central de Automação</small></div><div class="regulos-nav-label">Navegação</div><nav class="regulos-nav"></nav><div class="regulos-sidebar-status"><span class="dot"></span><b id="regulosSidebarStatus">Sistema online</b><div id="regulosSidebarNumber" style="margin-top:4px;color:#8fa6c5">WhatsApp verificando...</div></div>';
+  aside.innerHTML='<div class="regulos-sidebar-brand"><b>⚙️ RegulOS</b><small>Central de Automação</small></div><div class="regulos-nav-label">Navegação</div><nav class="regulos-nav"></nav><div class="regulos-sidebar-metrics"><div><span>💬 Mensagens</span><b id="regulosSidebarToday">0</b></div><div><span>👥 Grupos</span><b id="regulosSidebarGroups">0</b></div><div><span>🔗 Links</span><b id="regulosSidebarLinks">0</b></div></div><div class="regulos-sidebar-status"><span class="dot"></span><b id="regulosSidebarStatus">Sistema online</b><div id="regulosSidebarNumber" style="margin-top:4px;color:#8fa6c5">WhatsApp verificando...</div></div>';
   const navEl=aside.querySelector('.regulos-nav');
   nav.forEach(([icon,label,fn])=>{
     const b=document.createElement('button');b.type='button';b.innerHTML='<span class="regulos-nav-icon">'+icon+'</span><span>'+label+'</span>';
@@ -79,6 +79,12 @@
         dot.style.background=connected?'#22c55e':waitingQr?'#f59e0b':'#ef4444';
         dot.style.boxShadow=connected?'0 0 10px rgba(34,197,94,.7)':waitingQr?'0 0 10px rgba(245,158,11,.7)':'0 0 10px rgba(239,68,68,.55)';
       }
+      const todayEl=document.getElementById('regulosSidebarToday');
+      const groupsEl=document.getElementById('regulosSidebarGroups');
+      const linksEl=document.getElementById('regulosSidebarLinks');
+      if(todayEl) todayEl.textContent=d.mensagensHoje??d.hoje??0;
+      if(groupsEl) groupsEl.textContent=d.grupos??0;
+      if(linksEl) linksEl.textContent=d.links??0;
     }catch{
       statusEl.textContent='Sistema indisponível';
       numberEl.textContent='Não foi possível verificar';
