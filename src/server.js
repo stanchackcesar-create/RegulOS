@@ -449,7 +449,7 @@ async function extractUniversalOfferWithBrowser(url){
       const imageCandidates=[];
       const addImage=v=>{
         const s=clean(v);
-        if(/^https?:\\/\\//i.test(s)&&!imageCandidates.includes(s))imageCandidates.push(s);
+        if(/^https?:\/\//i.test(s)&&!imageCandidates.includes(s))imageCandidates.push(s);
       };
       document.querySelectorAll('meta[property="og:image"],meta[property="og:image:url"],meta[name="twitter:image"],img').forEach(el=>{
         addImage(el.getAttribute?.('content')||el.currentSrc||el.src);
