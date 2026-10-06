@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#08111f">
+<title>Extrator Universal — RegulOS</title>
+<link rel="icon" type="image/svg+xml" href="/icons/regulos.svg">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#080e1a;color:#eef3ff;font-family:Segoe UI,Arial,sans-serif}
+.wrap{width:min(1050px,calc(100% - 28px));margin:0 auto;padding:24px 0 40px}
+header{background:#111b2d;border-bottom:1px solid #263653;padding:16px 0;position:sticky;top:0;z-index:5}
+.head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+h1{font-size:22px;margin:0}.sub{color:#9eb0ca;font-size:13px;margin-top:4px}
+.panel{background:#111b2d;border:1px solid #263653;border-radius:16px;padding:18px;margin-top:16px}
+label{display:block;color:#c6d2e7;font-size:13px;margin-bottom:7px}
+.row{display:flex;gap:8px;align-items:center}
+input{width:100%;background:#07101f;color:#eef3ff;border:1px solid #34445c;border-radius:10px;padding:12px;font:inherit;min-height:46px}
+button{border:0;border-radius:10px;padding:11px 15px;font-weight:800;cursor:pointer;background:#3d83f6;color:#fff;min-height:44px}
+button.secondary{background:#34445c}button:disabled{opacity:.55;cursor:wait}
+.status{margin-top:10px;padding:10px;border-radius:10px;background:#19273e;color:#cbd7ea}
+.error{background:#481c27;color:#ffd3d8}.success{background:#123e29;color:#c9ffe0}
+.result{display:grid;grid-template-columns:300px 1fr;gap:18px}
+.preview{min-height:260px;border:1px solid #263653;border-radius:12px;background:#07101f;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.preview img{width:100%;height:100%;max-height:320px;object-fit:contain}
+.placeholder{color:#71819a;text-align:center;padding:20px}
+.fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.field{border:1px solid #263653;border-radius:10px;padding:11px;background:#0b1423;min-width:0}
+.field small{display:block;color:#8ea1bd;margin-bottom:5px}.field b{word-break:break-word}
+.full{grid-column:1/-1}
+.badge{display:inline-block;padding:4px 8px;border-radius:999px;background:#34445c;font-size:12px;font-weight:800}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+details{margin-top:14px}summary{cursor:pointer;color:#bcd1ee;font-weight:700}
+pre{white-space:pre-wrap;word-break:break-word;background:#030811;border-radius:10px;padding:12px;overflow:auto;font-size:12px}
+@media(max-width:700px){.result{grid-template-columns:1fr}.fields{grid-template-columns:1fr}.row{flex-direction:column}.row button{width:100%}.wrap{width:min(100% - 18px,1050px);padding-top:14px}.panel{padding:13px}}
+</style>
+</head>
+<body>
+<header><div class="wrap" style="padding:0">
+  <div class="head">
+    <div><h1>🧪 Extrator Universal</h1><div class="sub">Laboratório isolado para testar links sem alterar os agendamentos existentes.</div></div>
+    <button class="secondary" onclick="location.href='/'">← RegulOS</button>
+  </div>
+</div></header>
+
+<main class="wrap">
+<section class="panel">
+  <label for="url">Cole qualquer link de produto/oferta</label>
+  <div class="row">
+    <input id="url" type="url" autocomplete="off" placeholder="https://...">
+    <button id="analyze" type="button">🔎 Analisar link</button>
+  </div>
+  <div id="status" class="status">Pronto para testar. O painel usa somente o endpoint de prévia existente e não salva o resultado.</div>
+</section>
+
+<section id="resultPanel" class="panel" style="display:none">
+  <div class="result">
+    <div>
+      <div id="preview" class="preview"><div class="placeholder">A imagem encontrada aparecerá aqui.</div></div>
+      <div class="actions">
+        <button id="openImage" class="secondary" style="display:none">🖼️ Abrir imagem</button>
+        <button id="openFinal" class="secondary" style="display:none">🔗 Abrir link final</button>
+      </div>
+    </div>
+    <div class="fields">
+      <div class="field"><small>🏪 Domínio final</small><b id="domain">—</b></div>
+      <div class="field"><small>🔗 URL final</small><b id="finalUrl">—</b></div>
+      <div class="field full"><small>📝 Título</small><b id="title">—</b></div>
+      <div class="field"><small>💰 Preço</small><b id="price">—</b></div>
+      <div class="field"><small>🏷️ Preço original</small><b id="original">—</b></div>
+      <div class="field"><small>🔥 Desconto</small><b id="discount">—</b></div>
+      <div class="field"><small>🖼️ Imagem</small><b id="imageStatus">—</b></div>
+      <div class="field full"><small>📌 Situação</small><b id="resultMessage">—</b></div>
+    </div>
+  </div>
+  <details>
+    <summary>Ver dados técnicos retornados</summary>
+    <pre id="raw">—</pre>
+  </details>
+</section>
+</main>
+
+<script>
+const $=id=>document.getElementById(id);
+function setStatus(msg,type=''){const s=$('status');s.textContent=msg;s.className='status '+type}
+function val(x){return String(x??'').trim()||'—'}
+function validHttp(u){try{const x=new URL(u);return /^https?:$/.test(x.protocol)}catch{return false}}
+function showResult(d){
+  $('resultPanel').style.display='block';
+  const finalUrl=val(d.finalUrl);
+  $('domain').textContent='—';
+  try{$('domain').textContent=new URL(d.finalUrl||'').hostname||'—'}catch{}
+  $('finalUrl').textContent=finalUrl;
+  $('title').textContent=val(d.titulo);
+  $('price').textContent=val(d.preco);
+  $('original').textContent=val(d.precoOriginal);
+  $('discount').textContent=val(d.desconto);
+  const img=String(d.imagemUrl||'').trim();
+  const preview=$('preview');
+  preview.innerHTML='';
+  if(img){
+    const image=new Image();
+    image.alt='Imagem encontrada pelo extrator';
+    image.onload=()=>{$('imageStatus').textContent='✅ URL encontrada e imagem carregou';};
+    image.onerror=()=>{$('imageStatus').textContent='⚠️ URL encontrada, mas o navegador não conseguiu carregar';};
+    image.src=img;
+    preview.appendChild(image);
+    $('openImage').style.display='inline-block';
+    $('openImage').onclick=()=>window.open(img,'_blank','noopener');
+  }else{
+    preview.innerHTML='<div class="placeholder">❌ Nenhuma imagem foi encontrada pelo extrator atual.</div>';
+    $('imageStatus').textContent='❌ Não encontrada';
+    $('openImage').style.display='none';
+  }
+  if(d.finalUrl){$('openFinal').style.display='inline-block';$('openFinal').onclick=()=>window.open(d.finalUrl,'_blank','noopener')}
+  else $('openFinal').style.display='none';
+  $('resultMessage').textContent=[
+    d.titulo?'título encontrado':'título não encontrado',
+    d.preco?'preço encontrado':'preço não encontrado',
+    d.desconto?'desconto encontrado':'desconto não encontrado',
+    img?'imagem encontrada':'imagem não encontrada'
+  ].join(' · ');
+  $('raw').textContent=JSON.stringify(d,null,2);
+}
+async function analyze(){
+  const url=$('url').value.trim();
+  if(!validHttp(url)){setStatus('Digite um link completo começando com http:// ou https://.','error');return}
+  const btn=$('analyze');btn.disabled=true;btn.textContent='⏳ Analisando...';
+  $('resultPanel').style.display='none';
+  setStatus('🔎 Resolvendo o link e procurando título, preço, desconto e imagem...','');
+  try{
+    const r=await fetch('/api/oferta-preview?url='+encodeURIComponent(url),{cache:'no-store',credentials:'same-origin'});
+    const d=await r.json().catch(()=>({}));
+    if(!r.ok||d.ok!==true)throw new Error(d.msg||'O servidor não conseguiu analisar esse link.');
+    showResult(d);
+    setStatus('✅ Análise concluída. Nada foi salvo nem alterado no sistema de agendamentos.','success');
+  }catch(e){setStatus('❌ '+(e.message||'Falha ao analisar o link.'),'error')}
+  finally{btn.disabled=false;btn.textContent='🔎 Analisar link'}
+}
+$('analyze').addEventListener('click',analyze);
+$('url').addEventListener('keydown',e=>{if(e.key==='Enter')analyze()});
+</script>
+</body>
+</html>
