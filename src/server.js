@@ -210,6 +210,57 @@ app.post('/api/auth/login',(req,res)=>{
   setSession(res,user); res.json({ok:true,msg:'Login realizado.',usuario:sanitizeUser(user)});
 });
 app.post('/api/auth/logout',(req,res)=>{clearSession(req,res);res.json({ok:true});});
+
+function recoveryKeyValid(value){
+  const configured=String(process.env.REGULOS_RECOVERY_KEY||'');
+  const supplied=String(value||'');
+  if(!configured || !supplied) return false;
+  const a=crypto.createHash('sha256').update(configured).digest();
+  const b=crypto.createHash('sha256').update(supplied).digest();
+  return crypto.timingSafeEqual(a,b);
+}
+const recoveryAttempts = new Map();
+function recoveryAllowed(req){
+  const key=clientIp(req), now=Date.now(), windowMs=15*60*1000;
+  const a=recoveryAttempts.get(key);
+  if(!a || now-a.startedAt>windowMs){ recoveryAttempts.set(key,{startedAt:now,count:0}); return true; }
+  return a.count < 5;
+}
+function registerRecoveryFailure(req){
+  const key=clientIp(req), now=Date.now(), windowMs=15*60*1000;
+  const a=recoveryAttempts.get(key);
+  if(!a || now-a.startedAt>windowMs) recoveryAttempts.set(key,{startedAt:now,count:1});
+  else { a.count++; recoveryAttempts.set(key,a); }
+}
+app.post('/api/auth/recover',(req,res)=>{
+  if(!recoveryAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas de recuperação. Aguarde alguns minutos.'});
+  const recoveryKey=String(req.body?.recoveryKey||'');
+  const usuario=String(req.body?.usuario||'').trim().toLowerCase();
+  const novaSenha=String(req.body?.novaSenha||'');
+  if(!recoveryKeyValid(recoveryKey) || !usuario || novaSenha.length<6){
+    registerRecoveryFailure(req);
+    return res.status(400).json({ok:false,msg:'Dados de recuperação inválidos.'});
+  }
+  const users=readUsers();
+  const user=users.find(x=>x.usuario===usuario);
+  if(!user){
+    registerRecoveryFailure(req);
+    return res.status(400).json({ok:false,msg:'Não foi possível recuperar esta conta.'});
+  }
+  const salt=crypto.randomBytes(16).toString('hex');
+  user.salt=salt;
+  user.hash=hashPassword(novaSenha,salt);
+  saveUsers(users);
+  const sessions=readSessions();
+  for(const [token,session] of Object.entries(sessions)){
+    if(session?.userId===user.id) delete sessions[token];
+  }
+  saveSessions(sessions);
+  recoveryAttempts.delete(clientIp(req));
+  setSession(res,user);
+  res.json({ok:true,msg:'Senha redefinida com sucesso.',usuario:sanitizeUser(user)});
+});
+
 app.get('/api/auth/me',(req,res)=>{const user=currentUser(req);if(!user)return res.status(401).json({ok:false,authRequired:true});res.json({ok:true,usuario:sanitizeUser(user)});});
 app.post('/api/auth/presence-offline',(req,res)=>{
   const token=String(req.headers.cookie||'').match(/(?:^|;\s*)regulos_session=([^;]+)/)?.[1];
