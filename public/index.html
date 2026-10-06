@@ -1251,7 +1251,7 @@ async function saveBotSchedule(){
   document.getElementById('botInicio').value=d.programacao?.inicio||'';
   document.getElementById('botFim').value=d.programacao?.fim||'';
   document.getElementById('botAtivo').checked=d.programacao?.ativo===true;
-  document.getElementById('botResult').textContent=d.janela;
+  const botResult=document.getElementById('botResult'); if(botResult) botResult.textContent=d.janela;
   toast(ativo?'Programação salva.':'Programação desativada.');
   await status();
  }catch(e){toast(e.message,true)}
