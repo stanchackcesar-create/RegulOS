@@ -1714,11 +1714,125 @@ async function getMercadoLivreOfferInfo(url){
         addLog(`Mercado Livre API sem dados para ${id}: ${e.message}`);
       }
     }
+    // Fallback isolado: quando a API de /items não entrega preço,
+    // consulta somente a página final do Mercado Livre pelo navegador.
+    if(best && !best.preco){
+      try{
+        const browserOffer=await getMercadoLivreBrowserPriceInfo(page.finalUrl||url);
+        if(browserOffer){
+          best={
+            ...best,
+            preco:browserOffer.preco||best.preco,
+            precoOriginal:browserOffer.precoOriginal||best.precoOriginal,
+            desconto:browserOffer.desconto||best.desconto,
+            titulo:browserOffer.titulo||best.titulo,
+            imagemUrl:browserOffer.imagemUrl||best.imagemUrl,
+            finalUrl:browserOffer.finalUrl||best.finalUrl,
+            fonte:'mercado-livre-api+browser'
+          };
+        }
+      }catch(e){
+        addLog(`Mercado Livre fallback de preço ignorado: ${e.message}`);
+      }
+    }
     return best;
   }catch(e){
     addLog(`Mercado Livre oferta: ${e.message}`);
   }
   return null;
+}
+
+async function getMercadoLivreBrowserPriceInfo(url){
+  let context=null;
+  try{
+    await assertSafeExternalUrl(url);
+    const browser=await getRegulosBrowser();
+    context=await browser.newContext({
+      userAgent:'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/154 Safari/537.36',
+      locale:'pt-BR',
+      viewport:{width:1365,height:900},
+      javaScriptEnabled:true,
+      ignoreHTTPSErrors:true
+    });
+    const page=await context.newPage();
+    await page.goto(url,{waitUntil:'domcontentloaded',timeout:35000});
+    await page.waitForTimeout(3000);
+
+    const data=await page.evaluate(()=>{
+      const clean=v=>String(v??'').replace(/\s+/g,' ').trim();
+      const parseMoney=v=>{
+        const s=clean(v).replace(/[^0-9,.-]/g,'');
+        if(!s)return NaN;
+        const lastComma=s.lastIndexOf(',');
+        const lastDot=s.lastIndexOf('.');
+        let n=s;
+        if(lastComma>=0 && lastDot>=0){
+          n=lastComma>lastDot?s.replace(/\./g,'').replace(',','.'):s.replace(/,/g,'');
+        }else if(lastComma>=0){
+          n=s.replace(',','.');
+        }else if((s.match(/\./g)||[]).length>1){
+          n=s.replace(/\./g,'');
+        }
+        const value=Number(n);
+        return Number.isFinite(value)&&value>0&&value<100000000?value:NaN;
+      };
+      const values=[];
+      const originals=[];
+      const add=(target,v)=>{
+        const n=parseMoney(v);
+        if(Number.isFinite(n))target.push(n);
+      };
+
+      const currentSelectors=[
+        '.ui-pdp-price__second-line .andes-money-amount__fraction',
+        '.ui-pdp-price .andes-money-amount__fraction',
+        '.ui-pdp-price__second-line .andes-money-amount',
+        '[data-testid="price-part"] .andes-money-amount__fraction',
+        '[data-testid="price-part"]'
+      ];
+      const originalSelectors=[
+        '.ui-pdp-price__original .andes-money-amount__fraction',
+        '.ui-pdp-price--original .andes-money-amount__fraction',
+        '.ui-pdp-price__original .andes-money-amount',
+        '[class*="price"][class*="original"] .andes-money-amount__fraction'
+      ];
+
+      for(const sel of currentSelectors){
+        document.querySelectorAll(sel).forEach(el=>add(values,el.textContent||el.getAttribute('content')||''));
+      }
+      for(const sel of originalSelectors){
+        document.querySelectorAll(sel).forEach(el=>add(originals,el.textContent||el.getAttribute('content')||''));
+      }
+
+      const body=clean(document.body?.innerText||'');
+      const bodyPrices=body.match(/R\$\s*[0-9.]+(?:,[0-9]{2})?/g)||[];
+      for(const v of bodyPrices.slice(0,30))add(values,v);
+
+      const title=clean(document.querySelector('h1.ui-pdp-title,h1')?.textContent||'');
+      const imageEl=document.querySelector('.ui-pdp-gallery__figure img,figure.ui-pdp-gallery__figure img');
+      const image=String(imageEl?.currentSrc||imageEl?.src||document.querySelector('meta[property="og:image"]')?.getAttribute('content')||'').trim();
+      const current=values.length?Math.min(...values):NaN;
+      const original=originals.length?Math.max(...originals):NaN;
+      let desconto='';
+      if(Number.isFinite(current)&&Number.isFinite(original)&&original>current){
+        desconto=Math.round((1-current/original)*100)+'%';
+      }
+      return {finalUrl:location.href,titulo:title,current,original,desconto,imagemUrl:image};
+    });
+
+    if(!Number.isFinite(data.current)) return null;
+    return {
+      titulo:String(data.titulo||'').trim(),
+      preco:autoOfferFormatBRL(data.current,'BRL'),
+      precoOriginal:Number.isFinite(data.original)?autoOfferFormatBRL(data.original,'BRL'):'',
+      desconto:String(data.desconto||''),
+      imagemUrl:String(data.imagemUrl||'').trim(),
+      finalUrl:data.finalUrl||url,
+      fonte:'mercado-livre-browser'
+    };
+  }finally{
+    if(context) await context.close().catch(()=>{});
+  }
 }
 
 
