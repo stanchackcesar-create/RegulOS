@@ -1715,7 +1715,58 @@ async function getMercadoLivreOfferInfo(url){
       }
     }
     // Fallback isolado: quando a API de /items não entrega preço,
-    // consulta somente a página final do Mercado Livre pelo navegador.
+    // primeiro tenta os dados embutidos no HTML e só depois abre o navegador.
+    if(best && !best.preco){
+      try{
+        const html=String(page.data||'');
+        const currentValues=[]; const originalValues=[];
+        const addNumber=(arr,v)=>{
+          const s=String(v??'').replace(/[^0-9,.-]/g,'');
+          if(!s)return;
+          const comma=s.lastIndexOf(','); const dot=s.lastIndexOf('.');
+          let n=s;
+          if(comma>=0&&dot>=0)n=comma>dot?s.replace(/\\./g,'').replace(',','.') : s.replace(/,/g,'');
+          else if(comma>=0)n=s.replace(',','.');
+          else if((s.match(/\\./g)||[]).length>1)n=s.replace(/\\./g,'');
+          const x=Number(n);
+          if(Number.isFinite(x)&&x>0&&x<100000000)arr.push(x);
+        };
+        const collect=(regex,arr)=>{for(const m of html.matchAll(regex))addNumber(arr,m[1]);};
+        collect(/["'](?:price|current_price|sale_price|final_price|selling_price)["']\\s*[:=]\\s*["']?([0-9]+(?:[.,][0-9]+)?)/gi,currentValues);
+        collect(/["'](?:original_price|old_price|list_price|regular_price|base_price|price_before_discount)["']\\s*[:=]\\s*["']?([0-9]+(?:[.,][0-9]+)?)/gi,originalValues);
+        collect(/(?:product:price:amount|og:price:amount)["']?\\s*content=["']([0-9]+(?:[.,][0-9]+)?)/gi,currentValues);
+        collect(/(?:product:original_price:amount|product:list_price:amount|original_price)["']?\\s*content=["']([0-9]+(?:[.,][0-9]+)?)/gi,originalValues);
+
+        const visible=html.match(/R\\$\\s*[0-9.]+(?:,[0-9]{2})?/g)||[];
+        for(const value of visible.slice(0,80))addNumber(currentValues,value);
+
+        const discountPct=Number(String(best.desconto||'').replace(/[^0-9]/g,''));
+        let current=currentValues.length?Math.min(...currentValues):NaN;
+        let original=originalValues.length?Math.max(...originalValues):NaN;
+
+        // Se o HTML trouxe apenas uma das pontas, usa o desconto já encontrado
+        // para encontrar/derivar o par correto (ex.: 60% = R$49,99 -> R$19,94).
+        if(Number.isFinite(discountPct)&&discountPct>0&&discountPct<100){
+          if(Number.isFinite(original)){
+            const derived=original*(1-discountPct/100);
+            if(!Number.isFinite(current)||Math.abs(current-derived)>0.05)current=derived;
+          }else if(Number.isFinite(current)){
+            const derived=current/(1-discountPct/100);
+            original=derived;
+          }
+        }
+
+        if(Number.isFinite(current)){
+          best.preco=autoOfferFormatBRL(current,'BRL');
+          if(Number.isFinite(original)&&original>current)best.precoOriginal=autoOfferFormatBRL(original,'BRL');
+          best.fonte='mercado-livre-html';
+        }
+      }catch(e){
+        addLog('Mercado Livre fallback HTML ignorado: '+e.message);
+      }
+    }
+
+    // Último recurso: consulta somente a página final pelo navegador.
     if(best && !best.preco){
       try{
         const browserOffer=await getMercadoLivreBrowserPriceInfo(page.finalUrl||url);
