@@ -1742,7 +1742,7 @@ async function getMercadoLivreOfferInfo(url){
   return null;
 }
 
-async async function getMercadoLivreBrowserPriceInfo(url){
+async function getMercadoLivreBrowserPriceInfo(url){
   let context=null;
   try{
     await assertSafeExternalUrl(url);
