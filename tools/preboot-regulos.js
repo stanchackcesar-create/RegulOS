@@ -17,7 +17,7 @@ require(path.join(ROOT, 'tools', 'fix-auto-offer-image.js'));
 
 // Mercado Livre: se a API pública do item estiver bloqueada/sem preço,
 // o extrator usa o DOM real do produto pelo navegador.
-require(path.join(ROOT, 'tools', 'patch_ml_price.py'));
+require(path.join(ROOT, 'tools', 'patch_ml_price.js'));
 
 // A lógica atual de agendamento por múltiplos grupos já está integrada em
 // server.js/index.html. Não executar o patch legado, pois ele reintroduz a
