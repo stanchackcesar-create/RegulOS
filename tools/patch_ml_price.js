@@ -1,0 +1,186 @@
+const fs = require('fs');
+const path = require('path');
+
+const serverPath = path.join(__dirname, '..', 'src', 'server.js');
+let text = fs.readFileSync(serverPath, 'utf8');
+
+if (text.includes('REGULOS_ML_PRICE_V2')) process.exit(0);
+
+const start = text.indexOf('async function getMercadoLivreOfferInfo(url){');
+const end = text.indexOf('async function findProductImage(url) {', start);
+
+if (start < 0 || end < 0) {
+  console.error('Patch ML preço: função não encontrada.');
+  process.exit(1);
+}
+
+const replacement = String.raw`// REGULOS_ML_PRICE_V2
+// Fallback de preço: API pública -> página real renderizada pelo Playwright.
+// Nunca inventa preço; só aceita valores encontrados na fonte.
+async function getMercadoLivreOfferInfo(url){
+  let best=null;
+  try{
+    const page=await fetchText(url);
+    const source=\`\${page.finalUrl||''}\\n\${page.data||''}\`;
+    const ids=[]; const seen=new Set();
+
+    for(const m of source.matchAll(/\\bMLB[-_]?\\d{5,}\\b/gi)){
+      const id=String(m[0]).toUpperCase().replace(/[-_]/g,'');
+      if(!seen.has(id)){seen.add(id);ids.push(id);}
+    }
+
+    for(const id of ids.slice(0,10)){
+      try{
+        const api=await fetchText(\`https://api.mercadolibre.com/items/\${id}\`);
+        const data=JSON.parse(api.data||'{}');
+        if(!data?.id) continue;
+
+        const price=Number(data.price);
+        const original=Number(data.original_price);
+        const basePrice=Number(data.base_price);
+        const current=Number.isFinite(price)&&price>0?price:NaN;
+        const originalValue=Number.isFinite(original)&&original>current
+          ? original
+          : (Number.isFinite(basePrice)&&basePrice>current ? basePrice : NaN);
+
+        let desconto='';
+        if(Number.isFinite(current)&&Number.isFinite(originalValue)&&originalValue>current){
+          desconto=Math.round((1-current/originalValue)*100)+'%';
+        }
+
+        let imagem='';
+        for(const picture of (Array.isArray(data.pictures)?data.pictures:[])){
+          const image=picture?.secure_url||picture?.url;
+          if(image&&/^https?:\\/\\//i.test(image)){imagem=image;break;}
+        }
+
+        const candidate={
+          titulo:String(data.title||'').trim(),
+          preco:Number.isFinite(current)?autoOfferFormatBRL(current,'BRL'):'',
+          precoOriginal:Number.isFinite(originalValue)?autoOfferFormatBRL(originalValue,'BRL'):'',
+          desconto,
+          imagemUrl:imagem,
+          finalUrl:page.finalUrl||url,
+          fonte:'mercado-livre-api'
+        };
+
+        if(!best || candidate.preco || candidate.precoOriginal || candidate.imagemUrl) best=candidate;
+        if(candidate.preco) return candidate;
+      }catch(e){
+        addLog(\`Mercado Livre API sem acesso ao item \${id}: \${e.message}\`);
+      }
+    }
+
+    const browser=await getRegulosBrowser();
+    const context=await browser.newContext({
+      userAgent:'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/154 Safari/537.36',
+      locale:'pt-BR',
+      viewport:{width:1365,height:900},
+      javaScriptEnabled:true,
+      ignoreHTTPSErrors:true
+    });
+    const browserPage=await context.newPage();
+
+    try{
+      await browserPage.goto(page.finalUrl||url,{waitUntil:'domcontentloaded',timeout:35000});
+      await browserPage.waitForTimeout(1800);
+
+      const extracted=await browserPage.evaluate(()=>{
+        const normalize=s=>String(s||'').replace(/\\s+/g,' ').trim();
+        const parseMoney=s=>{
+          const m=normalize(s).match(/R\\$\\s*([0-9.]+(?:,[0-9]{1,2})?)/i);
+          if(!m)return NaN;
+          const n=Number(m[1].replace(/\\./g,'').replace(',','.'));
+          return Number.isFinite(n)&&n>0?n:NaN;
+        };
+
+        const current=[], original=[];
+        const add=(arr,value)=>{
+          const n=parseMoney(value);
+          if(Number.isFinite(n)&&!arr.includes(n))arr.push(n);
+        };
+
+        const selectors=[
+          '.ui-pdp-price__second-line .andes-money-amount',
+          '.ui-pdp-price .andes-money-amount',
+          '[data-testid*="price"] .andes-money-amount',
+          '.poly-price__current .andes-money-amount',
+          '.andes-money-amount'
+        ];
+
+        for(const selector of selectors){
+          for(const el of document.querySelectorAll(selector)){
+            const value=el.innerText||el.textContent||'';
+            if(!/R\\$/i.test(value))continue;
+            const cls=(String(el.className||'')+' '+String(el.parentElement?.className||'')).toLowerCase();
+            if(/previous|old|original|before|strike|s-price/.test(cls)) add(original,value);
+            else add(current,value);
+          }
+          if(current.length) break;
+        }
+
+        for(const el of document.querySelectorAll('s .andes-money-amount,.andes-money-amount--previous,.ui-pdp-price__original .andes-money-amount')){
+          add(original,el.innerText||el.textContent||'');
+        }
+
+        for(const el of document.querySelectorAll('meta[property="product:price:amount"],meta[property="og:price:amount"]')){
+          add(current,el.getAttribute('content')||'');
+        }
+
+        const title=normalize(
+          document.querySelector('h1.ui-pdp-title,h1')?.innerText ||
+          document.querySelector('meta[property="og:title"]')?.getAttribute('content') || ''
+        );
+
+        const image=
+          document.querySelector('meta[property="og:image"]')?.getAttribute('content') ||
+          document.querySelector('.ui-pdp-gallery img')?.currentSrc ||
+          document.querySelector('.ui-pdp-gallery img')?.src || '';
+
+        const body=normalize(document.body?.innerText||'');
+        const discountMatch=body.match(/(?:-|desconto|off)?\\s*(\\d{1,3})\\s*%\\s*OFF/i);
+
+        return {
+          title,
+          current:[...new Set(current)].sort((a,b)=>a-b),
+          original:[...new Set(original)].sort((a,b)=>b-a),
+          image,
+          discount:discountMatch?.[1]?discountMatch[1]+'%':''
+        };
+      });
+
+      if(extracted.current?.length){
+        const current=extracted.current[0];
+        const original=extracted.original?.find(n=>n>current) || NaN;
+        const merged={
+          ...(best||{}),
+          titulo:String(extracted.title||best?.titulo||'').trim(),
+          preco:autoOfferFormatBRL(current,'BRL'),
+          precoOriginal:Number.isFinite(original)?autoOfferFormatBRL(original,'BRL'):(best?.precoOriginal||''),
+          desconto:extracted.discount || best?.desconto || '',
+          imagemUrl:extracted.image || best?.imagemUrl || '',
+          finalUrl:page.finalUrl||url,
+          fonte:'mercado-livre-browser'
+        };
+        if(!merged.desconto && Number.isFinite(original) && original>current){
+          merged.desconto=Math.round((1-current/original)*100)+'%';
+        }
+        return merged;
+      }
+
+      if(best?.preco || best?.precoOriginal) return best;
+      return null;
+    }finally{
+      await context.close().catch(()=>{});
+    }
+  }catch(e){
+    addLog(\`Mercado Livre oferta: \${e.message}\`);
+  }
+  return best?.preco || best?.precoOriginal ? best : null;
+}
+
+`;
+
+text = text.slice(0, start) + replacement + text.slice(end);
+fs.writeFileSync(serverPath, text, 'utf8');
+console.log('Patch ML preço aplicado no server.js');
