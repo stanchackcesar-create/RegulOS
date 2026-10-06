@@ -523,8 +523,8 @@ async function buildAutomaticOffer(url){
   const desconto=autoOfferDiscount(html,product,offers,priceInfo);
   let imagem=autoOfferMeta(html,'og:image') || autoOfferMeta(html,'twitter:image') || product?.image || '';
   if(Array.isArray(imagem))imagem=imagem[0]||'';
-  if(imagem && !/^https?:\\/\\//i.test(imagem))imagem='';
-  if(imagem && !/^https?:\\/\\//i.test(imagem))imagem='';
+  if(imagem && !/^https?:\/\//i.test(imagem))imagem='';
+  if(imagem && !/^https?:\/\//i.test(imagem))imagem='';
   if(!imagem && typeof findMercadoLivreImageUrl==='function')imagem=await findMercadoLivreImageUrl(url).catch(()=> '');
 
   const base={
