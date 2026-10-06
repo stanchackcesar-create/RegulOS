@@ -1,0 +1,19 @@
+{
+  "name": "regulos-mobile",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Aplicativo mobile do RegulOS baseado no painel web existente.",
+  "scripts": {
+    "cap": "cap",
+    "android": "cap open android",
+    "sync": "cap sync android",
+    "build:web": "echo O RegulOS web permanece hospedado no Railway Production."
+  },
+  "dependencies": {
+    "@capacitor/core": "^7.4.3"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3",
+    "@capacitor/android": "^7.4.3"
+  }
+}
