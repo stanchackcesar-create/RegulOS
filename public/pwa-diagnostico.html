@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#08bfff">
+<title>Diagnóstico PWA — RegulOS</title>
+<style>
+body{margin:0;background:#020817;color:#eef7ff;font:15px Arial,sans-serif;padding:20px}
+main{max-width:720px;margin:auto}
+h1{font-size:24px}
+.card{background:#0b1423;border:1px solid #263653;border-radius:14px;padding:14px;margin:10px 0}
+.ok{color:#42e58b}.bad{color:#ff6b7a}.warn{color:#ffd166}.muted{color:#9eb0ca}
+.item{padding:10px 0;border-bottom:1px solid #263653}.item:last-child{border:0}
+button{background:#1688d8;color:white;border:0;border-radius:9px;padding:11px 14px;font-weight:700;margin:5px 5px 5px 0}
+pre{white-space:pre-wrap;word-break:break-word;background:#030811;padding:10px;border-radius:9px}
+</style>
+</head>
+<body>
+<main>
+<h1>🔎 Diagnóstico PWA — RegulOS</h1>
+<p class="muted">Esta página verifica a instalação no Chrome sem alterar dados do RegulOS.</p>
+<div id="status" class="card">⏳ Verificando...</div>
+<div id="checks" class="card"></div>
+<div class="card">
+<button id="install" hidden>📲 Instalar RegulOS</button>
+<button id="update">🔄 Atualizar Service Worker</button>
+<button id="reload">↻ Recarregar</button>
+</div>
+<div class="card"><b>Detalhes</b><pre id="details">Aguardando...</pre></div>
+</main>
+<script>
+let deferredPrompt=null;
+const $=id=>document.getElementById(id);
+const rows=[];
+function add(name,ok,detail,level){
+  rows.push({name,ok,detail,level});
+  const cls=level==='warn'?'warn':ok?'ok':'bad';
+  $('checks').innerHTML=rows.map(x=>'<div class="item"><b class="'+(x.level==='warn'?'warn':x.ok?'ok':'bad')+'">'+(x.level==='warn'?'⚠️':x.ok?'✅':'❌')+' '+x.name+'</b><br><span class="muted">'+x.detail+'</span></div>').join('');
+}
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault(); deferredPrompt=e; $('install').hidden=false;
+  $('status').innerHTML='<span class="ok">✅ Chrome liberou o fluxo de instalação.</span>';
+});
+$('install').onclick=async()=>{
+  if(!deferredPrompt)return;
+  deferredPrompt.prompt();
+  const r=await deferredPrompt.userChoice;
+  $('details').textContent+='\nInstalação: '+r.outcome;
+  deferredPrompt=null; $('install').hidden=true;
+};
+async function check(){
+  rows.length=0;
+  add('HTTPS / contexto seguro',location.protocol==='https:',location.href,'');
+  let manifestOk=false;
+  try{
+    const r=await fetch('/manifest.json',{cache:'no-store'});
+    const text=await r.text();
+    const m=JSON.parse(text);
+    manifestOk=r.ok && !!m;
+    add('Manifest HTTP',r.ok,'HTTP '+r.status+' — Content-Type: '+(r.headers.get('content-type')||'não informado'),'');
+    add('Manifest JSON',true,'name='+m.name+' | start_url='+m.start_url+' | display='+m.display,'');
+    add('Nome/short_name',!!(m.name||m.short_name),String(m.name||m.short_name||'ausente'),'');
+    add('start_url',!!m.start_url,String(m.start_url||'ausente'),'');
+    add('display standalone',m.display==='standalone'||m.display==='fullscreen'||m.display==='minimal-ui'||m.display==='window-controls-overlay','display='+m.display,'');
+    add('prefer_related_applications',m.prefer_related_applications!==true,'valor='+String(m.prefer_related_applications),'');
+    for(const size of [192,512]){
+      const icon=m.icons?.find(x=>x.sizes?.includes(size+'x'+size));
+      if(!icon){add('Ícone '+size+'x'+size,false,'não encontrado no manifest','');continue}
+      const ir=await fetch(icon.src,{cache:'no-store'});
+      add('Ícone '+size+'x'+size,ir.ok,'HTTP '+ir.status+' — '+icon.src+' — '+(ir.headers.get('content-type')||''),'');
+    }
+    $('details').textContent=JSON.stringify(m,null,2);
+  }catch(e){
+    add('Manifest',false,e.message,'');
+    $('details').textContent=String(e.stack||e);
+  }
+  if('serviceWorker' in navigator){
+    try{
+      const reg=await navigator.serviceWorker.register('/service-worker.js',{scope:'/',updateViaCache:'none'});
+      await reg.update().catch(()=>{});
+      add('Service Worker registrado',true,'scope='+reg.scope+' | state='+(reg.active?.state||reg.installing?.state||reg.waiting?.state||'desconhecido'),'');
+      add('Service Worker controlando esta página',!!navigator.serviceWorker.controller,navigator.serviceWorker.controller?'SIM':'AINDA NÃO — recarregue a página depois do registro','');
+    }catch(e){add('Service Worker registrado',false,e.message,'')}
+  }else add('Service Worker API',false,'Chrome não expôs navigator.serviceWorker','');
+  add('Manifest link na página',!!document.querySelector('link[rel="manifest"]'),document.querySelector('link[rel="manifest"]')?.href||'ausente','');
+  add('Tempo/engajamento','performance' in window,true,'warn');
+  $('status').innerHTML='<span class="warn">⚠️ Diagnóstico concluído. Se aparecer ❌, encontramos o bloqueio.</span>';
+}
+$('update').onclick=async()=>{try{const r=await navigator.serviceWorker.getRegistration('/');await r?.update();alert('Service Worker atualizado. Recarregue a página.')}catch(e){alert(e.message)}};
+$('reload').onclick=()=>location.reload();
+check();
+setTimeout(()=>add('Tempo mínimo de uso',true,'Fique nesta página por pelo menos 30 segundos e toque na tela para permitir que o Chrome avalie a promoção de instalação.','warn'),30000);
+</script>
+</body>
+</html>
