@@ -21,6 +21,7 @@ const dns = require('dns').promises;
 const net = require('net');
 const zlib = require('zlib');
 const crypto = require('crypto');
+const { createShopeeIntegration, isShopeeHost } = require('./shopee');
 const { chromium } = require('playwright');
 
 const ROOT = path.join(__dirname, '..');
@@ -282,6 +283,45 @@ app.post('/api/auth/heartbeat',(req,res)=>{
 
 app.get('/login',(req,res)=>res.sendFile(path.join(PUBLIC,'login.html')));
 app.get('/configurar',(req,res)=>res.sendFile(path.join(PUBLIC,'configurar.html')));
+app.get('/integracoes',(req,res)=>res.sendFile(path.join(PUBLIC,'integracoes.html')));
+
+const shopeeIntegration = createShopeeIntegration({dataDir:DATA});
+
+app.get('/api/integracoes/shopee/status',requireAuth,requireAdmin,(req,res)=>{
+  res.set('Cache-Control','no-store');
+  res.json({ok:true,...shopeeIntegration.publicStatus()});
+});
+
+app.get('/api/integracoes/shopee/authorize',requireAuth,requireAdmin,(req,res)=>{
+  try{
+    const url=shopeeIntegration.authorizationUrl();
+    res.json({ok:true,url});
+  }catch(e){res.status(400).json({ok:false,msg:e.message||'Não foi possível iniciar a autorização Shopee.'});}
+});
+
+app.get('/integracoes/shopee/callback',async(req,res)=>{
+  const state=String(req.query?.state||'');
+  const code=String(req.query?.code||'');
+  const stateFile=path.join(DATA,'shopee_oauth_state.json');
+  let saved={};
+  try{saved=JSON.parse(fs.readFileSync(stateFile,'utf8'));}catch{}
+  try{fs.rmSync(stateFile,{force:true});}catch{}
+  if(!state || !saved.state || state!==saved.state || Number(saved.expiresAt||0)<Date.now()){
+    return res.status(400).send('<h2>Autorização Shopee inválida ou expirada.</h2><p>Volte ao RegulOS e inicie a conexão novamente.</p>');
+  }
+  if(!code) return res.status(400).send('<h2>A Shopee não retornou o código de autorização.</h2>');
+  try{
+    await shopeeIntegration.exchangeCode(code);
+    res.send('<h2>✅ Shopee conectada ao RegulOS.</h2><p>Você já pode fechar esta janela e voltar ao painel de Integrações.</p><script>setTimeout(()=>location.href="/integracoes",1200)</script>');
+  }catch(e){
+    res.status(502).send('<h2>Falha ao conectar a Shopee</h2><p>'+String(e.message||'Erro').replace(/[<>]/g,'')+'</p><p><a href="/integracoes">Voltar</a></p>');
+  }
+});
+
+app.post('/api/integracoes/shopee/disconnect',requireAuth,requireAdmin,(req,res)=>{
+  shopeeIntegration.disconnect();
+  res.json({ok:true,msg:'Shopee desconectada. Os tokens salvos foram removidos.'});
+});
 
 // A partir daqui, todo o painel e todas as APIs do RegulOS exigem login.
 // REGULOS_AUTO_OFFER_V1
@@ -602,6 +642,19 @@ async function extractUniversalOfferWithBrowser(url){
   }
 }
 async function buildAutomaticOffer(url){
+  try{
+    const host=new URL(url).hostname.toLowerCase().replace(/^www\\./,'');
+    if(isShopeeHost(host) && shopeeIntegration.publicStatus().connected){
+      try{
+        const apiOffer=await shopeeIntegration.getProductByUrl(url);
+        if(apiOffer?.titulo || apiOffer?.preco || apiOffer?.imagemUrl){
+          return apiOffer;
+        }
+      }catch(e){
+        addLog('Shopee API: '+e.message);
+      }
+    }
+  }catch{}
   const page=await fetchText(url);
   const html=String(page.data||'');
   const product=autoOfferJsonLd(html);
