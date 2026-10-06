@@ -645,7 +645,7 @@ async function extractUniversalOfferWithBrowser(url){
 async function buildAutomaticOffer(url){
   try{
     const host=new URL(url).hostname.toLowerCase().replace(/^www\\./,'');
-    if(/(?:^|\\.)mercadolivre\\.com\\.br$/i.test(host)){
+    if(/(?:^|\\.)(?:mercadolivre\\.com\\.br|meli\\.la)$/i.test(host)){
       try{
         const mlOffer=await getMercadoLivreOfferInfo(url);
         if(mlOffer?.titulo || mlOffer?.preco || mlOffer?.precoOriginal || mlOffer?.imagemUrl){
@@ -1669,7 +1669,7 @@ async function getMercadoLivreOfferInfo(url){
     const page=await fetchText(url);
     const source=`${page.finalUrl||''}\n${page.data||''}`;
     const ids=[]; const seen=new Set();
-    for(const m of source.matchAll(/\\bMLB[-_]?\\d{5,}\\b/gi)){
+    for(const m of source.matchAll(/\bMLB[-_]?\d{5,}\b/gi)){
       const id=String(m[0]).toUpperCase().replace(/[-_]/g,'');
       if(!seen.has(id)){seen.add(id);ids.push(id);}
     }
