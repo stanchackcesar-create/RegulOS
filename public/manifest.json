@@ -1,0 +1,19 @@
+{
+  "name": "RegulOS",
+  "short_name": "RegulOS",
+  "description": "Painel de gerenciamento e automação do RegulOS",
+  "lang": "pt-BR",
+  "start_url": "/login",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#020817",
+  "theme_color": "#08bfff",
+  "icons": [
+    {
+      "src": "/icons/regulos.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
