@@ -6,14 +6,13 @@
   "scripts": {
     "cap": "cap",
     "android": "cap open android",
-    "sync": "cap sync android",
-    "build:web": "echo O RegulOS web permanece hospedado no Railway Production."
+    "sync": "cap sync android"
   },
   "dependencies": {
-    "@capacitor/core": "^7.4.3"
+    "@capacitor/core": "^8.0.0"
   },
   "devDependencies": {
-    "@capacitor/cli": "^7.4.3",
-    "@capacitor/android": "^7.4.3"
+    "@capacitor/cli": "^8.0.0",
+    "@capacitor/android": "^8.0.0"
   }
 }
