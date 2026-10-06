@@ -148,5 +148,14 @@ button:hover{filter:brightness(1.08);box-shadow:0 0 26px rgba(34,211,238,.28),0 
 async function init(){try{const r=await fetch('/api/auth/status');const d=await r.json();if(d.autenticado)location.href='/';if(!d.configurado)location.href='/configurar';}catch(e){document.getElementById('e').textContent='Servidor indisponível.'}}
 document.getElementById('f').onsubmit=async e=>{e.preventDefault();const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario:u.value,senha:s.value})});const d=await r.json();if(r.ok)location.href='/';else document.getElementById('e').className='err',document.getElementById('e').textContent=d.msg||'Não foi possível entrar.'};init();
 </script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+      .then(() => console.log('RegulOS PWA: service worker ativo'))
+      .catch(err => console.warn('RegulOS PWA: falha ao registrar service worker', err));
+  });
+}
+</script>
 </body>
 </html>
