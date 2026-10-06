@@ -3,7 +3,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const HOST = 'https://partner.shopeemobile.com';
-const AUTH_HOST = 'https://open.shopee.com.br/auth';
+const AUTH_HOST = 'https://partner.shopeemobile.com';
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
 function nowSec(){ return Math.floor(Date.now()/1000); }
@@ -148,16 +148,18 @@ function createShopeeIntegration({dataDir}){
     if(!c.partnerId || !c.redirectUri) throw new Error('Configure REGULOS_SHOPEE_PARTNER_ID e REGULOS_SHOPEE_REDIRECT_URI no Railway.');
     const state=crypto.randomBytes(32).toString('hex');
     writeJson(stateFile,{state,expiresAt:Date.now()+OAUTH_STATE_TTL_MS});
-    const u=new URL(AUTH_HOST);
+    const apiPath='/api/v2/shop/auth_partner';
+    const timestamp=nowSec();
+    const sign=hmac(c.partnerId+apiPath+timestamp,c.partnerKey);
+    const u=new URL(c.apiHost+apiPath);
     u.searchParams.set('partner_id',c.partnerId);
-    u.searchParams.set('auth_type','seller');
-    u.searchParams.set('redirect_uri',c.redirectUri);
-    u.searchParams.set('response_type','code');
-    u.searchParams.set('state',state);
+    u.searchParams.set('timestamp',String(timestamp));
+    u.searchParams.set('sign',sign);
+    u.searchParams.set('redirect',c.redirectUri);
     return u.toString();
   }
 
-  async function exchangeCode(code){
+  async function exchangeCode(code,shopId){
     const c=config();
     if(!configured()) throw new Error('A integração Shopee ainda não está configurada no Railway.');
     const timestamp=nowSec();
@@ -167,10 +169,11 @@ function createShopeeIntegration({dataDir}){
     u.searchParams.set('partner_id',c.partnerId);
     u.searchParams.set('timestamp',String(timestamp));
     u.searchParams.set('sign',sign);
-    const response=await fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code,partner_id:Number(c.partnerId)})});
+    const response=await fetch(u,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code,shop_id:Number(shopId),partner_id:Number(c.partnerId)})});
     const data=await response.json().catch(()=>({}));
     if(!response.ok || data.error) throw new Error(data.message||data.error||'A Shopee recusou a autorização.');
     const shopIds=(data.shop_id_list||[]).map(Number).filter(Number.isFinite);
+    if(!shopIds.length && shopId) shopIds.push(Number(shopId));
     if(!shopIds.length && data.shop_id) shopIds.push(Number(data.shop_id));
     if(!shopIds.length) throw new Error('A Shopee autorizou, mas não retornou o shop_id.');
     const primaryShopId=shopIds[0];
