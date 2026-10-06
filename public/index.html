@@ -1656,5 +1656,14 @@ document.getElementById('qrModal')?.addEventListener('click',e=>{if(e.target.id=
     moveFloatingControlsToRoot();
   }
 })();
-</script></body>
+</script><script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+      .then(() => console.log('RegulOS PWA: service worker ativo'))
+      .catch(err => console.warn('RegulOS PWA: falha ao registrar service worker', err));
+  });
+}
+</script>
+</body>
 </html>
