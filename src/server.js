@@ -1692,11 +1692,11 @@ async function getMercadoLivreOfferInfo(url){
           let imagem='';
           for(const picture of (Array.isArray(data.pictures)?data.pictures:[])){
             const image=picture?.secure_url||picture?.url;
-            if(image&&/^https?:\\/\\//i.test(image)){imagem=image;break;}
+            if(image&&/^https?:\/\//i.test(image)){imagem=image;break;}
           }
           if(!imagem){
             const thumb=data.secure_thumbnail||data.thumbnail;
-            if(thumb&&/^https?:\\/\\//i.test(thumb))imagem=thumb;
+            if(thumb&&/^https?:\/\//i.test(thumb))imagem=thumb;
           }
           return {
             titulo:String(data.title||'').trim(),
