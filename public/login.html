@@ -141,12 +141,21 @@ button:hover{filter:brightness(1.08);box-shadow:0 0 26px rgba(34,211,238,.28),0 
     <label>Senha</label><input id="s" type="password" autocomplete="current-password" required>
     <button>Entrar</button>
   </form>
+  <button type="button" id="forgot" style="margin-top:10px;background:transparent;border:1px solid #35506f;box-shadow:none;color:#9fefff">Esqueci minha senha</button>
+  <form id="rf" style="display:none;margin-top:10px">
+    <label>Usuário</label><input id="ru" autocomplete="username">
+    <label>Chave de recuperação</label><input id="rk" type="password" autocomplete="off">
+    <label>Nova senha</label><input id="rs" type="password" autocomplete="new-password" minlength="6">
+    <button>Redefinir senha</button>
+  </form>
   <div id="e"></div>
   <div class="small">A sessão do WhatsApp e os dados continuam compartilhados entre os usuários autorizados.</div>
 </div>
 <script>
 async function init(){try{const r=await fetch('/api/auth/status');const d=await r.json();if(d.autenticado)location.href='/';if(!d.configurado)location.href='/configurar';}catch(e){document.getElementById('e').textContent='Servidor indisponível.'}}
-document.getElementById('f').onsubmit=async e=>{e.preventDefault();const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario:u.value,senha:s.value})});const d=await r.json();if(r.ok)location.href='/';else document.getElementById('e').className='err',document.getElementById('e').textContent=d.msg||'Não foi possível entrar.'};init();
+document.getElementById('f').onsubmit=async e=>{e.preventDefault();const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario:u.value,senha:s.value})});const d=await r.json();if(r.ok)location.href='/';else document.getElementById('e').className='err',document.getElementById('e').textContent=d.msg||'Não foi possível entrar.'};
+document.getElementById('forgot').onclick=()=>{const f=document.getElementById('rf');f.style.display=f.style.display==='none'?'block':'none';document.getElementById('e').textContent=''};
+document.getElementById('rf').onsubmit=async e=>{e.preventDefault();const box=document.getElementById('e');box.textContent='';const r=await fetch('/api/auth/recover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario:ru.value,recoveryKey:rk.value,novaSenha:rs.value})});const d=await r.json();if(r.ok)location.href='/';else box.className='err',box.textContent=d.msg||'Não foi possível recuperar a senha.'};init();
 </script>
 <script>
 if ('serviceWorker' in navigator) {
