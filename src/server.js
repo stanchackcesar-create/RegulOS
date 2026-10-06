@@ -413,85 +413,176 @@ async function extractUniversalOfferWithBrowser(url){
       ignoreHTTPSErrors:true
     });
     const page=await context.newPage();
-    await page.goto(url,{waitUntil:'domcontentloaded',timeout:35000});
-    await page.waitForTimeout(4500);
 
-    const data=await page.evaluate(()=>{
-      const clean=v=>String(v||'').replace(/\\s+/g,' ').trim();
+    const sourceUrl=String(url||'').trim();
+    const sourceHost=new URL(sourceUrl).hostname.toLowerCase().replace(/^www\./,'');
+    const isShopee=/^(?:shopee\.com\.br|shopee\.com)$/i.test(sourceHost);
+    const sourcePath=new URL(sourceUrl).pathname;
+
+    // A URL da Shopee normalmente carrega o shopId/itemId no formato
+    // /nome-do-produto-i.SHOP_ID.ITEM_ID ou /product/SHOP_ID/ITEM_ID.
+    // Guardamos esses IDs para não aceitar a homepage como se fosse o produto.
+    let expectedItemId='';
+    if(isShopee){
+      expectedItemId=
+        (sourcePath.match(/(?:^|[/-])i\.\d+\.(\d+)(?:[/?]|$)/i)||[])[1] ||
+        (sourcePath.match(/\/product\/\d+\/(\d+)/i)||[])[1] ||
+        (new URL(sourceUrl).searchParams.get('itemId')||new URL(sourceUrl).searchParams.get('item_id')||'');
+    }
+
+    await page.goto(sourceUrl,{waitUntil:'domcontentloaded',timeout:35000});
+    await page.waitForTimeout(5500);
+
+    const data=await page.evaluate(({isShopee,expectedItemId})=>{
+      const clean=v=>String(v||'').replace(/\s+/g,' ').trim();
       const prices=[];
       const addPrice=v=>{
-        const s=String(v||'').replace(/\\s+/g,' ');
-        const matches=s.match(/R\\$\\s*([0-9.]+(?:,[0-9]{2})?)/g)||[];
+        const s=String(v||'').replace(/\s+/g,' ');
+        const matches=s.match(/R\$\s*([0-9.]+(?:,[0-9]{2})?)/g)||[];
         for(const m of matches){
-          const n=Number(m.replace(/[^0-9,]/g,'').replace(/\\./g,'').replace(',','.'));
+          const n=Number(m.replace(/[^0-9,]/g,'').replace(/\./g,'').replace(',','.'));
           if(Number.isFinite(n)&&n>0&&n<100000000) prices.push(n);
         }
       };
-      const textOf=el=>el?clean(el.textContent||el.getAttribute?.('content')||''):'';
+
       const titleCandidates=[];
-      const addTitle=v=>{const s=clean(v);if(s&&s.length>=4&&!titleCandidates.includes(s))titleCandidates.push(s)};
-      document.querySelectorAll('h1,[data-testid*="title"],[class*="title"],meta[property="og:title"],meta[name="twitter:title"]').forEach(el=>{
+      const addTitle=v=>{
+        const s=clean(v);
+        if(s&&s.length>=4&&!titleCandidates.includes(s)) titleCandidates.push(s);
+      };
+
+      const imageCandidates=[];
+      const addImage=v=>{
+        const s=clean(v);
+        if(/^https?:\/\//i.test(s)&&!imageCandidates.includes(s)) imageCandidates.push(s);
+      };
+
+      // Primeiro procura dados estruturados/embutidos, que são mais confiáveis
+      // do que varrer todo o body da página.
+      const structured=[];
+      const addStructured=(value)=>{
+        if(value===null||value===undefined)return;
+        if(typeof value==='object') structured.push(value);
+        else if(typeof value==='string' && value.length>20){
+          try{
+            const parsed=JSON.parse(value);
+            if(parsed && typeof parsed==='object') structured.push(parsed);
+          }catch{}
+        }
+      };
+      document.querySelectorAll('script[type="application/ld+json"],script#__NEXT_DATA__,script').forEach(el=>{
+        const raw=el.textContent||'';
+        if(/product|item_id|itemId|shopid|shopId|price_before_discount|priceBeforeDiscount|model_price/i.test(raw)){
+          addStructured(raw);
+        }
+      });
+
+      const walk=(obj,depth=0)=>{
+        if(!obj||depth>7||typeof obj!=='object')return;
+        if(Array.isArray(obj)){obj.slice(0,100).forEach(x=>walk(x,depth+1));return;}
+        const keys=Object.keys(obj);
+        const item=String(obj.itemid??obj.itemId??obj.item_id??'');
+        const title=String(obj.name??obj.title??obj.productName??'');
+        const priceRaw=obj.price??obj.priceMin??obj.minPrice??obj.currentPrice??obj.salePrice;
+        const originalRaw=obj.price_before_discount??obj.priceBeforeDiscount??obj.originalPrice??obj.listPrice;
+        if(item && (!expectedItemId || item===expectedItemId)){
+          if(title) addTitle(title);
+          addPrice(typeof priceRaw==='number'?('R$ '+(priceRaw/100000).toFixed(2).replace('.',',')):priceRaw);
+          addPrice(typeof originalRaw==='number'?('R$ '+(originalRaw/100000).toFixed(2).replace('.',',')):originalRaw);
+          const imgs=obj.images??obj.image??obj.imageUrl??obj.image_url;
+          if(Array.isArray(imgs)) imgs.slice(0,10).forEach(addImage);
+          else addImage(imgs);
+        }
+        for(const v of Object.values(obj)) if(v&&typeof v==='object') walk(v,depth+1);
+      };
+      structured.forEach(x=>walk(x));
+
+      document.querySelectorAll('h1,[data-testid*="title"],[class*="product"][class*="title"],[class*="Product"][class*="Title"],meta[property="og:title"],meta[name="twitter:title"]').forEach(el=>{
         addTitle(el.getAttribute?.('content')||el.textContent);
       });
-      addTitle(document.title);
 
       const priceSelectors=[
         'meta[property="product:price:amount"]','meta[property="og:price:amount"]',
-        '[data-testid*="price"]','[class*="price"]','[class*="Price"]',
-        '[class*="sale"]','[class*="Sale"]','[class*="amount"]','[class*="Amount"]'
+        '[data-testid*="price"]','[class*="product"][class*="price"]','[class*="Product"][class*="Price"]',
+        '[class*="sale"][class*="price"]','[class*="Sale"][class*="Price"]'
       ];
       for(const sel of priceSelectors){
         try{document.querySelectorAll(sel).forEach(el=>addPrice(el.getAttribute?.('content')||el.textContent));}catch{}
       }
-      addPrice(document.body?.innerText||'');
 
-      let image='';
-      const imageCandidates=[];
-      const addImage=v=>{
-        const s=clean(v);
-        if(/^https?:\/\//i.test(s)&&!imageCandidates.includes(s))imageCandidates.push(s);
-      };
-      document.querySelectorAll('meta[property="og:image"],meta[property="og:image:url"],meta[name="twitter:image"],img').forEach(el=>{
-        addImage(el.getAttribute?.('content')||el.currentSrc||el.src);
-      });
-      image=imageCandidates[0]||'';
-
-      let discount='';
       const discountTexts=[];
-      document.querySelectorAll('[class*="discount"],[class*="Discount"],[class*="percent"],[class*="Percent"],[data-testid*="discount"]').forEach(el=>{
-        const s=textOf(el);
+      document.querySelectorAll('[class*="discount"],[class*="Discount"],[data-testid*="discount"],[class*="percent"],[class*="Percent"]').forEach(el=>{
+        const s=clean(el.textContent);
         if(s) discountTexts.push(s);
       });
-      const allDiscount=(discountTexts.join(' ').match(/(?:-|off|desconto)?\\s*(\\d{1,3})\\s*%/i)||[]);
-      if(allDiscount[1]) discount=allDiscount[1]+'%';
+      const allDiscount=(discountTexts.join(' ').match(/(?:-|off|desconto)?\s*(\d{1,3})\s*%/i)||[]);
+
+      document.querySelectorAll('meta[property="og:image"],meta[property="og:image:url"],meta[name="twitter:image"]').forEach(el=>{
+        addImage(el.getAttribute?.('content'));
+      });
+      // Só aceita imagens <img> quando aparentam pertencer ao conteúdo do produto.
+      document.querySelectorAll('main img,[role="main"] img,[class*="product"] img,[class*="Product"] img').forEach(el=>{
+        addImage(el.currentSrc||el.src);
+      });
+
+      const body=clean(document.body?.innerText||'').slice(0,50000);
+      const finalUrl=location.href;
+      const finalPath=location.pathname;
+      const looksLikeShopeeProduct=isShopee && (
+        /\/product\/\d+\/\d+/i.test(finalPath) ||
+        /(?:^|[/-])i\.\d+\.\d+(?:[/?]|$)/i.test(finalPath) ||
+        (expectedItemId && body.includes(expectedItemId))
+      );
 
       return {
-        finalUrl:location.href,
-        titulo:titleCandidates.find(x=>!/^shopee|mercado livre|amazon|produto$/i.test(x))||titleCandidates[0]||'',
+        finalUrl,
+        finalPath,
+        looksLikeShopeeProduct,
+        titulo:titleCandidates.find(x=>!/^shopee(?: brasil)?(?:\s*\|.*)?$/i.test(x)&&!/^mercado livre(?:\s*\|.*)?$/i.test(x)&&!/^amazon(?:\s*\|.*)?$/i.test(x))||'',
         prices:[...new Set(prices)].sort((a,b)=>a-b),
-        imagem:image,
-        desconto:discount,
-        bodyText:clean(document.body?.innerText||'').slice(0,50000)
+        imagens:imageCandidates,
+        desconto:allDiscount[1]?allDiscount[1]+'%':'',
+        bodyText:body
       };
-    });
+    },{isShopee,expectedItemId});
+
+    // Se a Shopee mandou o navegador para a home, nunca devolvemos
+    // título/logo/preço da home como se fossem dados do produto.
+    if(isShopee && expectedItemId && !data.looksLikeShopeeProduct){
+      return {
+        titulo:'',
+        preco:'',
+        precoOriginal:'',
+        desconto:'',
+        imagemUrl:'',
+        finalUrl:data.finalUrl||sourceUrl,
+        fonte:'navegador-bloqueado',
+        aviso:'A Shopee redirecionou ou bloqueou a página do produto para este servidor. Nenhum dado da homepage foi usado.'
+      };
+    }
 
     const prices=Array.isArray(data.prices)?data.prices.filter(Number.isFinite):[];
     let preco='';
     let precoOriginal='';
-    if(prices.length===1){preco=prices[0];}
+    if(prices.length===1) preco=prices[0];
     else if(prices.length>1){
       preco=Math.min(...prices);
       precoOriginal=Math.max(...prices);
     }
+
     let desconto=String(data.desconto||'');
     if(!desconto && preco && precoOriginal && precoOriginal>preco){
       desconto=Math.round((1-(preco/precoOriginal))*100)+'%';
     }
 
-    let imagemUrl=String(data.imagem||'');
+    let imagemUrl=Array.isArray(data.imagens)?data.imagens.find(x=>{
+      const s=String(x||'').toLowerCase();
+      return s && !/logo|icon|sprite|favicon|shopee\.com\.br\/.*logo/i.test(s);
+    })||'':'';
+
     if(!imagemUrl){
       try{
-        const browserImage=await findProductImageWithBrowser(data.finalUrl||url);
+        const browserImage=await findProductImageWithBrowser(data.finalUrl||sourceUrl);
         if(browserImage?.url) imagemUrl=browserImage.url;
       }catch{}
     }
@@ -502,14 +593,14 @@ async function extractUniversalOfferWithBrowser(url){
       precoOriginal:precoOriginal?autoOfferFormatBRL(precoOriginal,'BRL'):'',
       desconto,
       imagemUrl,
-      finalUrl:data.finalUrl||url,
-      fonte:'navegador'
+      finalUrl:data.finalUrl||sourceUrl,
+      fonte:'navegador',
+      ...(data.aviso?{aviso:data.aviso}:{})
     };
   }finally{
     if(context) await context.close().catch(()=>{});
   }
 }
-
 async function buildAutomaticOffer(url){
   const page=await fetchText(url);
   const html=String(page.data||'');
@@ -524,7 +615,6 @@ async function buildAutomaticOffer(url){
   let imagem=autoOfferMeta(html,'og:image') || autoOfferMeta(html,'twitter:image') || product?.image || '';
   if(Array.isArray(imagem))imagem=imagem[0]||'';
   if(imagem && !/^https?:\/\//i.test(imagem))imagem='';
-  if(imagem && !/^https?:\/\//i.test(imagem))imagem='';
   if(!imagem && typeof findMercadoLivreImageUrl==='function')imagem=await findMercadoLivreImageUrl(url).catch(()=> '');
 
   const base={
@@ -537,7 +627,7 @@ async function buildAutomaticOffer(url){
 
   if(missingTitle || missingPrice || !base.desconto || missingImage){
     try{
-      const browser=await extractUniversalOfferWithBrowser(page.finalUrl||url);
+      const browser=await extractUniversalOfferWithBrowser(url);
       return {
         titulo:browser.titulo||base.titulo,
         preco:browser.preco||base.preco,
