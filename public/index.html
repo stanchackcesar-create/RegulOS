@@ -292,6 +292,20 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 .account-modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
 .account-modal-head h2{margin:0}
 .account-modal-head button{border:0;border-radius:9px;background:#34455f;color:#fff;font-size:20px;min-width:42px;min-height:42px;cursor:pointer}
+
+/* REGULOS_EXTRATOR_UNIVERSAL_V1 */
+.extrator-side-panel{position:sticky;top:150px;background:linear-gradient(145deg,rgba(17,27,45,.98),rgba(7,16,31,.98));border:1px solid rgba(34,211,238,.28);border-radius:15px;padding:16px;box-shadow:0 12px 35px rgba(0,0,0,.22),0 0 22px rgba(34,211,238,.05)}
+.extrator-side-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:6px}.extrator-side-head h2{margin:0}
+.extrator-side-sub{font-size:12px;color:#9eb0ca;line-height:1.4;margin-bottom:12px}
+.extrator-side-form{display:flex;gap:7px;align-items:stretch}.extrator-side-form input{min-width:0;flex:1}.extrator-side-form button{flex:0 0 auto;white-space:nowrap}
+.extrator-side-status{min-height:20px;margin-top:9px;font-size:12px;color:#9eb0ca}
+.extrator-side-result{display:none;margin-top:10px;border:1px solid #263653;border-radius:12px;background:#0b1423;padding:11px}
+.extrator-side-result.open{display:block}.extrator-side-result-title{font-weight:800;font-size:15px;line-height:1.3}.extrator-side-meta{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}
+.extrator-side-stat{padding:8px;border:1px solid #263653;border-radius:9px;background:#07101f}.extrator-side-stat small{display:block;color:#7f91ac;font-size:10px}.extrator-side-stat b{display:block;margin-top:3px;overflow-wrap:anywhere}
+.extrator-side-image{display:flex;gap:9px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid #263653}.extrator-side-image img{width:72px;height:72px;object-fit:contain;border-radius:9px;background:#fff;border:1px solid #34445c}.extrator-side-actions{display:flex;gap:7px;margin-top:10px}.extrator-side-actions a{flex:1;text-align:center;text-decoration:none;padding:9px 8px;border-radius:9px;background:#34445c;color:#fff;font-weight:700;font-size:12px}
+.extrator-side-json{margin-top:9px;font:11px Consolas,monospace;color:#9eb0ca;white-space:pre-wrap;overflow:auto;max-height:140px}
+@media(max-width:900px){.extrator-side-panel{position:relative;top:auto}.extrator-side-form{flex-direction:column}.extrator-side-form button{width:100%;min-height:44px}.extrator-side-meta{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.extrator-side-panel{margin-top:14px}.extrator-side-head{align-items:flex-start}.extrator-side-actions{flex-direction:column}.extrator-side-actions a{min-height:42px;display:flex;align-items:center;justify-content:center}}
 </style>
 
 <style id="regulosQrModalStyle">
@@ -325,7 +339,7 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 </div>
 <button class="red" onclick="novoQR()">📱 Novo QR</button>
 <button type="button" class="desktop-logs-button" onclick="openLogsPanel()">📜 Logs</button>
-<button type="button" onclick="location.href='/extrator-universal.html'">🧪 Extrator</button>
+<button type="button" onclick="document.getElementById('extratorUniversalPanel')?.scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>document.getElementById('extratorUniversalUrl')?.focus(),350)">🧪 Extrator</button>
 </div>
 </div></header>
 
@@ -478,6 +492,16 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 </section>
 
 <aside>
+<section id="extratorUniversalPanel" class="extrator-side-panel">
+  <div class="extrator-side-head"><h2>🧪 Extrator Universal</h2><span class="badge neutral">V1</span></div>
+  <div class="extrator-side-sub">Cole um link de produto. O RegulOS resolve redirecionamentos e tenta encontrar título, preço, desconto e imagem sem salvar nada.</div>
+  <form id="extratorUniversalForm" class="extrator-side-form" autocomplete="off">
+    <input id="extratorUniversalUrl" type="url" placeholder="https://link-do-produto..." required>
+    <button class="primary" type="submit">🔎 Analisar</button>
+  </form>
+  <div id="extratorUniversalStatus" class="extrator-side-status"></div>
+  <div id="extratorUniversalResult" class="extrator-side-result"></div>
+</section>
 <div class="panel regulos-nav-source-panel">
 <div class="row" style="justify-content:space-between"><div><h2>🔗 Gerenciador de links</h2><div class="muted">Crie ou edite uma programação. Depois de salvar, ela fica somente em Agendamentos.</div></div><button class="green" onclick="showForm()">+ Adicionar link</button></div>
 <div id="linkForm" class="hidden">
@@ -1359,6 +1383,44 @@ function closeLogsPanel(){
   panel.classList.remove('logs-open');
   panel.setAttribute('aria-hidden','true');
 }
+async function analisarExtratorUniversal(url){
+  const status=document.getElementById('extratorUniversalStatus');
+  const box=document.getElementById('extratorUniversalResult');
+  if(!status||!box)return;
+  status.textContent='🔎 Consultando o link...';
+  box.classList.remove('open');box.innerHTML='';
+  try{
+    const d=await jfetch('/api/oferta-preview?url='+encodeURIComponent(url));
+    const titulo=String(d.titulo||'Produto não identificado');
+    const preco=d.preco!=null&&d.preco!==''?String(d.preco):'Não encontrado';
+    const original=d.precoOriginal!=null&&d.precoOriginal!==''?String(d.precoOriginal):'Não encontrado';
+    const desconto=d.desconto!=null&&d.desconto!==''?String(d.desconto):'Não encontrado';
+    const imagem=String(d.imagemUrl||'');
+    const finalUrl=String(d.finalUrl||url);
+    let html='<div class="extrator-side-result-title">📦 '+esc(titulo)+'</div>'
+      +'<div class="extrator-side-meta">'
+      +'<div class="extrator-side-stat"><small>💰 PREÇO</small><b>'+esc(preco)+'</b></div>'
+      +'<div class="extrator-side-stat"><small>🔥 DESCONTO</small><b>'+esc(desconto)+'</b></div>'
+      +'<div class="extrator-side-stat"><small>💵 PREÇO ANTERIOR</small><b>'+esc(original)+'</b></div>'
+      +'<div class="extrator-side-stat"><small>🏪 DOMÍNIO FINAL</small><b>'+esc(new URL(finalUrl).hostname)+'</b></div>'
+      +'</div>';
+    if(imagem){
+      html+='<div class="extrator-side-image"><img src="'+esc(imagem)+'" alt="Imagem do produto" onerror="this.style.display=\'none\';this.nextElementSibling.textContent=\'⚠️ A imagem encontrada não pôde ser carregada.\'"><span class="muted">🖼️ Imagem encontrada</span></div>';
+    }else{
+      html+='<div class="notice" style="margin-top:10px">⚠️ Nenhuma imagem encontrada nesta primeira tentativa.</div>';
+    }
+    html+='<div class="extrator-side-actions"><a href="'+esc(finalUrl)+'" target="_blank" rel="noopener">🔗 Abrir produto</a>'+(imagem?'<a href="'+esc(imagem)+'" target="_blank" rel="noopener">🖼️ Abrir imagem</a>':'')+'</div>';
+    html+='<details style="margin-top:9px"><summary class="muted" style="cursor:pointer">Dados técnicos</summary><div class="extrator-side-json">'+esc(JSON.stringify(d,null,2))+'</div></details>';
+    box.innerHTML=html;box.classList.add('open');status.textContent='✅ Análise concluída. Nada foi salvo.';
+  }catch(e){status.textContent='❌ Falha na análise.';box.innerHTML='<div class="error">⚠️ '+esc(e.message||e)+'</div>';box.classList.add('open');}
+}
+document.getElementById('extratorUniversalForm')?.addEventListener('submit',async e=>{
+  e.preventDefault();
+  const url=String(document.getElementById('extratorUniversalUrl')?.value||'').trim();
+  if(!url)return;
+  await analisarExtratorUniversal(url);
+});
+
 async function loadDashboard(){try{const d=await jfetch('/api/dashboard');document.getElementById('today').textContent=d.hoje||0}catch{}}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
 refreshAll();startPolling(false);
