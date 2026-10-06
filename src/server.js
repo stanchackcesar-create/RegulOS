@@ -400,6 +400,116 @@ function autoOfferPriceInfo(html,product,offers,currency){
     precoOriginal:autoOfferFormatBRL(original,currency)
   };
 }
+async function extractUniversalOfferWithBrowser(url){
+  let context=null;
+  try{
+    await assertSafeExternalUrl(url);
+    const browser=await getRegulosBrowser();
+    context=await browser.newContext({
+      userAgent:'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154 Safari/537.36',
+      locale:'pt-BR',
+      viewport:{width:1365,height:900},
+      javaScriptEnabled:true,
+      ignoreHTTPSErrors:true
+    });
+    const page=await context.newPage();
+    await page.goto(url,{waitUntil:'domcontentloaded',timeout:35000});
+    await page.waitForTimeout(4500);
+
+    const data=await page.evaluate(()=>{
+      const clean=v=>String(v||'').replace(/\\s+/g,' ').trim();
+      const prices=[];
+      const addPrice=v=>{
+        const s=String(v||'').replace(/\\s+/g,' ');
+        const matches=s.match(/R\\$\\s*([0-9.]+(?:,[0-9]{2})?)/g)||[];
+        for(const m of matches){
+          const n=Number(m.replace(/[^0-9,]/g,'').replace(/\\./g,'').replace(',','.'));
+          if(Number.isFinite(n)&&n>0&&n<100000000) prices.push(n);
+        }
+      };
+      const textOf=el=>el?clean(el.textContent||el.getAttribute?.('content')||''):'';
+      const titleCandidates=[];
+      const addTitle=v=>{const s=clean(v);if(s&&s.length>=4&&!titleCandidates.includes(s))titleCandidates.push(s)};
+      document.querySelectorAll('h1,[data-testid*="title"],[class*="title"],meta[property="og:title"],meta[name="twitter:title"]').forEach(el=>{
+        addTitle(el.getAttribute?.('content')||el.textContent);
+      });
+      addTitle(document.title);
+
+      const priceSelectors=[
+        'meta[property="product:price:amount"]','meta[property="og:price:amount"]',
+        '[data-testid*="price"]','[class*="price"]','[class*="Price"]',
+        '[class*="sale"]','[class*="Sale"]','[class*="amount"]','[class*="Amount"]'
+      ];
+      for(const sel of priceSelectors){
+        try{document.querySelectorAll(sel).forEach(el=>addPrice(el.getAttribute?.('content')||el.textContent));}catch{}
+      }
+      addPrice(document.body?.innerText||'');
+
+      let image='';
+      const imageCandidates=[];
+      const addImage=v=>{
+        const s=clean(v);
+        if(/^https?:\\/\\//i.test(s)&&!imageCandidates.includes(s))imageCandidates.push(s);
+      };
+      document.querySelectorAll('meta[property="og:image"],meta[property="og:image:url"],meta[name="twitter:image"],img').forEach(el=>{
+        addImage(el.getAttribute?.('content')||el.currentSrc||el.src);
+      });
+      image=imageCandidates[0]||'';
+
+      let discount='';
+      const discountTexts=[];
+      document.querySelectorAll('[class*="discount"],[class*="Discount"],[class*="percent"],[class*="Percent"],[data-testid*="discount"]').forEach(el=>{
+        const s=textOf(el);
+        if(s) discountTexts.push(s);
+      });
+      const allDiscount=(discountTexts.join(' ').match(/(?:-|off|desconto)?\\s*(\\d{1,3})\\s*%/i)||[]);
+      if(allDiscount[1]) discount=allDiscount[1]+'%';
+
+      return {
+        finalUrl:location.href,
+        titulo:titleCandidates.find(x=>!/^shopee|mercado livre|amazon|produto$/i.test(x))||titleCandidates[0]||'',
+        prices:[...new Set(prices)].sort((a,b)=>a-b),
+        imagem:image,
+        desconto:discount,
+        bodyText:clean(document.body?.innerText||'').slice(0,50000)
+      };
+    });
+
+    const prices=Array.isArray(data.prices)?data.prices.filter(Number.isFinite):[];
+    let preco='';
+    let precoOriginal='';
+    if(prices.length===1){preco=prices[0];}
+    else if(prices.length>1){
+      preco=Math.min(...prices);
+      precoOriginal=Math.max(...prices);
+    }
+    let desconto=String(data.desconto||'');
+    if(!desconto && preco && precoOriginal && precoOriginal>preco){
+      desconto=Math.round((1-(preco/precoOriginal))*100)+'%';
+    }
+
+    let imagemUrl=String(data.imagem||'');
+    if(!imagemUrl){
+      try{
+        const browserImage=await findProductImageWithBrowser(data.finalUrl||url);
+        if(browserImage?.url) imagemUrl=browserImage.url;
+      }catch{}
+    }
+
+    return {
+      titulo:String(data.titulo||'').trim(),
+      preco:preco?autoOfferFormatBRL(preco,'BRL'):'',
+      precoOriginal:precoOriginal?autoOfferFormatBRL(precoOriginal,'BRL'):'',
+      desconto,
+      imagemUrl,
+      finalUrl:data.finalUrl||url,
+      fonte:'navegador'
+    };
+  }finally{
+    if(context) await context.close().catch(()=>{});
+  }
+}
+
 async function buildAutomaticOffer(url){
   const page=await fetchText(url);
   const html=String(page.data||'');
@@ -413,9 +523,36 @@ async function buildAutomaticOffer(url){
   const desconto=autoOfferDiscount(html,product,offers,priceInfo);
   let imagem=autoOfferMeta(html,'og:image') || autoOfferMeta(html,'twitter:image') || product?.image || '';
   if(Array.isArray(imagem))imagem=imagem[0]||'';
-  if(imagem && !/^https?:\/\//i.test(imagem))imagem='';
+  if(imagem && !/^https?:\\/\\//i.test(imagem))imagem='';
+  if(imagem && !/^https?:\\/\\//i.test(imagem))imagem='';
   if(!imagem && typeof findMercadoLivreImageUrl==='function')imagem=await findMercadoLivreImageUrl(url).catch(()=> '');
-  return {titulo,preco,precoOriginal,desconto,imagemUrl:imagem,finalUrl:page.finalUrl||url};
+
+  const base={
+    titulo,preco,precoOriginal,desconto,imagemUrl:imagem,finalUrl:page.finalUrl||url
+  };
+
+  const missingTitle=!String(base.titulo||'').trim();
+  const missingPrice=!String(base.preco||'').trim();
+  const missingImage=!String(base.imagemUrl||'').trim();
+
+  if(missingTitle || missingPrice || !base.desconto || missingImage){
+    try{
+      const browser=await extractUniversalOfferWithBrowser(page.finalUrl||url);
+      return {
+        titulo:browser.titulo||base.titulo,
+        preco:browser.preco||base.preco,
+        precoOriginal:browser.precoOriginal||base.precoOriginal,
+        desconto:browser.desconto||base.desconto,
+        imagemUrl:browser.imagemUrl||base.imagemUrl,
+        finalUrl:browser.finalUrl||base.finalUrl,
+        fonte:browser.fonte||'navegador'
+      };
+    }catch(e){
+      addLog('Extrator universal navegador: '+e.message);
+    }
+  }
+
+  return {...base,fonte:'html'};
 }
 
 app.get('/api/oferta-preview', requireAuth, async (req,res)=>{
