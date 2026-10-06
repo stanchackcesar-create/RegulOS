@@ -1673,50 +1673,54 @@ async function getMercadoLivreOfferInfo(url){
       const id=String(m[0]).toUpperCase().replace(/[-_]/g,'');
       if(!seen.has(id)){seen.add(id);ids.push(id);}
     }
-    for(const id of ids.slice(0,3)){
+    let best=null;
+    for(const id of ids.slice(0,10)){
       try{
         const api=await fetchText(`https://api.mercadolibre.com/items/${id}`);
         const data=JSON.parse(api.data||'{}');
-        if(!data || data.id) {
-          const price=Number(data.price);
-          const original=Number(data.original_price);
-          const basePrice=Number(data.base_price);
-          const current=Number.isFinite(price)&&price>0?price:NaN;
-          const originalValue=Number.isFinite(original)&&original>current
-            ? original
-            : (Number.isFinite(basePrice)&&basePrice>current ? basePrice : NaN);
-          let desconto='';
-          if(Number.isFinite(current)&&Number.isFinite(originalValue)&&originalValue>current){
-            desconto=Math.round((1-current/originalValue)*100)+'%';
-          }
-          let imagem='';
-          for(const picture of (Array.isArray(data.pictures)?data.pictures:[])){
-            const image=picture?.secure_url||picture?.url;
-            if(image&&/^https?:\/\//i.test(image)){imagem=image;break;}
-          }
-          if(!imagem){
-            const thumb=data.secure_thumbnail||data.thumbnail;
-            if(thumb&&/^https?:\/\//i.test(thumb))imagem=thumb;
-          }
-          return {
-            titulo:String(data.title||'').trim(),
-            preco:Number.isFinite(current)?autoOfferFormatBRL(current,'BRL'):'',
-            precoOriginal:Number.isFinite(originalValue)?autoOfferFormatBRL(originalValue,'BRL'):'',
-            desconto,
-            imagemUrl:imagem,
-            finalUrl:page.finalUrl||url,
-            fonte:'mercado-livre-api'
-          };
+        if(!data?.id) continue;
+        const price=Number(data.price);
+        const original=Number(data.original_price);
+        const basePrice=Number(data.base_price);
+        const current=Number.isFinite(price)&&price>0?price:NaN;
+        const originalValue=Number.isFinite(original)&&original>current
+          ? original
+          : (Number.isFinite(basePrice)&&basePrice>current ? basePrice : NaN);
+        let desconto='';
+        if(Number.isFinite(current)&&Number.isFinite(originalValue)&&originalValue>current){
+          desconto=Math.round((1-current/originalValue)*100)+'%';
         }
+        let imagem='';
+        for(const picture of (Array.isArray(data.pictures)?data.pictures:[])){
+          const image=picture?.secure_url||picture?.url;
+          if(image&&/^https?:\/\//i.test(image)){imagem=image;break;}
+        }
+        if(!imagem){
+          const thumb=data.secure_thumbnail||data.thumbnail;
+          if(thumb&&/^https?:\/\//i.test(thumb))imagem=thumb;
+        }
+        const candidate={
+          titulo:String(data.title||'').trim(),
+          preco:Number.isFinite(current)?autoOfferFormatBRL(current,'BRL'):'',
+          precoOriginal:Number.isFinite(originalValue)?autoOfferFormatBRL(originalValue,'BRL'):'',
+          desconto,
+          imagemUrl:imagem,
+          finalUrl:page.finalUrl||url,
+          fonte:'mercado-livre-api'
+        };
+        if(!best || candidate.preco || candidate.precoOriginal || candidate.imagemUrl) best=candidate;
+        if(candidate.preco) return candidate;
       }catch(e){
         addLog(`Mercado Livre API sem dados para ${id}: ${e.message}`);
       }
     }
+    return best;
   }catch(e){
     addLog(`Mercado Livre oferta: ${e.message}`);
   }
   return null;
 }
+
 
 async function findProductImage(url) {
   // REGULOS_BROWSER_IMAGE_FALLBACK_V2
