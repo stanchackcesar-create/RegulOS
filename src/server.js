@@ -302,6 +302,7 @@ app.get('/api/integracoes/shopee/authorize',requireAuth,requireAdmin,(req,res)=>
 app.get('/integracoes/shopee/callback',async(req,res)=>{
   const state=String(req.query?.state||'');
   const code=String(req.query?.code||'');
+  const shopId=String(req.query?.shop_id||'');
   const stateFile=path.join(DATA,'shopee_oauth_state.json');
   let saved={};
   try{saved=JSON.parse(fs.readFileSync(stateFile,'utf8'));}catch{}
@@ -311,7 +312,7 @@ app.get('/integracoes/shopee/callback',async(req,res)=>{
   }
   if(!code) return res.status(400).send('<h2>A Shopee não retornou o código de autorização.</h2>');
   try{
-    await shopeeIntegration.exchangeCode(code);
+    await shopeeIntegration.exchangeCode(code,shopId);
     res.send('<h2>✅ Shopee conectada ao RegulOS.</h2><p>Você já pode fechar esta janela e voltar ao painel de Integrações.</p><script>setTimeout(()=>location.href="/integracoes",1200)</script>');
   }catch(e){
     res.status(502).send('<h2>Falha ao conectar a Shopee</h2><p>'+String(e.message||'Erro').replace(/[<>]/g,'')+'</p><p><a href="/integracoes">Voltar</a></p>');
