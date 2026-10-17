@@ -8,7 +8,7 @@ Permitir que qualquer pessoa crie sua própria conta no formulário de login e u
 
 1. A primeira configuração continua criando a conta administradora em `/configurar`.
 2. Depois de configurado o administrador, a tela `/login` oferece login e cadastro público.
-3. O cadastro público valida nome, nome de usuário exclusivo e senha com pelo menos 8 caracteres; as senhas são armazenadas usando scrypt com salt.
+3. O cadastro público valida nome, nome de usuário exclusivo e senha com pelo menos 8 caracteres; as senhas são armazenadas usando scrypt com salt. O cadastro fica fechado por padrão e só pode ser habilitado explicitamente com `REGULOS_PUBLIC_SIGNUP_ENABLED=true` no ambiente isolado.
 4. Cada conta recebe um ID UUID permanente e um registro de conta WhatsApp próprio.
 5. A sessão web é criada com cookie HttpOnly e vinculada ao ID do usuário.
 6. O QR Code deve ser iniciado e consultado somente pela conta autenticada, salvo acesso administrativo explicitamente autorizado.
@@ -30,11 +30,11 @@ A separação deverá cobrir, no mínimo:
 ## Estado desta primeira etapa
 
 Implementado nesta branch:
-- cadastro público após a configuração inicial do administrador;
+- endpoint de cadastro público implementado, mas bloqueado por padrão; para testá-lo, habilitar `REGULOS_PUBLIC_SIGNUP_ENABLED=true` somente no ambiente local isolado;
 - validação e unicidade do nome de usuário;
 - limitação básica de tentativas de cadastro por IP;
 - criação de ID próprio, sessão web e registro WhatsApp para a nova conta;
-- formulário de cadastro na tela de login;
+- formulário de cadastro na tela de login, oculto enquanto o cadastro público estiver desabilitado;
 - inclusão do nome no perfil retornado pela API.
 
 Ainda NÃO considerar a Multi-Estância pronta:
@@ -44,7 +44,7 @@ Ainda NÃO considerar a Multi-Estância pronta:
 - validar reinicialização, reconexão e persistência sem apagar dados de outras contas;
 - executar testes automatizados e revisão de segurança.
 
-## Regras de segurança e implantação
+## Base de código desta etapa\n\nEsta branch foi criada como experimento sobre a candidata `fix/multi-estancia-isolamento-2026-10-17`, que deriva de `feature/multi-estancia`. Ela **não é ainda uma atualização da branch atual do domínio** (`teste-restauracao-completa-2026-10-04`). Antes de qualquer implantação, será necessário reconciliar as alterações com a versão atual e preservar as funcionalidades mais recentes.\n\n## Regras de segurança e implantação
 
 - Não conectar números reais nem enviar mensagens durante os testes iniciais.
 - Usar somente contas de teste e dados sintéticos.
