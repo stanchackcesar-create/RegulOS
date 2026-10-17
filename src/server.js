@@ -246,15 +246,17 @@ function canAccessWhatsAppRecord(req,item){
 function clearUserLinkData(userId){
   const id=String(userId||'');
   if(!id) return {schedules:0,history:0,failures:0};
-  const schedulesBefore=linkSchedules.length;
-  linkSchedules=linkSchedules.filter(x=>scheduleOwnerId(x)!==id);
-  writeJson(FILES.schedules,linkSchedules);
+  // Resolve history/failure ownership while the original schedules still exist;
+  // legacy records may rely on agendamentoId to identify their owner.
   const historyBefore=linkHistory.length;
   linkHistory=linkHistory.filter(x=>recordOwnerId(x)!==id);
   saveLinkHistory();
   const failuresBefore=linkFailures.length;
   linkFailures=linkFailures.filter(x=>recordOwnerId(x)!==id);
   saveLinkFailures();
+  const schedulesBefore=linkSchedules.length;
+  linkSchedules=linkSchedules.filter(x=>scheduleOwnerId(x)!==id);
+  writeJson(FILES.schedules,linkSchedules);
   return {schedules:schedulesBefore-linkSchedules.length,history:historyBefore-linkHistory.length,failures:failuresBefore-linkFailures.length};
 }
 function clearLegacyAuthFiles(){
@@ -2256,11 +2258,13 @@ app.get('*',(req,res)=>res.sendFile(path.join(PUBLIC,'index.html')));
 
 // ================= MULTI-ESTÂNCIA — ISOLAMENTO E AUTORIZAÇÃO =================
 function historyBelongsToUser(entry,user){
-  const ownerId=String(entry?.whatsappUserId||'');
+  // Reuse the canonical ownership resolver so legacy history records linked to
+  // an agendamentoId remain visible only to their actual owner.
+  const ownerId=recordOwnerId(entry);
   if(!ownerId) return user?.admin===true;
   if(String(ownerId)===String(user?.id||'')) return true;
   if(user?.admin===true){
-    const owner=readUsers().find(x=>String(x.id)===ownerId);
+    const owner=readUsers().find(x=>String(x.id)===String(ownerId));
     return owner?.whatsappAdminAccess===true;
   }
   return false;
