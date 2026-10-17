@@ -370,6 +370,7 @@ function registerSignupAttempt(req){
 }
 app.post('/api/auth/register',(req,res)=>{
   if(!signupAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas de cadastro. Tente novamente daqui a uma hora.'});
+  registerSignupAttempt(req);
   const nome=String(req.body?.nome||'').trim().replace(/\\s+/g,' ');
   const usuario=String(req.body?.usuario||'').trim().toLowerCase();
   const senha=String(req.body?.senha||'');
@@ -387,7 +388,6 @@ app.post('/api/auth/register',(req,res)=>{
     return res.status(409).json({ok:false,msg:'Primeiro, configure a conta administradora do RegulOS.'});
   if(users.some(x=>String(x.usuario||'').toLowerCase()===usuario))
     return res.status(409).json({ok:false,msg:'Esse nome de usuário já está em uso. Escolha outro.'});
-  registerSignupAttempt(req);
   const salt=crypto.randomBytes(16).toString('hex');
   const user={
     id:crypto.randomUUID(),
