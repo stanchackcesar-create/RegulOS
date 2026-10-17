@@ -1622,64 +1622,26 @@ async function sendScheduledLink(item) {
 }
 async function processLinkSchedules() {
   if (!botWindowActive()) return;
-  if (!readUsers().some(u=>isWhatsAppOnlineForUser(u))) return;
-  syncLinkQueue();
-  const queue = orderedLinks();
+  const users=readUsers();
+  const queue=orderedLinks();
   if (!queue.length) return;
 
-  // Fila contínua: apenas UM link é processado por vez.
-  // Se o horário acabar depois do 15º link, o cursor permanece no 16º
-  // (ou no link que estava em andamento) e o próximo período continua dali.
-  for (let guard = 0; guard < queue.length; guard++) {
-    if (!botWindowActive()) return;
-    syncLinkQueue();
-    const currentQueue = orderedLinks();
-    if (!currentQueue.length) return;
-    const idx = Math.min(Math.max(Number(linkQueue.cursor)||0, 0), currentQueue.length-1);
-    const item = currentQueue[idx];
-    linkQueue.cursor = idx;
-    linkQueue.currentId = String(item.id);
-    saveLinkQueue();
-
-    const now = new Date();
-    if (!scheduleDue(item, now)) return;
-
-    const before = item.lastRunKey;
-    const hadProgress = hasPendingProgress(item);
-    await sendScheduledLink(item);
-
-    // Se ainda há progresso pendente, a janela acabou ou houve falha.
-    // Não avança o cursor: retomará exatamente este link.
-    if (hasPendingProgress(item)) return;
-
-    // Para repetição diária/semanal, um link concluído fica aguardando a
-    // próxima ocorrência e não pode bloquear os próximos links da fila.
-    // Para uma vez, o item fica inativo e também pode avançar.
-    if (item.lastRunKey && item.lastRunKey !== before || (!hadProgress && item.repeticao === 'uma_vez' && !item.ativo)) {
-      const ids = currentQueue.map(x => String(x.id));
-      const pos = ids.indexOf(String(item.id));
-      linkQueue.cursor = pos >= 0 ? (pos + 1) % Math.max(ids.length,1) : 0;
-      const next = orderedLinks();
-      if (next.length) {
-        // Em uma fila de uma vez, removemos o link concluído da sequência
-        // pelo próprio ativo=false. Em repetição, o cursor avança para o
-        // próximo link apenas se ele também estiver devido.
-        const nextIds = next.map(x => String(x.id));
-        if (nextIds.length) {
-          const nextPos = nextIds.indexOf(String(item.id));
-          linkQueue.cursor = nextPos >= 0 ? (nextPos + 1) % nextIds.length : 0;
-          linkQueue.currentId = nextIds[linkQueue.cursor];
-        } else {
-          linkQueue.cursor = 0; linkQueue.currentId = '';
-        }
-      } else {
-        linkQueue.cursor = 0; linkQueue.currentId = '';
-      }
-      linkQueue.updatedAt = new Date().toISOString();
-      saveLinkQueue();
-      continue;
-    }
-    return;
+  // Processamento isolado por proprietário: uma conta desconectada ou com
+  // progresso pendente não impede que as outras contas avancem.
+  const ownerIds=[...new Set(queue.map(item=>scheduleOwnerId(item)).filter(Boolean))];
+  for(const ownerId of ownerIds){
+    if(!botWindowActive()) return;
+    const owner=users.find(user=>String(user.id)===String(ownerId));
+    if(!owner || !isWhatsAppOnlineForUser(owner)) continue;
+    const ownerQueue=queue.filter(item=>scheduleOwnerId(item)===String(ownerId));
+    const due=ownerQueue.find(item=>scheduleDue(item,new Date()));
+    if(!due) continue;
+    // No máximo um agendamento por conta em cada ciclo do temporizador.
+    // Se ele já está em execução, aguardamos o próximo ciclo daquela conta.
+    if(runningLinkSchedules.has(due.id)) continue;
+    await sendScheduledLink(due);
+    // O próximo ciclo retoma este agendamento se houver progresso pendente;
+    // as demais contas continuam independentes neste mesmo ciclo.
   }
 }
 async function startLinkScheduler() {
