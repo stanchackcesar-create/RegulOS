@@ -229,6 +229,20 @@ function scheduleOwnerId(item){
   const admin=readUsers().find(x=>x.admin===true);
   return String(admin?.id||'');
 }
+function recordOwnerId(item){
+  const explicit=String(item?.whatsappUserId||'').trim();
+  if(explicit) return explicit;
+  const scheduleId=String(item?.agendamentoId||'');
+  const linked=Array.isArray(linkSchedules)
+    ? linkSchedules.find(x=>String(x.id)===scheduleId)
+    : null;
+  if(linked) return scheduleOwnerId(linked);
+  return scheduleOwnerId(item);
+}
+function canAccessWhatsAppRecord(req,item){
+  const ownerId=recordOwnerId(item);
+  return Boolean(ownerId) && canAdminAccessWhatsApp(req,ownerId);
+}
 function currentUser(req){
   const token=String(req.headers.cookie||'').match(/(?:^|;\s*)regulos_session=([^;]+)/)?.[1];
   if(!token) return null;
@@ -2014,37 +2028,46 @@ app.get('/api/link-historico',(req,res)=>{
   res.set('Expires','0');
   try {
     if(!Array.isArray(linkHistory)) linkHistory=[];
-    res.json({ok:true,historico:linkHistory});
+    const historico=linkHistory.filter(x=>canAccessWhatsAppRecord(req,x));
+    return res.json({ok:true,historico});
   } catch(e) {
     addLog(`Erro ao carregar histórico de links: ${e.message}`);
-    res.status(500).json({ok:false,msg:'Não foi possível carregar o histórico de links.'});
+    return res.status(500).json({ok:false,msg:'Não foi possível carregar o histórico de links.'});
   }
 });
 app.delete('/api/link-historico',(req,res)=>{
-  const total=linkHistory.length;
-  clearLinkHistory();
-  clearLinkFailures();
-  addLog(`Histórico de links limpo pelo painel: ${total} registro(s) removido(s).`);
-  res.json({ok:true,msg:`Histórico limpo. ${total} registro(s) removido(s).`});
+  const before=linkHistory.length;
+  linkHistory=linkHistory.filter(x=>!canAccessWhatsAppRecord(req,x));
+  const total=before-linkHistory.length;
+  saveLinkHistory();
+  const failuresBefore=linkFailures.length;
+  linkFailures=linkFailures.filter(x=>!canAccessWhatsAppRecord(req,x));
+  const failuresRemoved=failuresBefore-linkFailures.length;
+  saveLinkFailures();
+  addLog(`Histórico limpo pelo painel: ${total} registro(s) e ${failuresRemoved} falha(s) removidos pelo usuário ${req.user?.id||'desconhecido'}.`);
+  res.json({ok:true,msg:`Histórico limpo. ${total} registro(s) e ${failuresRemoved} falha(s) removidos.`});
 });
 app.delete('/api/link-historico/:id',(req,res)=>{
   const i=linkHistory.findIndex(x=>String(x.id)===String(req.params.id));
-  if(i<0) return res.status(404).json({ok:false,msg:'Registro de histórico não encontrado.'});
+  if(i<0 || !canAccessWhatsAppRecord(req,linkHistory[i])) return res.status(404).json({ok:false,msg:'Registro de histórico não encontrado.'});
   const [removed]=linkHistory.splice(i,1);
   saveLinkHistory();
-  addLog(`Registro de histórico removido: ${removed.nome||removed.id}.`);
+  addLog(`Registro de histórico removido pelo usuário ${req.user?.id||'desconhecido'}: ${removed.nome||removed.id}.`);
   res.json({ok:true,msg:'Registro removido do histórico.'});
 });
 app.get('/api/link-falhas',(req,res)=>{
   res.set('Cache-Control','no-store');
-  res.json({ok:true, falhas:linkFailures});
+  const falhas=linkFailures.filter(x=>canAccessWhatsAppRecord(req,x));
+  res.json({ok:true,falhas});
 });
 app.post('/api/link-falhas/:id/reenviar', async (req,res)=>{
   const failure=linkFailures.find(x=>String(x.id)===String(req.params.id));
-  if(!failure) return res.status(404).json({ok:false,msg:'Falha não encontrada.'});
+  if(!failure || !canAccessWhatsAppRecord(req,failure)) return res.status(404).json({ok:false,msg:'Falha não encontrada.'});
   const item=linkSchedules.find(x=>String(x.id)===String(failure.agendamentoId));
   if(!item) return res.status(404).json({ok:false,msg:'O link associado à falha não está mais no Gerenciador de Links.'});
-  const owner=readUsers().find(x=>String(x.id)===String(item.whatsappUserId||failure.whatsappUserId||''));
+  if(!canAccessWhatsAppRecord(req,item) || recordOwnerId(item)!==recordOwnerId(failure))
+    return res.status(403).json({ok:false,msg:whatsappAccessDeniedMessage()});
+  const owner=readUsers().find(x=>String(x.id)===recordOwnerId(item));
   const ownerSock=owner ? getWhatsAppSocketForUser(owner) : null;
   if(!owner || !isWhatsAppOnlineForUser(owner) || !ownerSock) return res.status(503).json({ok:false,msg:'WhatsApp da conta do agendamento não está conectado.'});
   const target=String(failure.grupoId||'');
@@ -2055,7 +2078,7 @@ app.post('/api/link-falhas/:id/reenviar', async (req,res)=>{
     if(String(item.imagemUrl||'').trim()) image=await downloadBuffer(String(item.imagemUrl).trim(),String(item.url||'').trim());
     else image=await findProductImage(String(item.url||'').trim());
     if(!image) throw new Error('Não foi possível obter a imagem. Edite o link ou informe uma URL de imagem.');
-    if(image) await ownerSock.sendMessage(target,{image:image.buffer,caption:text}); else await ownerSock.sendMessage(target,{text});
+    await ownerSock.sendMessage(target,{image:image.buffer,caption:text});
     addHistory({whatsappUserId:String(item.whatsappUserId||owner.id),grupoId:target,link:item.url,status:'sucesso',agendamentoId:item.id,tipo:'reenvio',at:new Date().toISOString()});
     archiveSentFailureAsHistory(item,failure,target);
     removeLinkFailure(failure.id);
@@ -2070,10 +2093,12 @@ app.post('/api/link-falhas/:id/reenviar', async (req,res)=>{
 });
 app.put('/api/link-falhas/:id',(req,res)=>{
   const failure=linkFailures.find(x=>String(x.id)===String(req.params.id));
-  if(!failure) return res.status(404).json({ok:false,msg:'Falha não encontrada.'});
-  const b=req.body||{};
+  if(!failure || !canAccessWhatsAppRecord(req,failure)) return res.status(404).json({ok:false,msg:'Falha não encontrada.'});
   const item=linkSchedules.find(x=>String(x.id)===String(failure.agendamentoId));
   if(!item) return res.status(404).json({ok:false,msg:'Link associado não encontrado no Gerenciador de Links.'});
+  if(!canAccessWhatsAppRecord(req,item) || recordOwnerId(item)!==recordOwnerId(failure))
+    return res.status(403).json({ok:false,msg:whatsappAccessDeniedMessage()});
+  const b=req.body||{};
   if(typeof b.imagemUrl==='string') item.imagemUrl=b.imagemUrl.trim();
   if(typeof b.imagemAutomatica==='boolean') item.imagemAutomatica=b.imagemAutomatica;
   if(typeof b.url==='string' && b.url.trim()) item.url=b.url.trim();
@@ -2086,7 +2111,13 @@ app.put('/api/link-falhas/:id',(req,res)=>{
   upsertLinkFailure(item,failure.grupoId,failure.erro);
   res.json({ok:true,agendamento:item});
 });
-app.delete('/api/link-falhas',(req,res)=>{ const total=linkFailures.length; clearLinkFailures(); res.json({ok:true,msg:`Links com falha limpos. ${total} registro(s) removido(s).`}); });
+app.delete('/api/link-falhas',(req,res)=>{
+  const before=linkFailures.length;
+  linkFailures=linkFailures.filter(x=>!canAccessWhatsAppRecord(req,x));
+  const total=before-linkFailures.length;
+  saveLinkFailures();
+  res.json({ok:true,msg:`Links com falha limpos. ${total} registro(s) removido(s).`});
+});
 
 app.get('/api/link-imagem-preview', async (req,res)=>{
   const url=String(req.query?.url||'').trim();
