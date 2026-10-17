@@ -323,7 +323,7 @@ app.get('/api/health',(req,res)=>res.json({ok:true,version:'12.8.0-cloud',pid:pr
 app.get('/api/auth/status',(req,res)=>{
   const users=readUsers();
   const user=currentUser(req);
-  res.json({ok:true,configurado:users.length>0,autenticado:Boolean(user),usuario:user?sanitizeUser(user):null});
+  res.json({ok:true,configurado:users.length>0,cadastroAberto:process.env.REGULOS_PUBLIC_SIGNUP_ENABLED==='true' && users.length>0,autenticado:Boolean(user),usuario:user?sanitizeUser(user):null});
 });
 app.post('/api/auth/setup',(req,res)=>{
   if(readUsers().length>0)return res.status(409).json({ok:false,msg:'Já existe uma conta. Somente usuários cadastrados pelo administrador podem entrar.'});
@@ -369,6 +369,7 @@ function registerSignupAttempt(req){
   else { a.count++; signupAttempts.set(key,a); }
 }
 app.post('/api/auth/register',(req,res)=>{
+  if(process.env.REGULOS_PUBLIC_SIGNUP_ENABLED!=='true') return res.status(503).json({ok:false,msg:'O cadastro público será liberado após a validação do isolamento de dados.'});
   if(!signupAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas de cadastro. Tente novamente daqui a uma hora.'});
   registerSignupAttempt(req);
   const nome=String(req.body?.nome||'').trim().replace(/\s+/g,' ');
