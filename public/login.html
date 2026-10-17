@@ -47,6 +47,7 @@ button:disabled{opacity:.65;cursor:wait}
   </form>
 
   <button type="button" id="toggleMode" class="secondary">Criar uma conta nova</button>
+  <div id="signupNotice" class="small hidden">O cadastro público será liberado depois que a separação dos dados entre usuários for validada.</div>
   <div id="message" role="status" aria-live="polite"></div>
   <div class="small">Cada conta tem seu próprio acesso. Após entrar, conecte o WhatsApp pelo QR Code da sua conta. Não compartilhe sua senha nem seu QR Code.</div>
 </main>
@@ -96,6 +97,7 @@ async function init(){
     const response=await fetch('/api/auth/status');const data=await response.json();
     if(data.autenticado){location.href='/';return;}
     if(!data.configurado){location.href='/configurar';return;}
+    if(!data.cadastroAberto){byId('toggleMode').classList.add('hidden');byId('signupNotice').classList.remove('hidden');}
   }catch(error){showMessage('Servidor indisponível.');}
 }
 init();
