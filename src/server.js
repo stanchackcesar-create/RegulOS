@@ -206,6 +206,7 @@ function userHasActiveSession(userId){
 function sanitizeUser(u){
   return {
     id:u.id,
+    nome:u.nome||u.usuario,
     usuario:u.usuario,
     admin:u.admin===true,
     whatsappAdminAccess:u.admin===true || u.whatsappAdminAccess===true,
@@ -352,6 +353,58 @@ function registerLoginFailure(req){
   else { a.count++; loginAttempts.set(key,a); }
 }
 function clearLoginFailures(req){ loginAttempts.delete(clientIp(req)); }
+
+// Cadastro público: a conta inicial continua sendo criada em /configurar como administradora.
+const signupAttempts = new Map();
+function signupAllowed(req){
+  const key=clientIp(req), now=Date.now(), windowMs=60*60*1000;
+  const a=signupAttempts.get(key);
+  if(!a || now-a.startedAt>windowMs){ signupAttempts.set(key,{startedAt:now,count:0}); return true; }
+  return a.count < 4;
+}
+function registerSignupAttempt(req){
+  const key=clientIp(req), now=Date.now(), windowMs=60*60*1000;
+  const a=signupAttempts.get(key);
+  if(!a || now-a.startedAt>windowMs) signupAttempts.set(key,{startedAt:now,count:1});
+  else { a.count++; signupAttempts.set(key,a); }
+}
+app.post('/api/auth/register',(req,res)=>{
+  if(!signupAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas de cadastro. Tente novamente daqui a uma hora.'});
+  const nome=String(req.body?.nome||'').trim().replace(/\\s+/g,' ');
+  const usuario=String(req.body?.usuario||'').trim().toLowerCase();
+  const senha=String(req.body?.senha||'');
+  const confirmarSenha=String(req.body?.confirmarSenha||'');
+  if(nome.length<2 || nome.length>80)
+    return res.status(400).json({ok:false,msg:'Informe um nome entre 2 e 80 caracteres.'});
+  if(!/^[a-z0-9._-]{3,32}$/.test(usuario))
+    return res.status(400).json({ok:false,msg:'O usuário deve ter de 3 a 32 caracteres: letras sem acento, números, ponto, hífen ou sublinhado.'});
+  if(senha.length<8 || senha.length>128)
+    return res.status(400).json({ok:false,msg:'A senha deve ter pelo menos 8 caracteres.'});
+  if(senha!==confirmarSenha)
+    return res.status(400).json({ok:false,msg:'As senhas não conferem.'});
+  const users=readUsers();
+  if(users.length===0)
+    return res.status(409).json({ok:false,msg:'Primeiro, configure a conta administradora do RegulOS.'});
+  if(users.some(x=>String(x.usuario||'').toLowerCase()===usuario))
+    return res.status(409).json({ok:false,msg:'Esse nome de usuário já está em uso. Escolha outro.'});
+  registerSignupAttempt(req);
+  const salt=crypto.randomBytes(16).toString('hex');
+  const user={
+    id:crypto.randomUUID(),
+    nome,
+    usuario,
+    salt,
+    hash:hashPassword(senha,salt),
+    admin:false,
+    whatsappAdminAccess:false,
+    criadoEm:new Date().toISOString()
+  };
+  users.push(user);
+  saveUsers(users);
+  ensureWhatsAppAccount(user);
+  setSession(res,user);
+  res.status(201).json({ok:true,msg:'Conta criada. Agora conecte seu próprio WhatsApp pelo QR Code.',usuario:sanitizeUser(user)});
+});
 
 app.post('/api/auth/login',(req,res)=>{
   if(!loginAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas de login. Aguarde alguns minutos e tente novamente.'});
