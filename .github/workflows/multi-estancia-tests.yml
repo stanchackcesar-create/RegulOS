@@ -1,0 +1,22 @@
+name: Testes isolados Multi-Estância
+
+on:
+  push:
+    branches:
+      - audit/multi-estancia-isolamento-2026-10-17
+  pull_request:
+    branches:
+      - audit/multi-estancia-isolamento-2026-10-17
+
+jobs:
+  testes-multi-estancia:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Executar testes de isolamento
+        run: npm run test:multi-estancia
