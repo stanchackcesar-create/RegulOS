@@ -1350,7 +1350,10 @@ function armAutoLinkTimer() {
 }
 async function sendLegacyAutoLink() {
   scheduleTimer = null;
-  if (!online || !botWindowActive() || !sock || !links.length) {
+  // O socket legado pertence exclusivamente à conta administradora principal.
+  // As demais contas devem enviar pelo socket individual do gerenciador de sessões.
+  const legacyOwner=readUsers().find(user=>user.admin===true);
+  if (!legacyOwner || !online || !botWindowActive() || !sock || !links.length) {
     armAutoLinkTimer();
     return;
   }
@@ -1367,16 +1370,16 @@ async function sendLegacyAutoLink() {
     try {
       await sock.sendMessage(id, { text: link });
       sent++;
-      addHistory({ grupoId:id, link, status:'sucesso', tipo:'legado' });
+      addHistory({ whatsappUserId:String(legacyOwner.id), grupoId:id, link, status:'sucesso', tipo:'legado' });
       await new Promise(r => setTimeout(r, 1000));
     } catch (e) {
-      addHistory({ grupoId:id, link, status:'erro', erro:e.message, tipo:'legado' });
-      addLog(`Falha legado ${id}: ${e.message}`);
+      addHistory({ whatsappUserId:String(legacyOwner.id), grupoId:id, link, status:'erro', erro:e.message, tipo:'legado' });
+      addLog(`Falha legado da conta administradora ${id}: ${e.message}`);
     }
   }
   index = links.length ? (index + 1) % links.length : 0;
   fs.writeFileSync(FILES.index, String(index));
-  addLog(`Envio automático legado: ${sent}/${targets.length}`);
+  addLog(`Envio automático legado da conta administradora: ${sent}/${targets.length}`);
   armAutoLinkTimer();
 }
 
