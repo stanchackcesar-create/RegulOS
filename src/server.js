@@ -243,6 +243,29 @@ function canAccessWhatsAppRecord(req,item){
   const ownerId=recordOwnerId(item);
   return Boolean(ownerId) && canAdminAccessWhatsApp(req,ownerId);
 }
+function clearUserLinkData(userId){
+  const id=String(userId||'');
+  if(!id) return {schedules:0,history:0,failures:0};
+  const schedulesBefore=linkSchedules.length;
+  linkSchedules=linkSchedules.filter(x=>scheduleOwnerId(x)!==id);
+  writeJson(FILES.schedules,linkSchedules);
+  const historyBefore=linkHistory.length;
+  linkHistory=linkHistory.filter(x=>recordOwnerId(x)!==id);
+  saveLinkHistory();
+  const failuresBefore=linkFailures.length;
+  linkFailures=linkFailures.filter(x=>recordOwnerId(x)!==id);
+  saveLinkFailures();
+  return {schedules:schedulesBefore-linkSchedules.length,history:historyBefore-linkHistory.length,failures:failuresBefore-linkFailures.length};
+}
+function clearLegacyAuthFiles(){
+  try{
+    if(!fs.existsSync(AUTH)) return;
+    for(const name of fs.readdirSync(AUTH)){
+      if(name==='users') continue;
+      fs.rmSync(path.join(AUTH,name),{recursive:true,force:true});
+    }
+  }catch(e){ addLog(`Erro limpando arquivos da sessão legada: ${e.message}`); }
+}
 function currentUser(req){
   const token=String(req.headers.cookie||'').match(/(?:^|;\s*)regulos_session=([^;]+)/)?.[1];
   if(!token) return null;
@@ -1805,88 +1828,50 @@ app.post('/api/reconectar', requireAdmin, async (req,res) => {
 });
 
 app.post('/api/desconectar', requireAdmin, async (req,res) => {
-  // Desconectar pelo painel agora significa ENCERRAR a sessão atual e
-  // preparar imediatamente um novo QR para outro número.
-  // Também limpamos o cache de grupos/seleções para nunca deixar grupos
-  // do número anterior aparecendo depois da troca de conta.
   clearReconnect();
   stopSchedulers();
-  clearLinkHistory();
-  clearLinkFailures();
   manualDisconnected=true;
-
   const old=sock;
-  sock=null;
-  online=false;
-  qr=null;
-  connectedNumber='';
-  groups=[];
-  lastGroupRefreshAt=0;
-  allowed=[];
-
-  try {
-    if (old) await old.logout();
-  } catch(e) {
-    addLog(`Logout no desconectar: ${e.message}`);
-  }
+  sock=null; online=false; qr=null; connectedNumber='';
+  groups=[]; lastGroupRefreshAt=0; allowed=[];
+  try { if(old) await old.logout(); } catch(e) { addLog(`Logout no desconectar: ${e.message}`); }
   try { old?.end(); } catch {}
-
-  // Não reutilizar permissões dos grupos da conta anterior.
-  try { writeJson(FILES.groups, []); } catch(e) {
-    addLog(`Erro limpando grupos permitidos: ${e.message}`);
-  }
-
-  try { fs.rmSync(AUTH,{recursive:true,force:true}); } catch(e) {
-    addLog(`Erro limpando sessão: ${e.message}`);
-  }
-
+  try { writeJson(FILES.groups,[]); } catch(e) { addLog(`Erro limpando grupos permitidos: ${e.message}`); }
+  clearLegacyAuthFiles();
+  const removed=clearUserLinkData(req.user.id);
   status='Gerando novo QR Code...';
-  addLog('Conta desconectada pelo painel. Grupos antigos removidos; iniciando novo QR.');
-
-  // O fechamento provocado pelo logout não deve disparar reconexão automática.
-  // Reativamos o ciclo normal somente antes de iniciar a nova sessão.
-  res.json({ok:true,msg:'WhatsApp desconectado. Os grupos antigos foram removidos. Gerando novo QR Code...'});
-
-  setTimeout(() => {
-    manualDisconnected=false;
-    start();
-  }, 700);
+  addLog(`Sessão legada do administrador desconectada; dados próprios removidos (agendamentos: ${removed.schedules}, histórico: ${removed.history}, falhas: ${removed.failures}). Sessões de outros usuários preservadas.`);
+  res.json({ok:true,msg:'Sessão legada desconectada. Os dados e autenticações de outros usuários foram preservados. Gerando novo QR Code...'});
+  setTimeout(() => { manualDisconnected=false; start(); },700);
 });
 
 app.post('/api/novo-qr', requireAdmin, async (req,res) => {
-  // Novo QR = nova sessão. Limpa todos os dados da sessão anterior.
-  clearReconnect();
-  stopSchedulers();
-  clearLinkHistory();
-  clearLinkFailures();
-  manualDisconnected=false;
-  try { linkSchedules=[]; writeJson(FILES.schedules, linkSchedules); } catch(e) { addLog(`Erro limpando agendamentos: ${e.message}`); }
-  try { groups=[]; allowed=[]; writeJson(FILES.groups, []); } catch(e) { addLog(`Erro limpando grupos: ${e.message}`); }
-  const old=sock;
-  sock=null; online=false; qr=null; connectedNumber='';
+  clearReconnect(); stopSchedulers(); manualDisconnected=false;
+  const old=sock; sock=null; online=false; qr=null; connectedNumber='';
+  groups=[]; allowed=[];
+  try { writeJson(FILES.groups,[]); } catch(e) { addLog(`Erro limpando grupos permitidos: ${e.message}`); }
+  clearLegacyAuthFiles();
+  const removed=clearUserLinkData(req.user.id);
   status='Gerando novo QR Code...';
-  addLog('Novo QR solicitado pelo painel. Sessão anterior e dados associados foram limpos.');
+  addLog(`Novo QR solicitado para sessão legada do administrador; removidos agendamentos: ${removed.schedules}, histórico: ${removed.history}, falhas: ${removed.failures}. Demais contas preservadas.`);
   try { old?.end(); } catch {}
-  try { fs.rmSync(AUTH,{recursive:true,force:true}); } catch(e) { addLog(`Erro limpando sessão: ${e.message}`); }
-  // Responde antes de iniciar o socket para evitar corrida com o navegador.
-  res.json({ok:true,msg:'Sessão limpa. O novo QR será exibido automaticamente.'});
-  setTimeout(() => start(), 350);
+  res.json({ok:true,msg:'Sessão legada reiniciada; os dados e as autenticações das outras contas foram preservados.'});
+  setTimeout(() => start(),350);
 });
 
 app.post('/api/deslogar', requireAdmin, async (req,res) => {
-  clearReconnect(); stopSchedulers(); clearLinkHistory();
-  clearLinkFailures(); manualDisconnected=false;
-  try { linkSchedules=[]; writeJson(FILES.schedules, linkSchedules); } catch(e) { addLog(`Erro limpando agendamentos: ${e.message}`); }
-  try { groups=[]; allowed=[]; writeJson(FILES.groups, []); } catch(e) { addLog(`Erro limpando grupos: ${e.message}`); }
+  clearReconnect(); stopSchedulers(); manualDisconnected=false;
   const old=sock; sock=null; online=false; qr=null; connectedNumber='';
-  status='Removendo sessão...';
+  groups=[]; allowed=[];
+  try { writeJson(FILES.groups,[]); } catch(e) { addLog(`Erro limpando grupos permitidos: ${e.message}`); }
   try { await old?.logout(); } catch(e) { addLog(`Logout: ${e.message}`); }
   try { old?.end(); } catch {}
-  try { fs.rmSync(AUTH,{recursive:true,force:true}); } catch(e) { addLog(`Erro limpando sessão: ${e.message}`); }
+  clearLegacyAuthFiles();
+  const removed=clearUserLinkData(req.user.id);
   status='Gerando novo QR Code...';
-  addLog('Sessão removida; iniciando nova autenticação.');
-  res.json({ok:true,msg:'Sessão removida. O novo QR será exibido automaticamente.'});
-  setTimeout(() => start(), 500);
+  addLog(`Sessão legada removida; agendamentos: ${removed.schedules}, histórico: ${removed.history}, falhas: ${removed.failures}. Demais contas preservadas.`);
+  res.json({ok:true,msg:'Sessão legada removida; os dados e as autenticações das outras contas foram preservados. Gerando novo QR Code...'});
+  setTimeout(() => start(),500);
 });
 
 app.get('/api/grupos', async (req,res) => {
