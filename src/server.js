@@ -371,7 +371,7 @@ function registerSignupAttempt(req){
 app.post('/api/auth/register',(req,res)=>{
   if(!signupAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas de cadastro. Tente novamente daqui a uma hora.'});
   registerSignupAttempt(req);
-  const nome=String(req.body?.nome||'').trim().replace(/\\s+/g,' ');
+  const nome=String(req.body?.nome||'').trim().replace(/\s+/g,' ');
   const usuario=String(req.body?.usuario||'').trim().toLowerCase();
   const senha=String(req.body?.senha||'');
   const confirmarSenha=String(req.body?.confirmarSenha||'');
