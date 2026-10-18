@@ -252,6 +252,13 @@ app.post('/api/auth/register',async(req,res)=>{
   try {
     await sendGmail({to:email,subject:'Confirme seu e-mail — RegulOS',text:'Olá!\n\nSeu código de confirmação do RegulOS é: '+token+'\n\nEle expira em 30 minutos.\n\nSe você não solicitou este cadastro, ignore esta mensagem.'});
   } catch(err) {
+    // Diagnóstico seguro: registra apenas códigos técnicos conhecidos, nunca credenciais,
+    // destinatário, conteúdo do e-mail ou token de confirmação.
+    const rawError = String(err?.code || err?.message || 'UNKNOWN');
+    const safeError = /^(GMAIL_NOT_CONFIGURED|SMTP_TIMEOUT|SMTP_\d{3}|ECONNRESET|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT|EPIPE|ENOTFOUND|EAI_AGAIN|CERT_HAS_EXPIRED|UNABLE_TO_VERIFY_LEAF_SIGNATURE)$/.test(rawError)
+      ? rawError
+      : 'SMTP_OTHER_ERROR';
+    console.error('[auth-email] Falha no envio de confirmação:', safeError);
     saveUsers(users.filter(u=>u.id!==user.id));
     for(const [key,value] of emailTokens) if(value.userId===user.id) emailTokens.delete(key);
     return res.status(503).json({ok:false,msg:err.message==='GMAIL_NOT_CONFIGURED'?'O envio de e-mail ainda não foi configurado na Railway.':'Não foi possível enviar o e-mail. Tente novamente mais tarde.'});
