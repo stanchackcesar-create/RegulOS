@@ -328,6 +328,39 @@ function recoveryKeyValid(value){
   const b=crypto.createHash('sha256').update(supplied).digest();
   return crypto.timingSafeEqual(a,b);
 }
+
+// Reinicialização operacional de emergência: preserva o código e o volume,
+// mas remove contas, sessões, dados de operação e credenciais locais do WhatsApp.
+// Exige a chave de recuperação e uma frase explícita de confirmação.
+app.post('/api/admin/reset-operacional', (req,res)=>{
+  const recoveryKey=String(req.body?.recoveryKey||'');
+  const confirmacao=String(req.body?.confirmacao||'');
+  if(!recoveryKeyValid(recoveryKey)) return res.status(403).json({ok:false,msg:'Chave de recuperação inválida.'});
+  if(confirmacao!=='APAGAR TODOS OS DADOS OPERACIONAIS DO REGULOS') {
+    return res.status(400).json({ok:false,msg:'Confirmação explícita obrigatória.'});
+  }
+  try {
+    for(const entry of fs.readdirSync(DATA,{withFileTypes:true})) {
+      fs.rmSync(path.join(DATA,entry.name),{recursive:true,force:true});
+    }
+    fs.mkdirSync(DATA,{recursive:true});
+    writeJson(USERS_FILE,[]);
+    writeJson(SESSIONS_FILE,{});
+    for(const entry of fs.readdirSync(AUTH,{withFileTypes:true})) {
+      fs.rmSync(path.join(AUTH,entry.name),{recursive:true,force:true});
+    }
+    fs.mkdirSync(AUTH,{recursive:true});
+    if(sock) { try { sock.end(undefined); } catch {} sock=null; }
+    online=false;
+    qr=null;
+    connectedNumber=null;
+    addLog('Reinicialização operacional concluída por chave de recuperação; código e volume preservados.');
+    return res.json({ok:true,msg:'Dados operacionais removidos. O código e o volume foram preservados; reinicie o serviço antes de criar o novo administrador.'});
+  } catch(e) {
+    addLog('Falha na reinicialização operacional: '+String(e?.message||e));
+    return res.status(500).json({ok:false,msg:'A reinicialização não foi concluída. Consulte os logs antes de tentar novamente.'});
+  }
+});
 const recoveryAttempts = new Map();
 function recoveryAllowed(req){
   const key=clientIp(req), now=Date.now(), windowMs=15*60*1000;
