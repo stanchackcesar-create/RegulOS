@@ -117,6 +117,12 @@ function createUserSessionManager(options = {}) {
     return stateFor(userId);
   }
 
+  // Acesso interno para serviços operacionais; não expõe o runtime por HTTP.
+  function getRuntime(userId) {
+    const runtime = registry.get(userId);
+    return runtime && !runtime.closed ? runtime : null;
+  }
+
   function updateGroups(userId, groups) {
     const runtime = registry.get(userId);
     if (!runtime || runtime.closed) throw new Error('Sessão do usuário não está ativa.');
@@ -134,7 +140,7 @@ function createUserSessionManager(options = {}) {
     return { closed: ids.length };
   }
 
-  return Object.freeze({ start, stop, get, updateGroups, userIds: () => registry.userIds(), closeAll });
+  return Object.freeze({ start, stop, get, getRuntime, updateGroups, userIds: () => registry.userIds(), closeAll });
 }
 
 module.exports = { createUserSessionManager };
