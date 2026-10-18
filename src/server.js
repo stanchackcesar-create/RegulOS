@@ -206,6 +206,7 @@ app.post('/api/auth/login',(req,res)=>{
   const usuario=String(req.body?.usuario||'').trim().toLowerCase();
   const senha=String(req.body?.senha||'');
   const user=readUsers().find(x=>x.usuario===usuario);
+  if(user && user.ativo===false) return res.status(403).json({ok:false,msg:'Cadastro recebido. Sua conta aguarda liberação antes do primeiro acesso.'});
   if(!user || !verifyPassword(senha,user)){ registerLoginFailure(req); return res.status(401).json({ok:false,msg:'Usuário ou senha incorretos.'}); }
   clearLoginFailures(req);
   setSession(res,user); res.json({ok:true,msg:'Login realizado.',usuario:sanitizeUser(user)});
@@ -238,12 +239,11 @@ app.post('/api/auth/register',(req,res)=>{
     return res.status(409).json({ok:false,msg:'Esse nome de usuário já está em uso.'});
   }
   const salt=crypto.randomBytes(16).toString('hex');
-  const user={id:crypto.randomUUID(),nome:usuario,usuario,salt,hash:hashPassword(senha,salt),admin:false,criadoEm:new Date().toISOString()};
+  const user={id:crypto.randomUUID(),nome:usuario,usuario,salt,hash:hashPassword(senha,salt),admin:false,ativo:false,criadoEm:new Date().toISOString()};
   users.push(user);
   saveUsers(users);
   registrationAttempts.delete(clientIp(req));
-  setSession(res,user);
-  return res.status(201).json({ok:true,msg:'Cadastro realizado com sucesso.',usuario:sanitizeUser(user)});
+  return res.status(201).json({ok:true,msg:'Cadastro recebido. Sua conta aguarda liberação antes do primeiro acesso.'});
 });
 
 app.post('/api/auth/logout',(req,res)=>{clearSession(req,res);res.json({ok:true});});
