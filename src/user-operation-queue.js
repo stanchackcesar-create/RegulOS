@@ -22,9 +22,12 @@ function createUserOperationQueue() {
 
     // Mantém a fila até a operação terminar, mas permite que uma falha
     // não impeça as próximas operações do mesmo usuário.
-    const tail = current.finally(() => {
+    const cleanup = () => {
       if (pending.get(id) === tail) pending.delete(id);
-    });
+    };
+    // Não armazenar uma promise rejeitada sem tratamento: a chamada atual
+    // continua recebendo seu erro, mas a fila interna sempre termina resolvida.
+    const tail = current.then(cleanup, cleanup);
     pending.set(id, tail);
     return current;
   }
