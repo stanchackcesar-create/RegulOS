@@ -59,7 +59,7 @@ function createBaileysUserConnector(options = {}) {
           try {
             callbacks.onQr(await renderQr(update.qr));
           } catch (error) {
-            callbacks.onClose(new Error('Falha ao gerar QR Code: ' + (error?.message || error)));
+            callbacks.onError?.(new Error('Falha ao gerar QR Code: ' + (error?.message || error)));
           }
         });
       }
@@ -77,7 +77,7 @@ function createBaileysUserConnector(options = {}) {
               }));
             callbacks.onGroups(groups);
           })
-          .catch(error => callbacks.onClose(new Error('Falha ao carregar grupos: ' + (error?.message || error))));
+          .catch(error => callbacks.onError?.(new Error('Falha ao carregar grupos: ' + (error?.message || error))));
       }
       if (update?.connection === 'close') {
         callbacks.onClose(update.lastDisconnect?.error || new Error('Conexão WhatsApp encerrada.'));
