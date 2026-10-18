@@ -67,6 +67,10 @@ function createUserSessionManager(options = {}) {
           ? groups.filter(g => g && typeof g.id === 'string' && g.id.endsWith('@g.us')).map(g => ({ ...g }))
           : [];
       },
+      onError(error) {
+        if (registry.get(runtime.userId) !== runtime || runtime.closed) return;
+        if (error) state.lastError = String(error.message || error);
+      },
       onClose(error) {
         if (registry.get(runtime.userId) !== runtime) return;
         state.status = 'offline';
