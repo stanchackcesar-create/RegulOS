@@ -5,7 +5,7 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node tools/apply-mobile-ui.js && node tools/preboot-regulos.js",
-    "test:multi-estancia": "node --test test/user-data-store.test.js test/user-runtime-registry.test.js test/user-context.test.js test/user-groups-store.test.js test/user-runtime.test.js test/user-group-service.test.js test/user-session-manager.test.js test/baileys-user-connector.test.js"
+    "test:multi-estancia": "node --test test/user-data-store.test.js test/user-runtime-registry.test.js test/user-context.test.js test/user-groups-store.test.js test/user-runtime.test.js test/user-group-service.test.js test/user-session-manager.test.js test/baileys-user-connector.test.js test/user-api-context.test.js"
   },
   "dependencies": {
     "@whiskeysockets/baileys": "7.0.0-rc14",
