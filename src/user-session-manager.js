@@ -35,9 +35,13 @@ function createUserSessionManager(options = {}) {
   }
 
   async function start(userId) {
-    const runtime = registry.getOrCreate(userId);
-    const existing = states.get(runtime.userId);
-    if (existing && ['starting', 'online'].includes(existing.status)) return stateFor(runtime.userId);
+    let runtime = registry.get(userId);
+    const existing = runtime ? states.get(runtime.userId) : null;
+    if (existing && ['starting', 'online', 'qr'].includes(existing.status)) return stateFor(runtime.userId);
+    // Uma sessão offline/erro precisa de um runtime novo; não podemos associar
+    // outro socket a um runtime que ainda guarda a conexão anterior.
+    if (runtime) await stop(runtime.userId);
+    runtime = registry.getOrCreate(userId);
 
     const state = {
       status: 'starting', qr: null, connectedNumber: '',
