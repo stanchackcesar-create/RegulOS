@@ -96,7 +96,7 @@ function generateBackupCodes(count = 10) {
     throw new TypeError('Gere entre 5 e 20 códigos de recuperação.');
   }
   return Array.from({ length: count }, () =>
-    crypto.randomBytes(8).toString('hex').toUpperCase().match(/.{1,4}/g).join('-'));
+    crypto.randomBytes(16).toString('hex').toUpperCase().match(/.{1,4}/g).join('-'));
 }
 
 function hashBackupCode(code, pepper) {
