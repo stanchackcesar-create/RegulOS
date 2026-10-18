@@ -12,11 +12,12 @@ test('mantém QR, conexão, grupos e encerramento separados por usuário', async
   t.after(() => fs.rmSync(baseDir, { recursive: true, force: true }));
   const callbacks = new Map();
   const closed = [];
+  const cleaned = [];
   const manager = createUserSessionManager({
     baseDir,
     async connect(userId) {
       const socket = { end() { closed.push(userId); } };
-      return { socket, close() { socket.end(); } };
+      return { socket, close() { cleaned.push(userId); } };
     },
   });
 
@@ -36,9 +37,11 @@ test('mantém QR, conexão, grupos e encerramento separados por usuário', async
   assert.equal(manager.get('user-A'), null);
   assert.equal(manager.get('user-B').status, 'starting');
   assert.deepEqual(closed, ['user-A']);
+  assert.deepEqual(cleaned, ['user-A']);
   assert.equal(await manager.stop('user-A'), false);
   await manager.closeAll();
   assert.deepEqual(closed, ['user-A', 'user-B']);
+  assert.deepEqual(cleaned, ['user-A', 'user-B']);
 });
 
 test('callbacks de sessão não são compartilhados entre usuários', async t => {
