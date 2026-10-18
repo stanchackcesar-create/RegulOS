@@ -13,7 +13,9 @@ Este plano não autoriza deploy, ativação de serviços Railway, conexão de co
 - [x] Registrar os arquivos operacionais globais e as principais rotas.
 - [x] Criar um protótipo de armazenamento por usuário.
 - [x] Criar um protótipo de registro de runtime por usuário.
-- [ ] Executar os testes a partir do checkout da branch.
+- [x] Criar gerenciador de ciclo de vida de sessões por usuário com conector injetável.
+- [x] Criar adaptador Baileys com pasta de autenticação por usuário e limpeza de listeners.
+- [ ] Executar e confirmar os testes a partir do checkout da branch.
 - [ ] Revisar todos os consumidores de FILES, sock, groups, allowed, groupConfig e timers.
 
 ## Fase 2 — Contexto operacional por usuário
@@ -34,7 +36,7 @@ Ordem proposta:
 2. Migrar leitura/gravação de grupos e configurações; validar A/B.
 3. Migrar links, fila e agendamentos.
 4. Migrar histórico, falhas, entregas e rotas de diagnóstico.
-5. Ligar reconexão/desconexão e sessão Baileys ao runtime do usuário.
+5. Integrar o adaptador Baileys e o gerenciador às rotas de sessão por usuário, com reconexão/desconexão isoladas.
 6. Refatorar processadores e agendadores para receber contexto explicitamente, eliminando dependência de globais.
 7. Auditar todas as rotas e tarefas de fundo contra acesso cruzado.
 
@@ -60,4 +62,4 @@ Não avançar de fase se os testes de isolamento da fase anterior falharem.
 
 ## Estado atual
 
-O armazenamento e o registro de runtimes são protótipos isolados. Ainda não estão integrados a `src/server.js`; portanto, a aplicação completa ainda não oferece isolamento Multi-Estância.
+O armazenamento, o registro de runtimes, o gerenciador de sessões e o adaptador Baileys já existem como módulos separados e com testes unitários preparados. Ainda não estão integrados a `src/server.js`; as rotas e os processadores principais continuam usando estado global. A aplicação completa, portanto, ainda não oferece isolamento Multi-Estância. A execução da suíte nesta branch ainda precisa ser confirmada antes de avançar para integração de rotas.
