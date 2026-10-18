@@ -17,7 +17,7 @@ function authenticatedUserId(req) {
 
 function resolveAuthenticatedRuntime(req, sessionManager) {
   const userId = authenticatedUserId(req);
-  if (!sessionManager || typeof sessionManager.get !== 'function') {
+  if (!sessionManager || (typeof sessionManager.getRuntime !== 'function' && typeof sessionManager.get !== 'function')) {
     throw new TypeError('Gerenciador de sessões inválido.');
   }
   const lookup = typeof sessionManager.getRuntime === 'function' ? sessionManager.getRuntime : sessionManager.get;
