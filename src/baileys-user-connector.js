@@ -68,11 +68,13 @@ function createBaileysUserConnector(options = {}) {
         Promise.resolve(socket.groupFetchAllParticipating?.())
           .then(raw => {
             if (closed || runtime.closed || !raw || typeof raw !== 'object') return;
-            const groups = Object.entries(raw).map(([id, group]) => ({
-              id,
-              name: String(group?.subject || group?.name || id),
-              subject: String(group?.subject || group?.name || '')
-            }));
+            const groups = Object.entries(raw)
+              .filter(([id]) => id.endsWith('@g.us'))
+              .map(([id, group]) => ({
+                id,
+                name: String(group?.subject || group?.name || id),
+                subject: String(group?.subject || group?.name || '')
+              }));
             callbacks.onGroups(groups);
           })
           .catch(error => callbacks.onClose(new Error('Falha ao carregar grupos: ' + (error?.message || error))));
