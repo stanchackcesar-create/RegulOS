@@ -335,7 +335,11 @@ function recoveryKeyValid(value){
 app.post('/api/admin/reset-operacional', (req,res)=>{
   const recoveryKey=String(req.body?.recoveryKey||'');
   const confirmacao=String(req.body?.confirmacao||'');
-  if(!recoveryKeyValid(recoveryKey)) return res.status(403).json({ok:false,msg:'Chave de recuperação inválida.'});
+  const resetToken=String(process.env.REGULOS_RESET_TOKEN||'');
+  const tokenHash=crypto.createHash('sha256').update(resetToken).digest();
+  const suppliedHash=crypto.createHash('sha256').update(recoveryKey).digest();
+  const resetTokenValid=Boolean(resetToken && recoveryKey) && crypto.timingSafeEqual(tokenHash,suppliedHash);
+  if(!recoveryKeyValid(recoveryKey) && !resetTokenValid) return res.status(403).json({ok:false,msg:'Chave de recuperação inválida.'});
   if(confirmacao!=='APAGAR TODOS OS DADOS OPERACIONAIS DO REGULOS') {
     return res.status(400).json({ok:false,msg:'Confirmação explícita obrigatória.'});
   }
