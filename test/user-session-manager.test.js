@@ -67,6 +67,27 @@ test('callbacks de sessão não são compartilhados entre usuários', async t =>
   await manager.closeAll();
 });
 
+test('expõe runtime interno separado do estado público da sessão', async t => {
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'regulos-session-runtime-'));
+  t.after(() => fs.rmSync(baseDir, { recursive: true, force: true }));
+  const manager = createUserSessionManager({
+    baseDir,
+    async connect(userId) {
+      return { socket: { end() {} }, close() {} };
+    }
+  });
+  await manager.start('runtime-owner');
+  const publicState = manager.get('runtime-owner');
+  const runtime = manager.getRuntime('runtime-owner');
+  assert.equal(publicState.userId, 'runtime-owner');
+  assert.equal(publicState.groups instanceof Array, true);
+  assert.equal(runtime.userId, 'runtime-owner');
+  assert.equal(typeof runtime.groups.read, 'function');
+  assert.notEqual(runtime, publicState);
+  await manager.stop('runtime-owner');
+  assert.equal(manager.getRuntime('runtime-owner'), null);
+});
+
 test('exige conector explícito para impedir conexão real acidental nos testes', () => {
   assert.throws(() => createUserSessionManager({ baseDir: '/tmp/test' }), /connect.*obrigatória/);
 });
