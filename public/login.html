@@ -141,6 +141,12 @@ button:hover{filter:brightness(1.08);box-shadow:0 0 26px rgba(34,211,238,.28),0 
     <label>Senha</label><input id="s" type="password" autocomplete="current-password" required>
     <button>Entrar</button>
   </form>
+  <button type="button" id="showRegister" style="margin-top:10px;background:transparent;border:1px solid #35506f;box-shadow:none;color:#9fefff">Criar minha conta</button>
+  <form id="registerForm" style="display:none;margin-top:10px">
+    <label>Novo usuário</label><input id="newUser" autocomplete="username" minlength="3" maxlength="32" required pattern="[a-zA-Z0-9._-]{3,32}">
+    <label>Senha (mínimo 8 caracteres)</label><input id="newPassword" type="password" autocomplete="new-password" minlength="8" required>
+    <button type="submit">Cadastrar e entrar</button>
+  </form>
   <button type="button" id="forgot" style="margin-top:10px;background:transparent;border:1px solid #35506f;box-shadow:none;color:#9fefff">Esqueci minha senha</button>
   <form id="rf" style="display:none;margin-top:10px">
     <label>Usuário</label><input id="ru" autocomplete="username">
@@ -154,6 +160,8 @@ button:hover{filter:brightness(1.08);box-shadow:0 0 26px rgba(34,211,238,.28),0 
 <script>
 async function init(){try{const r=await fetch('/api/auth/status');const d=await r.json();if(d.autenticado)location.href='/';if(!d.configurado)location.href='/configurar';}catch(e){document.getElementById('e').textContent='Servidor indisponível.'}}
 document.getElementById('f').onsubmit=async e=>{e.preventDefault();const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario:u.value,senha:s.value})});const d=await r.json();if(r.ok)location.href='/';else document.getElementById('e').className='err',document.getElementById('e').textContent=d.msg||'Não foi possível entrar.'};
+document.getElementById('showRegister').onclick=()=>{const f=document.getElementById('registerForm');f.style.display=f.style.display==='none'?'block':'none';document.getElementById('e').textContent=''}; 
+document.getElementById('registerForm').onsubmit=async e=>{e.preventDefault();const box=document.getElementById('e');box.className='';box.textContent='';const r=await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({usuario:document.getElementById('newUser').value,senha:document.getElementById('newPassword').value})});const d=await r.json().catch(()=>({}));if(r.ok&&d.ok)location.href='/';else{box.className='err';box.textContent=d.msg||'Não foi possível criar a conta.'}}; 
 document.getElementById('forgot').onclick=()=>{const f=document.getElementById('rf');f.style.display=f.style.display==='none'?'block':'none';document.getElementById('e').textContent=''};
 document.getElementById('rf').onsubmit=async e=>{e.preventDefault();const box=document.getElementById('e');box.textContent='';const r=await fetch('/api/auth/recover',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario:ru.value,recoveryKey:rk.value,novaSenha:rs.value})});const d=await r.json();if(r.ok)location.href='/';else box.className='err',box.textContent=d.msg||'Não foi possível recuperar a senha.'};init();
 </script>
