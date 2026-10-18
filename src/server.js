@@ -3004,22 +3004,34 @@ app.post('/api/desconectar', requireAdmin, async (req,res) => {
 });
 
 app.post('/api/novo-qr', requireAdmin, async (req,res) => {
-  // Novo QR = nova sessão. Limpa todos os dados da sessão anterior.
+  // Somente o botão "Novo QR Code" inicia uma sessão limpa.
+  // Mantém usuários e demais dados do RegulOS; remove credenciais WhatsApp,
+  // cache/lista de grupos e permissões da sessão anterior para evitar acúmulo.
   clearReconnect();
   stopSchedulers();
   clearLinkHistory();
   clearLinkFailures();
   manualDisconnected=false;
   try { linkSchedules=[]; writeJson(FILES.schedules, linkSchedules); } catch(e) { addLog(`Erro limpando agendamentos: ${e.message}`); }
-  try { groups=[]; allowed=[]; writeJson(FILES.groups, []); } catch(e) { addLog(`Erro limpando grupos: ${e.message}`); }
+  try {
+    groups=[];
+    allowed=[];
+    lastGroupRefreshAt=0;
+    writeJson(FILES.groups, []);
+    writeJson(FILES.groupConfig, {});
+  } catch(e) { addLog(`Erro limpando grupos/configurações: ${e.message}`); }
+  try {
+    linkQueue={items:[],cursor:0,currentId:'',updatedAt:new Date().toISOString()};
+    saveLinkQueue();
+  } catch(e) { addLog(`Erro limpando fila de links: ${e.message}`); }
   const old=sock;
   sock=null; online=false; qr=null; connectedNumber='';
   status='Gerando novo QR Code...';
-  addLog('Novo QR solicitado pelo painel. Sessão anterior e dados associados foram limpos.');
+  addLog('Novo QR solicitado: credenciais WhatsApp, grupos, permissões, configurações de grupo, agendamentos e históricos da sessão anterior limpos. Usuários e demais dados do sistema preservados.');
   try { old?.end(); } catch {}
   try { fs.rmSync(AUTH,{recursive:true,force:true}); } catch(e) { addLog(`Erro limpando sessão: ${e.message}`); }
   // Responde antes de iniciar o socket para evitar corrida com o navegador.
-  res.json({ok:true,msg:'Sessão limpa. O novo QR será exibido automaticamente.'});
+  res.json({ok:true,msg:'Sessão anterior limpa; usuários e demais dados do sistema preservados. O novo QR será exibido automaticamente.'});
   setTimeout(() => start(), 350);
 });
 
