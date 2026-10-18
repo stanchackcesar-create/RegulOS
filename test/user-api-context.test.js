@@ -17,7 +17,7 @@ test('rejeita requisição sem identidade autenticada', () => {
 test('resolve somente o runtime da identidade autenticada', () => {
   const a = { userId: 'owner-A', marker: 'A' };
   const b = { userId: 'owner-B', marker: 'B' };
-  const manager = { get: id => ({ 'owner-A': a, 'owner-B': b })[id] || null };
+  const manager = { getRuntime: id => ({ 'owner-A': a, 'owner-B': b })[id] || null };
   const context = createUserApiContext(manager);
   assert.equal(context.runtime({ user: { id: 'owner-A' }, body: { userId: 'owner-B' } }), a);
   assert.equal(resolveAuthenticatedRuntime({ user: { id: 'owner-B' } }, manager), b);
@@ -25,7 +25,7 @@ test('resolve somente o runtime da identidade autenticada', () => {
 });
 
 test('rejeita runtime que não corresponde ao usuário autenticado', () => {
-  const manager = { get: () => ({ userId: 'another-user' }) };
+  const manager = { getRuntime: () => ({ userId: 'another-user' }) };
   assert.throws(
     () => resolveAuthenticatedRuntime({ user: { id: 'owner-A' } }, manager),
     { code: 'USER_RUNTIME_OWNERSHIP_MISMATCH' }
