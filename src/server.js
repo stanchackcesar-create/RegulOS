@@ -23,6 +23,7 @@ const zlib = require('zlib');
 const crypto = require('crypto');
 const { createShopeeIntegration, isShopeeHost } = require('./shopee');
 const { chromium } = require('playwright');
+const { sendGmail } = require('./gmail-mailer');
 
 const ROOT = path.join(__dirname, '..');
 const PUBLIC = path.join(ROOT, 'public');
@@ -225,25 +226,75 @@ function registerRegistrationAttempt(req){
   if(!a || now-a.startedAt>windowMs) registrationAttempts.set(key,{startedAt:now,count:1});
   else {a.count++;registrationAttempts.set(key,a);}
 }
-app.post('/api/auth/register',(req,res)=>{
+app.post('/api/auth/register',async(req,res)=>{
   if(!registrationAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas de cadastro. Aguarde 15 minutos.'});
   const usuario=String(req.body?.usuario||'').trim().toLowerCase();
+  const email=String(req.body?.email||'').trim().toLowerCase();
   const senha=String(req.body?.senha||'');
-  if(!/^[a-z0-9._-]{3,32}$/.test(usuario) || senha.length<8){
+  if(!/^[a-z0-9._-]{3,32}$/.test(usuario) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || senha.length<8){
     registerRegistrationAttempt(req);
-    return res.status(400).json({ok:false,msg:'Use um usuário de 3 a 32 caracteres (letras, números, ponto, hífen ou _) e senha com pelo menos 8 caracteres.'});
+    return res.status(400).json({ok:false,msg:'Informe usuário válido, e-mail válido e senha com pelo menos 8 caracteres.'});
   }
   const users=readUsers();
   if(users.some(u=>String(u.usuario||'').toLowerCase()===usuario)){
     registerRegistrationAttempt(req);
     return res.status(409).json({ok:false,msg:'Esse nome de usuário já está em uso.'});
   }
+  if(users.some(u=>String(u.email||'').toLowerCase()===email)){
+    registerRegistrationAttempt(req);
+    return res.status(409).json({ok:false,msg:'Esse e-mail já está cadastrado.'});
+  }
   const salt=crypto.randomBytes(16).toString('hex');
-  const user={id:crypto.randomUUID(),nome:usuario,usuario,salt,hash:hashPassword(senha,salt),admin:false,ativo:false,criadoEm:new Date().toISOString()};
-  users.push(user);
-  saveUsers(users);
+  const user={id:crypto.randomUUID(),nome:usuario,usuario,email,salt,hash:hashPassword(senha,salt),admin:false,ativo:false,criadoEm:new Date().toISOString(),emailVerificado:false};
+  users.push(user); saveUsers(users);
+  const token=crypto.randomBytes(32).toString('hex');
+  emailTokens.set(crypto.createHash('sha256').update(token).digest('hex'),{userId:user.id,expiresAt:Date.now()+30*60*1000,purpose:'verify'});
+  try {
+    await sendGmail({to:email,subject:'Confirme seu e-mail — RegulOS',text:'Olá!\n\nSeu código de confirmação do RegulOS é: '+token+'\n\nEle expira em 30 minutos.\n\nSe você não solicitou este cadastro, ignore esta mensagem.'});
+  } catch(err) {
+    saveUsers(users.filter(u=>u.id!==user.id));
+    for(const [key,value] of emailTokens) if(value.userId===user.id) emailTokens.delete(key);
+    return res.status(503).json({ok:false,msg:err.message==='GMAIL_NOT_CONFIGURED'?'O envio de e-mail ainda não foi configurado na Railway.':'Não foi possível enviar o e-mail. Tente novamente mais tarde.'});
+  }
   registrationAttempts.delete(clientIp(req));
-  return res.status(201).json({ok:true,msg:'Cadastro recebido. Sua conta aguarda liberação antes do primeiro acesso.'});
+  return res.status(201).json({ok:true,verificationRequired:true,msg:'Enviamos um código para seu e-mail. Informe o código para confirmar a conta.'});
+});
+const emailTokens=new Map();
+app.post('/api/auth/verify-email',(req,res)=>{
+  const usuario=String(req.body?.usuario||'').trim().toLowerCase();
+  const token=String(req.body?.codigo||'').trim();
+  if(!token||token.length>128) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
+  const digest=crypto.createHash('sha256').update(token).digest('hex');
+  const entry=emailTokens.get(digest);
+  if(!entry||entry.purpose!=='verify'||entry.expiresAt<Date.now()) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
+  const users=readUsers(), user=users.find(u=>u.id===entry.userId&&u.usuario===usuario);
+  if(!user) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
+  user.emailVerificado=true; user.ativo=true; saveUsers(users); emailTokens.delete(digest);
+  res.json({ok:true,msg:'E-mail confirmado. Sua conta aguarda liberação do administrador.'});
+});
+app.post('/api/auth/forgot-password',async(req,res)=>{
+  if(!recoveryAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas. Aguarde alguns minutos.'});
+  const email=String(req.body?.email||'').trim().toLowerCase();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){registerRecoveryFailure(req);return res.status(400).json({ok:false,msg:'Informe um e-mail válido.'});}
+  const user=readUsers().find(u=>String(u.email||'').toLowerCase()===email&&u.emailVerificado===true);
+  if(!user) return res.json({ok:true,msg:'Se o e-mail estiver cadastrado e confirmado, enviaremos as instruções de recuperação.'});
+  const token=crypto.randomBytes(32).toString('hex'), digest=crypto.createHash('sha256').update(token).digest('hex');
+  emailTokens.set(digest,{userId:user.id,expiresAt:Date.now()+20*60*1000,purpose:'reset'});
+  try { await sendGmail({to:email,subject:'Recuperação de senha — RegulOS',text:'Recebemos um pedido para redefinir sua senha.\n\nCódigo de recuperação: '+token+'\n\nUse este código no RegulOS em até 20 minutos. Ele só pode ser usado uma vez. Se não foi você, ignore esta mensagem.'}); }
+  catch(err){emailTokens.delete(digest);return res.status(503).json({ok:false,msg:err.message==='GMAIL_NOT_CONFIGURED'?'O Gmail ainda não foi configurado na Railway.':'Não foi possível enviar o e-mail agora.'});}
+  res.json({ok:true,msg:'Se o e-mail estiver cadastrado e confirmado, enviaremos as instruções de recuperação.'});
+});
+app.post('/api/auth/reset-password',(req,res)=>{
+  const email=String(req.body?.email||'').trim().toLowerCase(), token=String(req.body?.codigo||'').trim(), novaSenha=String(req.body?.novaSenha||'');
+  if(novaSenha.length<8) return res.status(400).json({ok:false,msg:'A nova senha deve ter pelo menos 8 caracteres.'});
+  const digest=crypto.createHash('sha256').update(token).digest('hex'), entry=emailTokens.get(digest);
+  if(!entry||entry.purpose!=='reset'||entry.expiresAt<Date.now()) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
+  const users=readUsers(), user=users.find(u=>u.id===entry.userId&&String(u.email||'').toLowerCase()===email&&u.emailVerificado===true);
+  if(!user) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
+  const salt=crypto.randomBytes(16).toString('hex'); user.salt=salt; user.hash=hashPassword(novaSenha,salt); saveUsers(users);
+  for(const [key,value] of emailTokens) if(value.userId===user.id) emailTokens.delete(key);
+  const sessions=readSessions(); for(const [key,value] of Object.entries(sessions)) if(value?.userId===user.id) delete sessions[key]; saveSessions(sessions);
+  res.json({ok:true,msg:'Senha redefinida. Entre com sua nova senha.'});
 });
 
 app.post('/api/auth/logout',(req,res)=>{clearSession(req,res);res.json({ok:true});});
