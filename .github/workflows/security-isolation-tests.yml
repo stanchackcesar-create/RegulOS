@@ -1,0 +1,22 @@
+name: Security and isolation tests
+
+on:
+  push:
+    branches:
+      - feature/auth-email-2fa-isolation-integration-2026-10-18
+  pull_request:
+    branches:
+      - main
+      - master
+      - audit/multi-estancia-isolamento-2026-10-17
+
+jobs:
+  node-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm install --ignore-scripts
+      - run: npm run test:multi-estancia
