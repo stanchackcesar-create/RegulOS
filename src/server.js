@@ -3021,7 +3021,7 @@ app.post('/api/novo-qr', requireAdmin, async (req,res) => {
     writeJson(FILES.groupConfig, {});
   } catch(e) { addLog(`Erro limpando grupos/configurações: ${e.message}`); }
   try {
-    linkQueue={items:[],cursor:0,currentId:'',updatedAt:new Date().toISOString()};
+    linkQueue={cursor:0,currentId:'',updatedAt:new Date().toISOString()};
     saveLinkQueue();
   } catch(e) { addLog(`Erro limpando fila de links: ${e.message}`); }
   const old=sock;
