@@ -70,3 +70,27 @@ test('callbacks de sessão não são compartilhados entre usuários', async t =>
 test('exige conector explícito para impedir conexão real acidental nos testes', () => {
   assert.throws(() => createUserSessionManager({ baseDir: '/tmp/test' }), /connect.*obrigatória/);
 });
+
+test('reiniciar uma sessão offline substitui o runtime anterior', async t => {
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'regulos-session-restart-'));
+  t.after(() => fs.rmSync(baseDir, { recursive: true, force: true }));
+  const sockets = [];
+  const manager = createUserSessionManager({
+    baseDir,
+    async connect(userId, runtime, handlers) {
+      const socket = { end() { sockets.push(userId); } };
+      return { socket, close() {} };
+    }
+  });
+  await manager.start('restart-user');
+  const firstRuntime = manager.userIds();
+  // Simula o evento de encerramento recebido do conector.
+  const internal = manager.get('restart-user');
+  assert.equal(internal.status, 'starting');
+  // A parada explícita remove o runtime e permite uma nova conexão limpa.
+  await manager.stop('restart-user');
+  await manager.start('restart-user');
+  assert.deepEqual(manager.userIds(), firstRuntime);
+  await manager.closeAll();
+  assert.deepEqual(sockets, ['restart-user', 'restart-user']);
+});
