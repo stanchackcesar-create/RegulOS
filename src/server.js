@@ -210,6 +210,42 @@ app.post('/api/auth/login',(req,res)=>{
   clearLoginFailures(req);
   setSession(res,user); res.json({ok:true,msg:'Login realizado.',usuario:sanitizeUser(user)});
 });
+
+const registrationAttempts = new Map();
+function registrationAllowed(req){
+  const key=clientIp(req), now=Date.now(), windowMs=15*60*1000;
+  const a=registrationAttempts.get(key);
+  if(!a || now-a.startedAt>windowMs){registrationAttempts.set(key,{startedAt:now,count:0});return true;}
+  return a.count < 5;
+}
+function registerRegistrationAttempt(req){
+  const key=clientIp(req), now=Date.now(), windowMs=15*60*1000;
+  const a=registrationAttempts.get(key);
+  if(!a || now-a.startedAt>windowMs) registrationAttempts.set(key,{startedAt:now,count:1});
+  else {a.count++;registrationAttempts.set(key,a);}
+}
+app.post('/api/auth/register',(req,res)=>{
+  if(!registrationAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas de cadastro. Aguarde 15 minutos.'});
+  const usuario=String(req.body?.usuario||'').trim().toLowerCase();
+  const senha=String(req.body?.senha||'');
+  if(!/^[a-z0-9._-]{3,32}$/.test(usuario) || senha.length<8){
+    registerRegistrationAttempt(req);
+    return res.status(400).json({ok:false,msg:'Use um usuário de 3 a 32 caracteres (letras, números, ponto, hífen ou _) e senha com pelo menos 8 caracteres.'});
+  }
+  const users=readUsers();
+  if(users.some(u=>String(u.usuario||'').toLowerCase()===usuario)){
+    registerRegistrationAttempt(req);
+    return res.status(409).json({ok:false,msg:'Esse nome de usuário já está em uso.'});
+  }
+  const salt=crypto.randomBytes(16).toString('hex');
+  const user={id:crypto.randomUUID(),nome:usuario,usuario,salt,hash:hashPassword(senha,salt),admin:false,criadoEm:new Date().toISOString()};
+  users.push(user);
+  saveUsers(users);
+  registrationAttempts.delete(clientIp(req));
+  setSession(res,user);
+  return res.status(201).json({ok:true,msg:'Cadastro realizado com sucesso.',usuario:sanitizeUser(user)});
+});
+
 app.post('/api/auth/logout',(req,res)=>{clearSession(req,res);res.json({ok:true});});
 
 function recoveryKeyValid(value){
