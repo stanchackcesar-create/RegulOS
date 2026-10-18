@@ -18,5 +18,8 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 24
+          cache: npm
+      - name: Instalar dependências
+        run: npm ci
       - name: Executar testes de isolamento
         run: npm run test:multi-estancia
