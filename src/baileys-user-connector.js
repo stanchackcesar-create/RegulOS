@@ -47,15 +47,16 @@ function createBaileysUserConnector(options = {}) {
     });
 
     let closed = false;
+    let isOpen = false;
     let qrWork = Promise.resolve();
     const onCredsUpdate = () => {
       Promise.resolve(auth.saveCreds()).catch(() => {});
     };
     const onConnectionUpdate = update => {
       if (closed || runtime.closed) return;
-      if (update?.qr) {
+      if (update?.qr && !isOpen) {
         qrWork = qrWork.then(async () => {
-          if (closed || runtime.closed) return;
+          if (closed || runtime.closed || isOpen) return;
           try {
             callbacks.onQr(await renderQr(update.qr));
           } catch (error) {
@@ -64,6 +65,7 @@ function createBaileysUserConnector(options = {}) {
         });
       }
       if (update?.connection === 'open') {
+        isOpen = true;
         callbacks.onOpen({ connectedNumber: normalizePhone(socket.user?.id || '') });
         Promise.resolve(socket.groupFetchAllParticipating?.())
           .then(raw => {
@@ -80,6 +82,7 @@ function createBaileysUserConnector(options = {}) {
           .catch(error => callbacks.onError?.(new Error('Falha ao carregar grupos: ' + (error?.message || error))));
       }
       if (update?.connection === 'close') {
+        isOpen = false;
         callbacks.onClose(update.lastDisconnect?.error || new Error('Conexão WhatsApp encerrada.'));
       }
     };
