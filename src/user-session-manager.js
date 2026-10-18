@@ -95,7 +95,9 @@ function createUserSessionManager(options = {}) {
     const connector = connectors.get(id);
     connectors.delete(id);
     states.delete(id);
-    if (connector) {
+    // Quando o runtime possui socket, seu close() é a única autoridade para
+    // encerrá-lo. Evita executar end()/logout() duas vezes na mesma conexão.
+    if (connector && !runtime.socket) {
       try { await connector.close(); } catch {}
     }
     await registry.remove(id);
