@@ -20,7 +20,8 @@ function resolveAuthenticatedRuntime(req, sessionManager) {
   if (!sessionManager || typeof sessionManager.get !== 'function') {
     throw new TypeError('Gerenciador de sessões inválido.');
   }
-  const runtime = sessionManager.get(userId);
+  const lookup = typeof sessionManager.getRuntime === 'function' ? sessionManager.getRuntime : sessionManager.get;
+  const runtime = lookup.call(sessionManager, userId);
   if (!runtime) {
     const error = new Error('Não existe runtime para o usuário autenticado.');
     error.code = 'USER_RUNTIME_NOT_FOUND';
