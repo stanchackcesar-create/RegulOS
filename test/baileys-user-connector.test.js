@@ -55,7 +55,7 @@ test('cria autenticação separada e encaminha QR, conexão e grupos', async t =
   assert.deepEqual(a.qrs, ['data:qr,QR_A']);
   assert.equal(a.opens.length, 0);
   assert.equal(b.opens[0].connectedNumber, '5511888888888');
-  assert.deepEqual(b.groups[0].map(g => g.id), ['group-1@g.us', 'direct@s.whatsapp.net']);
+  assert.deepEqual(b.groups[0].map(g => g.id), ['group-1@g.us']);
 
   sockets[0].ev.emit('creds.update');
   await new Promise(resolve => setImmediate(resolve));
