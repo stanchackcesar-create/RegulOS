@@ -260,6 +260,21 @@ app.post('/api/auth/register',async(req,res)=>{
   return res.status(201).json({ok:true,verificationRequired:true,msg:'Enviamos um código para seu e-mail. Informe o código para confirmar a conta.'});
 });
 const emailTokens=new Map();
+app.post('/api/auth/add-email',async(req,res)=>{
+  if(!recoveryAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas. Aguarde alguns minutos.'});
+  const usuario=String(req.body?.usuario||'').trim().toLowerCase();
+  const senha=String(req.body?.senha||'');
+  const email=String(req.body?.email||'').trim().toLowerCase();
+  if(!usuario||!senha||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ok:false,msg:'Informe usuário, senha atual e um e-mail válido.'});
+  const users=readUsers(), user=users.find(u=>String(u.usuario||'').toLowerCase()===usuario);
+  if(!user||!verifyPassword(senha,user)) {registerRecoveryFailure(req);return res.status(400).json({ok:false,msg:'Não foi possível validar a conta. Confira usuário e senha.'});}
+  if(users.some(u=>u.id!==user.id&&String(u.email||'').toLowerCase()===email)) return res.status(409).json({ok:false,msg:'Esse e-mail já está vinculado a outra conta.'});
+  const token=crypto.randomBytes(4).toString('hex').toUpperCase(), digest=crypto.createHash('sha256').update(token).digest('hex');
+  emailTokens.set(digest,{userId:user.id,email,expiresAt:Date.now()+20*60*1000,purpose:'add-email'});
+  try {await sendGmail({to:email,subject:'Confirme seu e-mail — RegulOS',text:'Você solicitou vincular este e-mail à sua conta RegulOS.\n\nCódigo: '+token+'\n\nO código expira em 20 minutos. Se não foi você, ignore esta mensagem.'});}
+  catch(err){emailTokens.delete(digest);return res.status(503).json({ok:false,msg:err.message==='GMAIL_NOT_CONFIGURED'?'O Gmail ainda não foi configurado na Railway.':'Não foi possível enviar o e-mail agora.'});}
+  res.json({ok:true,msg:'Enviamos um código para esse e-mail. Digite-o abaixo para vincular à sua conta.'});
+});
 app.post('/api/auth/verify-email',(req,res)=>{
   const usuario=String(req.body?.usuario||'').trim().toLowerCase();
   const token=String(req.body?.codigo||'').trim();
@@ -269,6 +284,12 @@ app.post('/api/auth/verify-email',(req,res)=>{
   if(!entry||entry.purpose!=='verify'||entry.expiresAt<Date.now()) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
   const users=readUsers(), user=users.find(u=>u.id===entry.userId&&u.usuario===usuario);
   if(!user) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
+  if(entry.purpose==='add-email'){
+    if(users.some(u=>u.id!==user.id&&String(u.email||'').toLowerCase()===String(entry.email||'').toLowerCase())) return res.status(409).json({ok:false,msg:'Esse e-mail já está vinculado a outra conta.'});
+    user.email=entry.email; user.emailVerificado=true; saveUsers(users); emailTokens.delete(digest);
+    return res.json({ok:true,msg:'E-mail vinculado e confirmado. Agora você pode recuperar sua senha por e-mail.'});
+  }
+  if(entry.purpose!=='verify') return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
   user.emailVerificado=true; user.ativo=true; saveUsers(users); emailTokens.delete(digest);
   res.json({ok:true,msg:'E-mail confirmado. Sua conta aguarda liberação do administrador.'});
 });
