@@ -247,7 +247,7 @@ app.post('/api/auth/register',async(req,res)=>{
   const salt=crypto.randomBytes(16).toString('hex');
   const user={id:crypto.randomUUID(),nome:usuario,usuario,email,salt,hash:hashPassword(senha,salt),admin:false,ativo:false,criadoEm:new Date().toISOString(),emailVerificado:false};
   users.push(user); saveUsers(users);
-  const token=crypto.randomBytes(32).toString('hex');
+  const token=String(crypto.randomInt(0,1000000)).padStart(6,'0');
   emailTokens.set(crypto.createHash('sha256').update(token).digest('hex'),{userId:user.id,expiresAt:Date.now()+30*60*1000,purpose:'verify'});
   try {
     await sendGmail({to:email,subject:'Confirme seu e-mail — RegulOS',text:'Olá!\n\nSeu código de confirmação do RegulOS é: '+token+'\n\nEle expira em 30 minutos.\n\nSe você não solicitou este cadastro, ignore esta mensagem.'});
@@ -276,7 +276,7 @@ app.post('/api/auth/add-email',async(req,res)=>{
   const users=readUsers(), user=users.find(u=>String(u.usuario||'').toLowerCase()===usuario);
   if(!user||!verifyPassword(senha,user)) {registerRecoveryFailure(req);return res.status(400).json({ok:false,msg:'Não foi possível validar a conta. Confira usuário e senha.'});}
   if(users.some(u=>u.id!==user.id&&String(u.email||'').toLowerCase()===email)) return res.status(409).json({ok:false,msg:'Esse e-mail já está vinculado a outra conta.'});
-  const token=crypto.randomBytes(4).toString('hex').toUpperCase(), digest=crypto.createHash('sha256').update(token).digest('hex');
+  const token=String(crypto.randomInt(0,1000000)).padStart(6,'0'), digest=crypto.createHash('sha256').update(token).digest('hex');
   emailTokens.set(digest,{userId:user.id,email,expiresAt:Date.now()+20*60*1000,purpose:'add-email'});
   try {await sendGmail({to:email,subject:'Confirme seu e-mail — RegulOS',text:'Você solicitou vincular este e-mail à sua conta RegulOS.\n\nCódigo: '+token+'\n\nO código expira em 20 minutos. Se não foi você, ignore esta mensagem.'});}
   catch(err){emailTokens.delete(digest);return res.status(503).json({ok:false,msg:err.message==='GMAIL_NOT_CONFIGURED'?'O Gmail ainda não foi configurado na Railway.':'Não foi possível enviar o e-mail agora.'});}
@@ -285,7 +285,7 @@ app.post('/api/auth/add-email',async(req,res)=>{
 app.post('/api/auth/verify-email',(req,res)=>{
   const usuario=String(req.body?.usuario||'').trim().toLowerCase();
   const token=String(req.body?.codigo||'').trim();
-  if(!token||token.length>128) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
+  if(!/^\d{6}$/.test(token)) return res.status(400).json({ok:false,msg:'Informe o código de 6 dígitos.'});
   const digest=crypto.createHash('sha256').update(token).digest('hex');
   const entry=emailTokens.get(digest);
   if(!entry||entry.purpose!=='verify'||entry.expiresAt<Date.now()) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
@@ -306,7 +306,7 @@ app.post('/api/auth/forgot-password',async(req,res)=>{
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){registerRecoveryFailure(req);return res.status(400).json({ok:false,msg:'Informe um e-mail válido.'});}
   const user=readUsers().find(u=>String(u.email||'').toLowerCase()===email&&u.emailVerificado===true);
   if(!user) return res.json({ok:true,msg:'Se o e-mail estiver cadastrado e confirmado, enviaremos as instruções de recuperação.'});
-  const token=crypto.randomBytes(32).toString('hex'), digest=crypto.createHash('sha256').update(token).digest('hex');
+  const token=String(crypto.randomInt(0,1000000)).padStart(6,'0'), digest=crypto.createHash('sha256').update(token).digest('hex');
   emailTokens.set(digest,{userId:user.id,expiresAt:Date.now()+20*60*1000,purpose:'reset'});
   try { await sendGmail({to:email,subject:'Recuperação de senha — RegulOS',text:'Recebemos um pedido para redefinir sua senha.\n\nCódigo de recuperação: '+token+'\n\nUse este código no RegulOS em até 20 minutos. Ele só pode ser usado uma vez. Se não foi você, ignore esta mensagem.'}); }
   catch(err){emailTokens.delete(digest);return res.status(503).json({ok:false,msg:err.message==='GMAIL_NOT_CONFIGURED'?'O Gmail ainda não foi configurado na Railway.':'Não foi possível enviar o e-mail agora.'});}
