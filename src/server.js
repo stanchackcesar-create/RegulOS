@@ -83,9 +83,21 @@ app.use((req,res,next)=>{
 // ========================= AUTENTICAÇÃO MULTIUSUÁRIO =========================
 // As contas controlam apenas o acesso ao painel. A sessão do WhatsApp e todos
 // os dados do RegulOS continuam compartilhados, conforme a arquitetura escolhida.
+function generateUserCode(users){
+  let code;
+  do { code='USR-'+String(crypto.randomInt(10000000,100000000)); }
+  while(users.some(u=>u && u.codigoUsuario===code));
+  return code;
+}
 function readUsers(){
   const v=readJson(USERS_FILE,[]);
-  return Array.isArray(v)?v:[];
+  if(!Array.isArray(v)) return [];
+  let changed=false;
+  for(const u of v){
+    if(u && !u.codigoUsuario){u.codigoUsuario=generateUserCode(v);changed=true;}
+  }
+  if(changed) writeJson(USERS_FILE,v);
+  return v;
 }
 function saveUsers(v){ writeJson(USERS_FILE,v); }
 function readSessions(){
@@ -115,7 +127,7 @@ function userHasActiveSession(userId){
 }
 
 function sanitizeUser(u){
-  return {id:u.id,usuario:u.usuario,admin:u.admin===true,criadoEm:u.criadoEm};
+  return {id:u.id,codigoUsuario:u.codigoUsuario||null,nome:u.nome||u.usuario,usuario:u.usuario,email:u.email||null,emailVerificado:u.emailVerificado===true,admin:u.admin===true,ativo:u.ativo!==false,criadoEm:u.criadoEm};
 }
 function currentUser(req){
   const token=String(req.headers.cookie||'').match(/(?:^|;\s*)regulos_session=([^;]+)/)?.[1];
@@ -182,7 +194,7 @@ app.post('/api/auth/setup',(req,res)=>{
   if(usuario.length<3||senha.length<6) return res.status(400).json({ok:false,msg:'Informe nome de usuário e senha (mínimo de 6 caracteres).'});
   const nome=usuario;
   const salt=crypto.randomBytes(16).toString('hex');
-  const user={id:crypto.randomUUID(),nome,usuario,salt,hash:hashPassword(senha,salt),admin:true,criadoEm:new Date().toISOString()};
+  const user={id:crypto.randomUUID(),codigoUsuario:generateUserCode(users),nome,usuario,salt,hash:hashPassword(senha,salt),admin:true,criadoEm:new Date().toISOString()};
   saveUsers([user]); saveSessions({}); setSession(res,user);
   res.json({ok:true,msg:'Conta administradora criada.',usuario:sanitizeUser(user)});
 });
@@ -250,7 +262,7 @@ app.post('/api/auth/register',async(req,res)=>{
     return res.status(409).json({ok:false,msg:'Esse e-mail já está cadastrado.'});
   }
   const salt=crypto.randomBytes(16).toString('hex');
-  const user={id:crypto.randomUUID(),nome:usuario,usuario,email,salt,hash:hashPassword(senha,salt),admin:false,ativo:false,criadoEm:new Date().toISOString(),emailVerificado:false};
+  const user={id:crypto.randomUUID(),codigoUsuario:generateUserCode(users),nome:usuario,usuario,email,salt,hash:hashPassword(senha,salt),admin:false,ativo:false,criadoEm:new Date().toISOString(),emailVerificado:false};
   users.push(user); saveUsers(users);
   const token=String(crypto.randomInt(0,1000000)).padStart(6,'0');
   emailTokens.set(crypto.createHash('sha256').update(token).digest('hex'),{userId:user.id,expiresAt:Date.now()+30*60*1000,purpose:'verify'});
@@ -913,7 +925,7 @@ app.post('/api/auth/change-password',requireAuth,requireAdmin,(req,res)=>{
   res.json({ok:true,msg:'Senha do administrador alterada. Faça login novamente com a nova senha.'});
 });
 
-app.get('/api/usuarios',(req,res)=>{
+app.get('/api/usuarios',requireAuth,requireAdmin,(req,res)=>{
   const usuarios=readUsers().map(u=>({...sanitizeUser(u),online:userHasActiveSession(u.id)}));
   res.json({ok:true,usuarios});
 });
