@@ -23,6 +23,7 @@ const zlib = require('zlib');
 const crypto = require('crypto');
 const { createShopeeIntegration, isShopeeHost } = require('./shopee');
 const { chromium } = require('playwright');
+const { sendGmail } = require('./gmail-mailer');
 
 const ROOT = path.join(__dirname, '..');
 const PUBLIC = path.join(ROOT, 'public');
@@ -206,10 +207,124 @@ app.post('/api/auth/login',(req,res)=>{
   const usuario=String(req.body?.usuario||'').trim().toLowerCase();
   const senha=String(req.body?.senha||'');
   const user=readUsers().find(x=>x.usuario===usuario);
+  if(user && user.ativo===false) return res.status(403).json({ok:false,msg:'Cadastro recebido. Sua conta aguarda liberação antes do primeiro acesso.'});
   if(!user || !verifyPassword(senha,user)){ registerLoginFailure(req); return res.status(401).json({ok:false,msg:'Usuário ou senha incorretos.'}); }
   clearLoginFailures(req);
   setSession(res,user); res.json({ok:true,msg:'Login realizado.',usuario:sanitizeUser(user)});
 });
+
+const registrationAttempts = new Map();
+function registrationAllowed(req){
+  const key=clientIp(req), now=Date.now(), windowMs=15*60*1000;
+  const a=registrationAttempts.get(key);
+  if(!a || now-a.startedAt>windowMs){registrationAttempts.set(key,{startedAt:now,count:0});return true;}
+  return a.count < 5;
+}
+function registerRegistrationAttempt(req){
+  const key=clientIp(req), now=Date.now(), windowMs=15*60*1000;
+  const a=registrationAttempts.get(key);
+  if(!a || now-a.startedAt>windowMs) registrationAttempts.set(key,{startedAt:now,count:1});
+  else {a.count++;registrationAttempts.set(key,a);}
+}
+app.post('/api/auth/register',async(req,res)=>{
+  if(!registrationAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas de cadastro. Aguarde 15 minutos.'});
+  const usuario=String(req.body?.usuario||'').trim().toLowerCase();
+  const email=String(req.body?.email||'').trim().toLowerCase();
+  const senha=String(req.body?.senha||'');
+  if(!/^[a-z0-9._-]{3,32}$/.test(usuario) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || senha.length<8){
+    registerRegistrationAttempt(req);
+    return res.status(400).json({ok:false,msg:'Informe usuário válido, e-mail válido e senha com pelo menos 8 caracteres.'});
+  }
+  const users=readUsers();
+  if(users.some(u=>String(u.usuario||'').toLowerCase()===usuario)){
+    registerRegistrationAttempt(req);
+    return res.status(409).json({ok:false,msg:'Esse nome de usuário já está em uso.'});
+  }
+  if(users.some(u=>String(u.email||'').toLowerCase()===email)){
+    registerRegistrationAttempt(req);
+    return res.status(409).json({ok:false,msg:'Esse e-mail já está cadastrado.'});
+  }
+  const salt=crypto.randomBytes(16).toString('hex');
+  const user={id:crypto.randomUUID(),nome:usuario,usuario,email,salt,hash:hashPassword(senha,salt),admin:false,ativo:false,criadoEm:new Date().toISOString(),emailVerificado:false};
+  users.push(user); saveUsers(users);
+  const token=crypto.randomBytes(32).toString('hex');
+  emailTokens.set(crypto.createHash('sha256').update(token).digest('hex'),{userId:user.id,expiresAt:Date.now()+30*60*1000,purpose:'verify'});
+  try {
+    await sendGmail({to:email,subject:'Confirme seu e-mail — RegulOS',text:'Olá!\n\nSeu código de confirmação do RegulOS é: '+token+'\n\nEle expira em 30 minutos.\n\nSe você não solicitou este cadastro, ignore esta mensagem.'});
+  } catch(err) {
+    // Diagnóstico seguro: registra apenas códigos técnicos conhecidos, nunca credenciais,
+    // destinatário, conteúdo do e-mail ou token de confirmação.
+    const rawError = String(err?.code || err?.message || 'UNKNOWN');
+    const safeError = /^(GMAIL_NOT_CONFIGURED|SMTP_TIMEOUT|SMTP_\d{3}|ECONNRESET|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT|EPIPE|ENOTFOUND|EAI_AGAIN|CERT_HAS_EXPIRED|UNABLE_TO_VERIFY_LEAF_SIGNATURE)$/.test(rawError)
+      ? rawError
+      : 'SMTP_OTHER_ERROR';
+    console.error('[auth-email] Falha no envio de confirmação:', safeError);
+    saveUsers(users.filter(u=>u.id!==user.id));
+    for(const [key,value] of emailTokens) if(value.userId===user.id) emailTokens.delete(key);
+    return res.status(503).json({ok:false,msg:err.message==='GMAIL_NOT_CONFIGURED'?'O envio de e-mail ainda não foi configurado na Railway.':'Não foi possível enviar o e-mail. Tente novamente mais tarde.'});
+  }
+  registrationAttempts.delete(clientIp(req));
+  return res.status(201).json({ok:true,verificationRequired:true,msg:'Enviamos um código para seu e-mail. Informe o código para confirmar a conta.'});
+});
+const emailTokens=new Map();
+app.post('/api/auth/add-email',async(req,res)=>{
+  if(!recoveryAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas. Aguarde alguns minutos.'});
+  const usuario=String(req.body?.usuario||'').trim().toLowerCase();
+  const senha=String(req.body?.senha||'');
+  const email=String(req.body?.email||'').trim().toLowerCase();
+  if(!usuario||!senha||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ok:false,msg:'Informe usuário, senha atual e um e-mail válido.'});
+  const users=readUsers(), user=users.find(u=>String(u.usuario||'').toLowerCase()===usuario);
+  if(!user||!verifyPassword(senha,user)) {registerRecoveryFailure(req);return res.status(400).json({ok:false,msg:'Não foi possível validar a conta. Confira usuário e senha.'});}
+  if(users.some(u=>u.id!==user.id&&String(u.email||'').toLowerCase()===email)) return res.status(409).json({ok:false,msg:'Esse e-mail já está vinculado a outra conta.'});
+  const token=crypto.randomBytes(4).toString('hex').toUpperCase(), digest=crypto.createHash('sha256').update(token).digest('hex');
+  emailTokens.set(digest,{userId:user.id,email,expiresAt:Date.now()+20*60*1000,purpose:'add-email'});
+  try {await sendGmail({to:email,subject:'Confirme seu e-mail — RegulOS',text:'Você solicitou vincular este e-mail à sua conta RegulOS.\n\nCódigo: '+token+'\n\nO código expira em 20 minutos. Se não foi você, ignore esta mensagem.'});}
+  catch(err){emailTokens.delete(digest);return res.status(503).json({ok:false,msg:err.message==='GMAIL_NOT_CONFIGURED'?'O Gmail ainda não foi configurado na Railway.':'Não foi possível enviar o e-mail agora.'});}
+  res.json({ok:true,msg:'Enviamos um código para esse e-mail. Digite-o abaixo para vincular à sua conta.'});
+});
+app.post('/api/auth/verify-email',(req,res)=>{
+  const usuario=String(req.body?.usuario||'').trim().toLowerCase();
+  const token=String(req.body?.codigo||'').trim();
+  if(!token||token.length>128) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
+  const digest=crypto.createHash('sha256').update(token).digest('hex');
+  const entry=emailTokens.get(digest);
+  if(!entry||entry.purpose!=='verify'||entry.expiresAt<Date.now()) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
+  const users=readUsers(), user=users.find(u=>u.id===entry.userId&&u.usuario===usuario);
+  if(!user) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
+  if(entry.purpose==='add-email'){
+    if(users.some(u=>u.id!==user.id&&String(u.email||'').toLowerCase()===String(entry.email||'').toLowerCase())) return res.status(409).json({ok:false,msg:'Esse e-mail já está vinculado a outra conta.'});
+    user.email=entry.email; user.emailVerificado=true; saveUsers(users); emailTokens.delete(digest);
+    return res.json({ok:true,msg:'E-mail vinculado e confirmado. Agora você pode recuperar sua senha por e-mail.'});
+  }
+  if(entry.purpose!=='verify') return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
+  user.emailVerificado=true; user.ativo=true; saveUsers(users); emailTokens.delete(digest);
+  res.json({ok:true,msg:'E-mail confirmado. Sua conta aguarda liberação do administrador.'});
+});
+app.post('/api/auth/forgot-password',async(req,res)=>{
+  if(!recoveryAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas. Aguarde alguns minutos.'});
+  const email=String(req.body?.email||'').trim().toLowerCase();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){registerRecoveryFailure(req);return res.status(400).json({ok:false,msg:'Informe um e-mail válido.'});}
+  const user=readUsers().find(u=>String(u.email||'').toLowerCase()===email&&u.emailVerificado===true);
+  if(!user) return res.json({ok:true,msg:'Se o e-mail estiver cadastrado e confirmado, enviaremos as instruções de recuperação.'});
+  const token=crypto.randomBytes(32).toString('hex'), digest=crypto.createHash('sha256').update(token).digest('hex');
+  emailTokens.set(digest,{userId:user.id,expiresAt:Date.now()+20*60*1000,purpose:'reset'});
+  try { await sendGmail({to:email,subject:'Recuperação de senha — RegulOS',text:'Recebemos um pedido para redefinir sua senha.\n\nCódigo de recuperação: '+token+'\n\nUse este código no RegulOS em até 20 minutos. Ele só pode ser usado uma vez. Se não foi você, ignore esta mensagem.'}); }
+  catch(err){emailTokens.delete(digest);return res.status(503).json({ok:false,msg:err.message==='GMAIL_NOT_CONFIGURED'?'O Gmail ainda não foi configurado na Railway.':'Não foi possível enviar o e-mail agora.'});}
+  res.json({ok:true,msg:'Se o e-mail estiver cadastrado e confirmado, enviaremos as instruções de recuperação.'});
+});
+app.post('/api/auth/reset-password',(req,res)=>{
+  const email=String(req.body?.email||'').trim().toLowerCase(), token=String(req.body?.codigo||'').trim(), novaSenha=String(req.body?.novaSenha||'');
+  if(novaSenha.length<8) return res.status(400).json({ok:false,msg:'A nova senha deve ter pelo menos 8 caracteres.'});
+  const digest=crypto.createHash('sha256').update(token).digest('hex'), entry=emailTokens.get(digest);
+  if(!entry||entry.purpose!=='reset'||entry.expiresAt<Date.now()) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
+  const users=readUsers(), user=users.find(u=>u.id===entry.userId&&String(u.email||'').toLowerCase()===email&&u.emailVerificado===true);
+  if(!user) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
+  const salt=crypto.randomBytes(16).toString('hex'); user.salt=salt; user.hash=hashPassword(novaSenha,salt); saveUsers(users);
+  for(const [key,value] of emailTokens) if(value.userId===user.id) emailTokens.delete(key);
+  const sessions=readSessions(); for(const [key,value] of Object.entries(sessions)) if(value?.userId===user.id) delete sessions[key]; saveSessions(sessions);
+  res.json({ok:true,msg:'Senha redefinida. Entre com sua nova senha.'});
+});
+
 app.post('/api/auth/logout',(req,res)=>{clearSession(req,res);res.json({ok:true});});
 
 function recoveryKeyValid(value){
@@ -220,6 +335,43 @@ function recoveryKeyValid(value){
   const b=crypto.createHash('sha256').update(supplied).digest();
   return crypto.timingSafeEqual(a,b);
 }
+
+// Reinicialização operacional de emergência: preserva o código e o volume,
+// mas remove contas, sessões, dados de operação e credenciais locais do WhatsApp.
+// Exige a chave de recuperação e uma frase explícita de confirmação.
+app.post('/api/admin/reset-operacional', (req,res)=>{
+  const recoveryKey=String(req.body?.recoveryKey||'');
+  const confirmacao=String(req.body?.confirmacao||'');
+  const resetToken=String(process.env.REGULOS_RESET_TOKEN||'');
+  const tokenHash=crypto.createHash('sha256').update(resetToken).digest();
+  const suppliedHash=crypto.createHash('sha256').update(recoveryKey).digest();
+  const resetTokenValid=Boolean(resetToken && recoveryKey) && crypto.timingSafeEqual(tokenHash,suppliedHash);
+  if(!recoveryKeyValid(recoveryKey) && !resetTokenValid) return res.status(403).json({ok:false,msg:'Chave de recuperação inválida.'});
+  if(confirmacao!=='APAGAR TODOS OS DADOS OPERACIONAIS DO REGULOS') {
+    return res.status(400).json({ok:false,msg:'Confirmação explícita obrigatória.'});
+  }
+  try {
+    for(const entry of fs.readdirSync(DATA,{withFileTypes:true})) {
+      fs.rmSync(path.join(DATA,entry.name),{recursive:true,force:true});
+    }
+    fs.mkdirSync(DATA,{recursive:true});
+    writeJson(USERS_FILE,[]);
+    writeJson(SESSIONS_FILE,{});
+    for(const entry of fs.readdirSync(AUTH,{withFileTypes:true})) {
+      fs.rmSync(path.join(AUTH,entry.name),{recursive:true,force:true});
+    }
+    fs.mkdirSync(AUTH,{recursive:true});
+    if(sock) { try { sock.end(undefined); } catch {} sock=null; }
+    online=false;
+    qr=null;
+    connectedNumber=null;
+    addLog('Reinicialização operacional concluída por chave de recuperação; código e volume preservados.');
+    return res.json({ok:true,msg:'Dados operacionais removidos. O código e o volume foram preservados; reinicie o serviço antes de criar o novo administrador.'});
+  } catch(e) {
+    addLog('Falha na reinicialização operacional: '+String(e?.message||e));
+    return res.status(500).json({ok:false,msg:'A reinicialização não foi concluída. Consulte os logs antes de tentar novamente.'});
+  }
+});
 const recoveryAttempts = new Map();
 function recoveryAllowed(req){
   const key=clientIp(req), now=Date.now(), windowMs=15*60*1000;
@@ -2859,22 +3011,34 @@ app.post('/api/desconectar', requireAdmin, async (req,res) => {
 });
 
 app.post('/api/novo-qr', requireAdmin, async (req,res) => {
-  // Novo QR = nova sessão. Limpa todos os dados da sessão anterior.
+  // Somente o botão "Novo QR Code" inicia uma sessão limpa.
+  // Mantém usuários e demais dados do RegulOS; remove credenciais WhatsApp,
+  // cache/lista de grupos e permissões da sessão anterior para evitar acúmulo.
   clearReconnect();
   stopSchedulers();
   clearLinkHistory();
   clearLinkFailures();
   manualDisconnected=false;
   try { linkSchedules=[]; writeJson(FILES.schedules, linkSchedules); } catch(e) { addLog(`Erro limpando agendamentos: ${e.message}`); }
-  try { groups=[]; allowed=[]; writeJson(FILES.groups, []); } catch(e) { addLog(`Erro limpando grupos: ${e.message}`); }
+  try {
+    groups=[];
+    allowed=[];
+    lastGroupRefreshAt=0;
+    writeJson(FILES.groups, []);
+    writeJson(FILES.groupConfig, {});
+  } catch(e) { addLog(`Erro limpando grupos/configurações: ${e.message}`); }
+  try {
+    linkQueue={cursor:0,currentId:'',updatedAt:new Date().toISOString()};
+    saveLinkQueue();
+  } catch(e) { addLog(`Erro limpando fila de links: ${e.message}`); }
   const old=sock;
   sock=null; online=false; qr=null; connectedNumber='';
   status='Gerando novo QR Code...';
-  addLog('Novo QR solicitado pelo painel. Sessão anterior e dados associados foram limpos.');
+  addLog('Novo QR solicitado: credenciais WhatsApp, grupos, permissões, configurações de grupo, agendamentos e históricos da sessão anterior limpos. Usuários e demais dados do sistema preservados.');
   try { old?.end(); } catch {}
   try { fs.rmSync(AUTH,{recursive:true,force:true}); } catch(e) { addLog(`Erro limpando sessão: ${e.message}`); }
   // Responde antes de iniciar o socket para evitar corrida com o navegador.
-  res.json({ok:true,msg:'Sessão limpa. O novo QR será exibido automaticamente.'});
+  res.json({ok:true,msg:'Sessão anterior limpa; usuários e demais dados do sistema preservados. O novo QR será exibido automaticamente.'});
   setTimeout(() => start(), 350);
 });
 
