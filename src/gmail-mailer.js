@@ -2,7 +2,41 @@
 const tls = require('node:tls');
 const crypto = require('node:crypto');
 
-function sendGmail({to,subject,text}) {
+async function sendWithResend({to, subject, text}) {
+  const apiKey = String(process.env.RESEND_API_KEY || '').trim();
+  const from = String(process.env.RESEND_FROM || '').trim();
+  if (!apiKey || !from) throw new Error('RESEND_NOT_CONFIGURED');
+
+  let response;
+  try {
+    response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + apiKey,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({from, to: [to], subject, text}),
+      signal: AbortSignal.timeout(15000)
+    });
+  } catch (err) {
+    if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
+      throw new Error('EMAIL_API_TIMEOUT');
+    }
+    const code = String(err?.cause?.code || err?.code || '');
+    if (/^(ECONNRESET|ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|ETIMEDOUT|ENOTFOUND|EAI_AGAIN)$/.test(code)) {
+      throw new Error(code);
+    }
+    throw new Error('EMAIL_API_NETWORK_ERROR');
+  }
+
+  if (!response.ok) {
+    // Keep provider response bodies and recipient data out of application logs.
+    throw new Error('EMAIL_API_' + response.status);
+  }
+  return true;
+}
+
+function sendWithGmailSmtp({to, subject, text}) {
   const host = process.env.GMAIL_USER;
   const pass = String(process.env.GMAIL_APP_PASSWORD || '').replace(/\s/g, '');
   if (!host || !pass) throw new Error('GMAIL_NOT_CONFIGURED');
@@ -37,4 +71,12 @@ function sendGmail({to,subject,text}) {
     })().catch(fail);
   });
 }
+
+// Railway Free, Trial and Hobby plans block outbound SMTP. Prefer the HTTPS API
+// when configured; retain SMTP for installations whose platform permits it.
+function sendGmail(message) {
+  if (process.env.RESEND_API_KEY) return sendWithResend(message);
+  return sendWithGmailSmtp(message);
+}
+
 module.exports={sendGmail};
