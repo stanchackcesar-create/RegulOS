@@ -1448,7 +1448,9 @@ async function loadAccount(){
   const me=await jfetch('/api/auth/me');
   const u=me.usuario||{};
   document.getElementById('accountInfo').textContent=(u.admin?'👑 ':'👤 ')+(u.usuario||'Conta');
-  let html=`<div style="margin-top:2px"><b>Usuário atual:</b> ${esc(u.usuario||'')} ${u.admin?'<span class="badge good">Administrador</span>':''}</div>`;
+  let html=`<div style="margin-top:2px"><b>Usuário atual:</b> ${esc(u.nome||u.usuario||'')} ${u.admin?'<span class="badge good">Administrador</span>':''}</div>
+    <div class="muted" style="margin-top:5px;font-size:12px">ID da conta: <b>${esc(u.codigoUsuario||u.id||'Pendente')}</b></div>
+    ${u.email?`<div class="muted" style="margin-top:4px;font-size:12px">E-mail: ${esc(u.email)} ${u.emailVerificado?'· confirmado':'· não confirmado'}</div>`:''}`;
   if(u.admin){
     const d=await jfetch('/api/usuarios');
     html+=`<div style="margin-top:14px"><b>Usuários com acesso ao mesmo RegulOS</b></div>
@@ -1459,9 +1461,10 @@ async function loadAccount(){
         <div class="account-user-line">
           <div class="account-user-name">
             <span class="presence-dot ${online?'presence-online':'presence-offline'}" title="${online?'Online':'Offline'}"></span>
-            <span>${esc(x.usuario)}</span>
+            <span>${esc(x.nome||x.usuario)}</span>
             ${x.admin?'<span class="badge good">Administrador</span>':''}
           </div>
+          <div class="muted" style="font-size:12px;margin-top:4px">ID: <b>${esc(x.codigoUsuario||x.id||'Pendente')}</b> · ${esc(x.email||'Sem e-mail cadastrado')} ${x.emailVerificado?'· e-mail confirmado':''}</div>
           <span class="account-user-status ${online?'status-online':'status-offline'}">${online?'Online':'Offline'}</span>
         </div>
         ${x.id!==u.id?`<button class="red" onclick="deleteUser('${x.id}')">Excluir</button>`:''}
