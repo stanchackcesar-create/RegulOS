@@ -204,11 +204,16 @@ function clearLoginFailures(req){ loginAttempts.delete(clientIp(req)); }
 
 app.post('/api/auth/login',(req,res)=>{
   if(!loginAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas de login. Aguarde alguns minutos e tente novamente.'});
-  const usuario=String(req.body?.usuario||'').trim().toLowerCase();
+  const identificador=String(req.body?.usuario||'').trim().toLowerCase();
   const senha=String(req.body?.senha||'');
-  const user=readUsers().find(x=>x.usuario===usuario);
+  const users=readUsers();
+  const user=users.find(x=>String(x.usuario||'').toLowerCase()===identificador || (identificador.includes('@') && String(x.email||'').toLowerCase()===identificador));
+  if(user && identificador.includes('@') && String(user.email||'').toLowerCase()===identificador && user.emailVerificado!==true){
+    registerLoginFailure(req);
+    return res.status(403).json({ok:false,msg:'Este e-mail ainda não foi confirmado. Entre com seu usuário ou confirme o e-mail.'});
+  }
   if(user && user.ativo===false) return res.status(403).json({ok:false,msg:'Cadastro recebido. Sua conta aguarda liberação antes do primeiro acesso.'});
-  if(!user || !verifyPassword(senha,user)){ registerLoginFailure(req); return res.status(401).json({ok:false,msg:'Usuário ou senha incorretos.'}); }
+  if(!user || !verifyPassword(senha,user)){ registerLoginFailure(req); return res.status(401).json({ok:false,msg:'Usuário/e-mail ou senha incorretos.'}); }
   clearLoginFailures(req);
   setSession(res,user); res.json({ok:true,msg:'Login realizado.',usuario:sanitizeUser(user)});
 });
