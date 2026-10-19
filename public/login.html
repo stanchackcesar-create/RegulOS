@@ -14,7 +14,7 @@ html,body{min-height:100%}
 body{
   margin:0;
   min-height:100vh;
-  overflow:hidden;
+  overflow:auto;
   color:#eef7ff;
   font-family:Segoe UI,Arial,sans-serif;
   display:flex;
@@ -53,7 +53,9 @@ body:before{
   position:relative;
   z-index:2;
   width:min(420px,92vw);
-  padding:28px;
+  max-height:calc(100vh - 32px);
+  overflow-y:auto;
+  padding:24px;
   background:linear-gradient(145deg,rgba(12,25,43,.94),rgba(5,12,22,.94));
   border:1px solid rgba(34,211,238,.32);
   border-radius:18px;
@@ -137,7 +139,7 @@ button:hover{filter:brightness(1.08);box-shadow:0 0 26px rgba(34,211,238,.28),0 
   <div class="brand"><div class="brand-mark">R</div><h1>Regul<span>OS</span></h1></div>
   <p>Entre para acessar o painel compartilhado.</p>
   <form id="f">
-    <label>Usuário</label><input id="u" autocomplete="username" required>
+    <label>Usuário ou e-mail</label><input id="u" autocomplete="username" placeholder="Digite seu usuário ou e-mail" required>
     <label>Senha</label><input id="s" type="password" autocomplete="current-password" required>
     <button>Entrar</button>
   </form>
@@ -148,16 +150,17 @@ button:hover{filter:brightness(1.08);box-shadow:0 0 26px rgba(34,211,238,.28),0 
     <button type="submit">Cadastrar e entrar</button>
   </form>
   <button type="button" id="forgot" style="margin-top:10px;background:transparent;border:1px solid #35506f;box-shadow:none;color:#9fefff">Esqueci minha senha</button>
+  <button type="button" id="backToLogin" style="display:none;margin-top:10px;background:transparent;border:1px solid #35506f;box-shadow:none;color:#9fefff">Voltar para entrar</button>
   <form id="rf" style="display:none;margin-top:10px">
     <label>E-mail cadastrado</label><input id="recoveryEmail" type="email" autocomplete="email" required>
     <button type="button" id="sendRecovery">Enviar código de recuperação</button>
-    <label>Código recebido por e-mail</label><input id="recoveryCode" autocomplete="one-time-code" required>
+    <label>Código recebido por e-mail</label><input id="recoveryCode" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" placeholder="000000" required>
     <label>Nova senha (mínimo 8 caracteres)</label><input id="rs" type="password" autocomplete="new-password" minlength="8" required>
     <button type="submit">Redefinir senha</button>
   </form>
   <form id="verifyForm" style="display:none;margin-top:10px">
     <label>Usuário cadastrado</label><input id="verifyUser" autocomplete="username" required>
-    <label>Código de confirmação do e-mail</label><input id="verifyCode" autocomplete="one-time-code" required>
+    <label>Código de confirmação do e-mail</label><input id="verifyCode" autocomplete="one-time-code" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" placeholder="000000" required>
     <button type="submit">Confirmar e-mail</button>
   </form>
   <div id="e"></div>
@@ -166,9 +169,11 @@ button:hover{filter:brightness(1.08);box-shadow:0 0 26px rgba(34,211,238,.28),0 
 <script>
 async function init(){try{const r=await fetch('/api/auth/status');const d=await r.json();if(d.autenticado)location.href='/';if(!d.configurado)location.href='/configurar';}catch(e){document.getElementById('e').textContent='Servidor indisponível.'}}
 document.getElementById('f').onsubmit=async e=>{e.preventDefault();const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario:u.value,senha:s.value})});const d=await r.json();if(r.ok)location.href='/';else document.getElementById('e').className='err',document.getElementById('e').textContent=d.msg||'Não foi possível entrar.'};
-document.getElementById('showRegister').onclick=()=>{const f=document.getElementById('registerForm');f.style.display=f.style.display==='none'?'block':'none';document.getElementById('e').textContent=''}; 
-document.getElementById('registerForm').onsubmit=async e=>{e.preventDefault();const box=document.getElementById('e');box.className='';box.textContent='';const r=await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({usuario:document.getElementById('newUser').value,email:document.getElementById('newEmail').value,senha:document.getElementById('newPassword').value})});const d=await r.json().catch(()=>({}));if(r.ok&&d.ok){box.className='';box.textContent=d.msg||'Confira seu e-mail.';document.getElementById('verifyUser').value=document.getElementById('newUser').value;document.getElementById('verifyForm').style.display='block';document.getElementById('registerForm').reset()}else{box.className='err';box.textContent=d.msg||'Não foi possível criar a conta.'}}; 
-document.getElementById('forgot').onclick=()=>{const f=document.getElementById('rf');f.style.display=f.style.display==='none'?'block':'none';document.getElementById('e').textContent=''};
+function showMode(mode){['f','registerForm','rf','verifyForm'].forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=id===mode?'block':'none'});document.getElementById('showRegister').style.display=mode==='f'?'block':'none';document.getElementById('forgot').style.display=mode==='f'?'block':'none';document.getElementById('backToLogin').style.display=mode==='f'?'none':'block';const box=document.getElementById('e');box.textContent='';box.className='';document.querySelector('.box').scrollTop=0;}
+document.getElementById('showRegister').onclick=()=>showMode('registerForm');
+document.getElementById('backToLogin').onclick=()=>showMode('f'); 
+document.getElementById('registerForm').onsubmit=async e=>{e.preventDefault();const box=document.getElementById('e');box.className='';box.textContent='';const r=await fetch('/api/auth/register',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({usuario:document.getElementById('newUser').value,email:document.getElementById('newEmail').value,senha:document.getElementById('newPassword').value})});const d=await r.json().catch(()=>({}));if(r.ok&&d.ok){const registeredUser=document.getElementById('newUser').value;showMode('verifyForm');document.getElementById('verifyForm').reset();document.getElementById('verifyUser').value=registeredUser;box.className='';box.textContent=d.msg||'Confira seu e-mail e digite o código de 6 dígitos.'}else{box.className='err';box.textContent=d.msg||'Não foi possível criar a conta.';if(String(d.msg||'').toLowerCase().includes('e-mail já está cadastrado'))box.textContent='Esse e-mail já está cadastrado. Volte para entrar usando seu e-mail ou use “Esqueci minha senha”.'}}; 
+document.getElementById('forgot').onclick=()=>showMode('rf');
 document.getElementById('sendRecovery').onclick=async()=>{const box=document.getElementById('e');box.className='';box.textContent='';const r=await fetch('/api/auth/forgot-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('recoveryEmail').value})});const d=await r.json();box.className=r.ok?'':'err';box.textContent=d.msg||'Não foi possível solicitar a recuperação.'};
 document.getElementById('rf').onsubmit=async e=>{e.preventDefault();const box=document.getElementById('e');box.textContent='';const r=await fetch('/api/auth/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:document.getElementById('recoveryEmail').value,codigo:document.getElementById('recoveryCode').value,novaSenha:document.getElementById('rs').value})});const d=await r.json();if(r.ok){box.className='';box.textContent=d.msg||'Senha redefinida.';document.getElementById('rf').reset()}else{box.className='err';box.textContent=d.msg||'Não foi possível recuperar a senha.'}};
 document.getElementById('verifyForm').onsubmit=async e=>{e.preventDefault();const box=document.getElementById('e');const r=await fetch('/api/auth/verify-email',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({usuario:document.getElementById('verifyUser').value,codigo:document.getElementById('verifyCode').value})});const d=await r.json();box.className=r.ok?'':'err';box.textContent=d.msg||'Não foi possível confirmar o e-mail.'};init();
