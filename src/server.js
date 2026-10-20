@@ -3948,8 +3948,9 @@ app.get('/api/dashboard',(req,res)=>{
 });
 
 app.get('/grupos',(req,res)=>res.sendFile(path.join(PUBLIC,'grupos.html')));
-app.get('/',(req,res)=>res.sendFile(path.join(PUBLIC,'index.html')));
-app.get('*',(req,res)=>res.sendFile(path.join(PUBLIC,'index.html')));
+app.get('/',(req,res)=>{const user=currentUser(req);if(user?.admin)return res.redirect('/admin');return res.sendFile(path.join(PUBLIC,'index.html'));});
+app.get('/index.html',(req,res)=>{const user=currentUser(req);if(user?.admin)return res.redirect('/admin');return res.sendFile(path.join(PUBLIC,'index.html'));});
+app.get('*',(req,res)=>{const user=currentUser(req);if(user?.admin)return res.redirect('/admin');return res.sendFile(path.join(PUBLIC,'index.html'));});
 
 const server=app.listen(PORT,HOST,()=>{
   console.log(`RegulOS online em http://${HOST}:${PORT}`);
