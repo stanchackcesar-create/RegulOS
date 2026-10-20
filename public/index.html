@@ -1918,20 +1918,8 @@ if ('serviceWorker' in navigator) {
   for(const t of tips){if(t.matches&&t.matches(target))return t;}
   return null;
  }
- document.addEventListener('click',function(e){
-  if(e.target.closest('#regulosContextHelp,#regulosTutorialModal'))return;
-  const t=findTip(e.target);
-  if(t)showTip(t,e.target);
- },false);
- document.addEventListener('focusin',function(e){
-  if(!e.target.matches('input,textarea,select'))return;
-  const t=findTip(e.target);
-  if(t)showTip(t,e.target);
- },false);
- document.addEventListener('change',function(e){
-  const t=findTip(e.target);
-  if(t)showTip(t,e.target);
- },false);
+ // As dicas contextuais não abrem automaticamente a cada clique.
+ // O tutorial completo é aberto manualmente pelo botão de ajuda.
 })();
 </script>
 <script>
@@ -1977,7 +1965,15 @@ if ('serviceWorker' in navigator) {
    const res=await fetch('/api/tutorial/status',{credentials:'same-origin',cache:'no-store'});
    if(!res.ok)return;
    const data=await res.json();
-   if(data.ok&&data.tutorial?.completed!==true){const title=document.getElementById('regulosContextHelpTitle');const textEl=document.getElementById('regulosContextHelpText');if(title&&textEl&&box()){title.textContent='Bem-vindo ao RegulOS';textEl.textContent='Clique em um painel para receber instruções sobre como usá-lo. Para ver o tutorial completo, use “Tutorial e ajuda”.';box().classList.add('show');lastTip='welcome';}}
+   if(data.ok&&data.tutorial?.completed!==true){
+    let alreadyWelcomed=false;
+    try{alreadyWelcomed=localStorage.getItem('regulos_tutorial_welcome_shown_v1')==='1';}catch(_e){}
+    if(!alreadyWelcomed){
+     const title=document.getElementById('regulosContextHelpTitle');const textEl=document.getElementById('regulosContextHelpText');
+     if(title&&textEl&&box()){title.textContent='Bem-vindo ao RegulOS';textEl.textContent='O tutorial está disponível quando você precisar. Clique em “🧭 Abrir tutorial do RegulOS” para ver as etapas e orientações.';box().classList.add('show');lastTip='welcome';}
+     try{localStorage.setItem('regulos_tutorial_welcome_shown_v1','1');}catch(_e){}
+    }
+   }
   }catch(e){console.debug('Tutorial indisponível:',e);}
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',checkFirstAccess,{once:true});else checkFirstAccess();
