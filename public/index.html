@@ -1845,6 +1845,46 @@ if ('serviceWorker' in navigator) {
   </div>
  </div>
 </div>
+<style>
+#regulosContextHelp{position:fixed;right:18px;bottom:18px;z-index:19990;width:min(360px,calc(100vw - 28px));background:#203653;color:#f4f8ff;border:2px solid #79a9ef;border-radius:14px;padding:15px 16px;box-shadow:0 12px 40px #000b;display:none}
+#regulosContextHelp.show{display:block;animation:regulosTipIn .18s ease-out}
+#regulosContextHelp strong{display:block;font-size:15px;margin-bottom:5px;color:#fff}
+#regulosContextHelp p{font-size:14px;line-height:1.5;margin:0 0 12px;color:#e2ecff}
+#regulosContextHelp .tip-actions{display:flex;gap:8px;justify-content:flex-end}
+#regulosContextHelp button{border:1px solid #7697c4;border-radius:8px;padding:7px 10px;background:#14263d;color:white;font-weight:700;cursor:pointer}
+#regulosContextHelp button.tip-close{background:#2766b6;border-color:#8bb9ff}
+@keyframes regulosTipIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:600px){#regulosContextHelp{right:10px;bottom:10px;width:calc(100vw - 20px)}}
+</style>
+<aside id="regulosContextHelp" role="status" aria-live="polite">
+ <strong id="regulosContextHelpTitle">Dica do RegulOS</strong>
+ <p id="regulosContextHelpText"></p>
+ <div class="tip-actions"><button type="button" onclick="window.regulosContextHelpClose()">Entendi</button><button type="button" class="tip-close" onclick="window.openRegulosTutorial(true)">Ver tutorial</button></div>
+</aside>
+<script>
+(function(){
+ const tips=[
+  {id:'connect',title:'Conectar o WhatsApp',text:'Use Conectar WhatsApp ou Novo QR e leia o código com a conta correta. Nunca compartilhe o QR Code nem a sessão.',test:e=>/Conectar WhatsApp|Novo QR|Reconectar|Conectar/.test(e.textContent||'')||!!e.closest('#qrModal,#qrBox')},
+  {id:'groups',title:'Revise os grupos',text:'Confira os grupos selecionados e envie somente onde você tem autorização e onde as mensagens são esperadas.',test:e=>!!e.closest('#lgrupos')||/Grupo|grupos/i.test(e.textContent||'')&&!!e.closest('button,label')},
+  {id:'links',title:'Gerenciador de links',text:'Confira o título, destino do link, imagem e mensagem antes de salvar. Selecione apenas os grupos corretos.',test:e=>!!e.closest('#linkForm,#links')||/Adicionar link|Salvar/.test(e.textContent||'')},
+  {id:'schedules',title:'Agendamentos',text:'Revise a data, o horário e os grupos de cada programação. Um agendamento não torna um envio automaticamente permitido.',test:e=>!!e.closest('#scheduleMainPanel,#schedulesModal')||/Agendamentos|agendar/i.test(e.textContent||'')},
+  {id:'history',title:'Histórico e entregas',text:'Use o histórico e Status das Entregas para verificar resultados. Antes de reenviar algo que falhou, confira o motivo para evitar duplicações.',test:e=>!!e.closest('#linkHistory,#linkFailures,#linkDeliveries')||/Histórico|Links com falha|Status das Entregas/.test(e.textContent||'')}
+ ];
+ let lastTip='';
+ const box=()=>document.getElementById('regulosContextHelp');
+ window.regulosContextHelpClose=function(){if(box())box().classList.remove('show');};
+ function showTip(t){if(!t||t.id===lastTip)return;lastTip=t.id;document.getElementById('regulosContextHelpTitle').textContent=t.title;document.getElementById('regulosContextHelpText').textContent=t.text;box().classList.add('show');}
+ function findTip(target){
+  let el=target;
+  for(let i=0;el&&i<5;i++,el=el.parentElement){
+   const t=tips.find(x=>x.test(el));if(t)return t;
+  }
+  return null;
+ }
+ document.addEventListener('click',function(e){if(e.target.closest('#regulosContextHelp,#regulosTutorialModal'))return;showTip(findTip(e.target));},true);
+ document.addEventListener('focusin',function(e){if(e.target.matches('input,textarea,select'))showTip(findTip(e.target));},true);
+})();
+</script>
 <script>
 (function(){
  const steps=[
