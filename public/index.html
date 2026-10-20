@@ -740,9 +740,12 @@ function populateScheduleGroupSelect(selectedIds=[]){
   if(!box.children.length)box.innerHTML='<div class="muted">Nenhum grupo disponível. Pesquise os grupos primeiro.</div>';
 }
 function renderGroups(){
- const q=document.getElementById('search').value.toLowerCase();
- const box=document.getElementById('groups');box.innerHTML='';
- groups.filter(g=>String(g.name).toLowerCase().includes(q)).forEach(g=>{
+ const searchInput=document.getElementById('search');
+ const q=String(searchInput?.value||'').toLowerCase();
+ const box=document.getElementById('groups');
+ if(!box)return;
+ box.innerHTML='';
+ groups.filter(g=>String(g.name||'').toLowerCase().includes(q)).forEach(g=>{
   const on=g.config?.ativo!==false;
   const el=document.createElement('div');el.className='group';
   el.innerHTML=`<div><div class="name">${esc(g.name)}</div><small>${g.members||0} membros · ${g.id} ${g.allowed?'· permitido':''}</small></div>
