@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - audit/multi-estancia-isolamento-2026-10-17
+      - feature/painel-admin-separado-2026-10-20
   pull_request:
     branches:
       - audit/multi-estancia-isolamento-2026-10-17
