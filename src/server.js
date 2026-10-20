@@ -200,7 +200,7 @@ app.post('/api/auth/setup',async(req,res)=>{
   const digest=crypto.createHash('sha256').update(token).digest('hex');
   emailTokens.set(digest,{userId:user.id,email,expiresAt:Date.now()+20*60*1000,purpose:'setup-admin'});
   try{
-    await sendGmail({to:email,subject:'Confirme o e-mail do administrador — RegulOS',text:'Seu código para configurar a conta administradora do RegulOS é: '+token+'\\n\\nO código expira em 20 minutos e só pode ser usado uma vez. Se você não solicitou esta configuração, ignore esta mensagem.'});
+    await sendGmail({to:email,subject:'Confirme o e-mail do administrador — RegulOS',text:'Seu código para configurar a conta administradora do RegulOS é: '+token+'\n\nO código expira em 20 minutos e só pode ser usado uma vez. Se você não solicitou esta configuração, ignore esta mensagem.'});
   }catch(err){
     emailTokens.delete(digest); saveUsers([]);
     const msg=err.message==='GMAIL_NOT_CONFIGURED'?'O envio de e-mail ainda não foi configurado no ambiente de testes.':'Não foi possível enviar o código de confirmação. Tente novamente mais tarde.';
@@ -211,7 +211,7 @@ app.post('/api/auth/setup',async(req,res)=>{
 app.post('/api/auth/verify-first-admin',(req,res)=>{
   const usuario=String(req.body?.usuario||'').trim().toLowerCase();
   const token=String(req.body?.codigo||'').trim();
-  if(!/^\\d{6}$/.test(token)) return res.status(400).json({ok:false,msg:'Informe o código de 6 dígitos.'});
+  if(!/^\d{6}$/.test(token)) return res.status(400).json({ok:false,msg:'Informe o código de 6 dígitos.'});
   const digest=crypto.createHash('sha256').update(token).digest('hex');
   const entry=emailTokens.get(digest);
   if(!entry||entry.purpose!=='setup-admin'||entry.expiresAt<Date.now()) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
