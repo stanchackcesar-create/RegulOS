@@ -93,7 +93,7 @@ function createUserLinkEngine(options = {}) {
     }
     const known=new Set(groups.map(g=>String(g.id)));
     if(ids.some(id=>!known.has(id))) return {ok:false,reason:'groups-not-refreshed'};
-    const targets=ids.filter(id=>config[id]?.ativo!==false);
+    const targets=ids.filter(id=>config[id]?.ativo===true);
     if(!targets.length) return {ok:false,reason:'no-enabled-groups'};
     busy.add(lock);
     try {
@@ -108,7 +108,7 @@ function createUserLinkEngine(options = {}) {
       let sent=0, errors=0;
       for(const id of targets) {
         if(item.progressGroupIds.includes(id)) continue;
-        if(config[id]?.ativo===false) { item.progressGroupIds.push(id); continue; }
+        if(config[id]?.ativo!==true) { item.progressGroupIds.push(id); continue; }
         addDelivery(userId,item,id,'ENVIANDO');
         try {
           let ok=false, lastError;
