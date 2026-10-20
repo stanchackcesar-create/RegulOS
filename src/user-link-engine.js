@@ -17,14 +17,17 @@ function createUserLinkEngine(options = {}) {
   function array(userId, key) { const v=read(userId,key,[]); return Array.isArray(v)?v:[]; }
   function object(userId, key) { const v=read(userId,key,{}); return v&&typeof v==='object'&&!Array.isArray(v)?v:{}; }
   function timeOf(item) { return String(item?.horario||''); }
+  function localDate(date = new Date()) {
+    return String(date.getFullYear()).padStart(4,'0')+'-'+String(date.getMonth()+1).padStart(2,'0')+'-'+String(date.getDate()).padStart(2,'0');
+  }
   function occurrence(item, now = new Date()) {
     const rep=String(item.repeticao||'uma_vez');
-    if(rep==='diariamente') return now.toISOString().slice(0,10);
+    if(rep==='diariamente') return localDate(now);
     if(rep==='semanalmente') {
       const d=new Date(now); d.setDate(d.getDate()-((d.getDay()+6)%7));
-      return d.toISOString().slice(0,10);
+      return localDate(d);
     }
-    return String(item.data||now.toISOString().slice(0,10))+'T'+timeOf(item);
+    return String(item.data||localDate(now)).slice(0,10)+'T'+timeOf(item);
   }
   function due(item, now = new Date()) {
     if(item.ativo===false) return false;
@@ -32,7 +35,7 @@ function createUserLinkEngine(options = {}) {
     if(!/^\d{2}:\d{2}$/.test(h)) return false;
     const [hh,mm]=h.split(':').map(Number);
     if(hh>23||mm>59) return false;
-    const today=now.toISOString().slice(0,10);
+    const today=localDate(now);
     const date=String(item.data||today).slice(0,10);
     const rep=String(item.repeticao||'uma_vez');
     if(rep==='uma_vez' && date!==today) return false;
