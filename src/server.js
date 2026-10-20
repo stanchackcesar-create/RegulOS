@@ -368,6 +368,9 @@ app.post('/api/auth/register',async(req,res)=>{
   const usuario=String(req.body?.usuario||'').trim().toLowerCase();
   const email=String(req.body?.email||'').trim().toLowerCase();
   const senha=String(req.body?.senha||'');
+  const acceptedRegulosPolicy=req.body?.acceptedRegulosPolicy===true;
+  const policyVersion=String(req.body?.policyVersion||'');
+  if(!acceptedRegulosPolicy || policyVersion!=='1.0') return res.status(400).json({ok:false,msg:'Para criar a conta, leia e aceite a Política de Uso e Regras do RegulOS.'});
   if(!/^[a-z0-9._-]{3,32}$/.test(usuario) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || senha.length<8){
     registerRegistrationAttempt(req);
     return res.status(400).json({ok:false,msg:'Informe usuário válido, e-mail válido e senha com pelo menos 8 caracteres.'});
