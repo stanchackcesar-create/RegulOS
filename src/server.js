@@ -3045,100 +3045,32 @@ app.post('/api/reconectar', requireAuth, (req,res) => {
 });
 app.get('/api/entregas', requireAuth, (req,res) => {
   try {
-    const agendamentoId = String(req.query?.agendamentoId || '').trim();
-    const ocorrencia = String(req.query?.ocorrencia || '').trim();
-    const status = String(req.query?.status || '').trim().toUpperCase();
-
-    let entregas = Array.isArray(linkDeliveries) ? [...linkDeliveries] : [];
-    if (agendamentoId) entregas = entregas.filter(x => String(x?.agendamentoId || '') === agendamentoId);
-    if (ocorrencia) entregas = entregas.filter(x => String(x?.ocorrencia || '') === ocorrencia);
-    if (status) entregas = entregas.filter(x => String(x?.status || '').toUpperCase() === status);
-
-    entregas.sort((a,b) => String(b?.criadoEm || '').localeCompare(String(a?.criadoEm || '')));
-    res.set('Cache-Control','no-store');
-    res.json({ok:true,total:entregas.length,entregas});
-  } catch(e) {
-    res.status(500).json({ok:false,msg:e.message || 'Falha ao consultar entregas.'});
-  }
+    const agendamentoId=String(req.query?.agendamentoId||'').trim();
+    const ocorrencia=String(req.query?.ocorrencia||'').trim();
+    const status=String(req.query?.status||'').trim().toUpperCase();
+    let entregas=readUserArray(req,'deliveries');
+    if(agendamentoId)entregas=entregas.filter(x=>String(x?.agendamentoId||'')===agendamentoId);
+    if(ocorrencia)entregas=entregas.filter(x=>String(x?.ocorrencia||'')===ocorrencia);
+    if(status)entregas=entregas.filter(x=>String(x?.status||'').toUpperCase()===status);
+    entregas.sort((a,b)=>String(b?.criadoEm||'').localeCompare(String(a?.criadoEm||'')));
+    res.set('Cache-Control','no-store');res.json({ok:true,total:entregas.length,entregas});
+  } catch(e) {res.status(500).json({ok:false,msg:e.message||'Falha ao consultar entregas.'});}
 });
-
 app.post('/api/assistente', requireAuth, (req,res)=>{
-  try{
-    const b=req.body||{}, acao=String(b.acao||'analisar').trim().toLowerCase(), periodo=Math.max(1,Math.min(90,Number(b.periodo||7)));
-    const cutoff=Date.now()-periodo*24*60*60*1000;
-    const agendamentos=Array.isArray(linkSchedules)?linkSchedules:[], falhas=Array.isArray(linkFailures)?linkFailures:[], entregas=Array.isArray(linkDeliveries)?linkDeliveries:[], historico=Array.isArray(linkHistory)?linkHistory:[];
-    const entregasRecentes=entregas.filter(x=>Date.parse(String(x?.concluidoEm||x?.criadoEm||''))>=cutoff);
-    const sucessos=entregasRecentes.filter(x=>String(x?.status||'').toUpperCase()==='SUCESSO').length;
-    const erros=entregasRecentes.filter(x=>String(x?.status||'').toUpperCase()==='ERRO').length;
-    const enviando=entregasRecentes.filter(x=>String(x?.status||'').toUpperCase()==='ENVIANDO').length;
-    const taxa=sucessos+erros?Math.round((sucessos/(sucessos+erros))*100):0;
-    const topFalhas={}; falhas.forEach(x=>{const k=String(x?.erro||'Falha não informada');topFalhas[k]=(topFalhas[k]||0)+1;});
-    const principaisFalhas=Object.entries(topFalhas).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([motivo,total])=>({motivo,total}));
-    const porLink={}; entregasRecentes.forEach(x=>{const k=String(x?.agendamentoId||'sem-id');porLink[k] ||= {agendamentoId:k,sucesso:0,erro:0,tentativas:0};const st=String(x?.status||'').toUpperCase();if(st==='SUCESSO')porLink[k].sucesso++;if(st==='ERRO')porLink[k].erro++;porLink[k].tentativas+=Number(x?.tentativas||0);});
-    const ranking=Object.values(porLink).sort((a,b)=>(b.sucesso-b.erro)-(a.sucesso-a.erro)).slice(0,10).map(x=>({...x,nome:agendamentos.find(a=>String(a.id)===String(x.agendamentoId))?.nome||historico.find(h=>String(h.agendamentoId)===String(x.agendamentoId))?.nome||'Link'}));
-    let resposta;
-    if(acao==='erros') resposta=principaisFalhas.length ? 'Encontrei '+falhas.length+' falha(s) registradas. O principal motivo é "'+principaisFalhas[0].motivo+'" ('+principaisFalhas[0].total+' ocorrência(s)).' : 'Não há falhas registradas no momento.';
-    else if(acao==='comparar') resposta='No período de '+periodo+' dia(s), foram '+sucessos+' sucesso(s), '+erros+' erro(s) e '+enviando+' envio(s) ainda em andamento. A taxa de sucesso das entregas finalizadas foi '+taxa+'%.';
-    else if(acao==='organizar') resposta='Há '+agendamentos.length+' agendamento(s), '+falhas.length+' falha(s) e '+historico.length+' registro(s) no histórico. Recomendo revisar primeiro os links com falha e depois os agendamentos recorrentes.';
-    else if(acao==='relatorio') resposta='Relatório de '+periodo+' dia(s): '+sucessos+' sucesso(s), '+erros+' erro(s), taxa de sucesso '+taxa+'%, '+agendamentos.length+' agendamento(s) atuais e '+falhas.length+' falha(s) pendentes.';
-    else if(acao==='campanha') resposta='Rascunho de campanha preparado. O Assistente pode organizar links, grupos, mensagens e horários; a publicação deve ser confirmada antes de criar os agendamentos.';
-    else resposta='Status do RegulOS: '+agendamentos.length+' agendamento(s), '+falhas.length+' falha(s), '+historico.length+' registro(s) no histórico. Nos últimos '+periodo+' dia(s), a taxa de sucesso foi '+taxa+'%.';
-    res.set('Cache-Control','no-store'); res.json({ok:true,acao,periodo,resposta,metricas:{agendamentos:agendamentos.length,falhas:falhas.length,historico:historico.length,sucessos,erros,enviando,taxaSucesso:taxa},principaisFalhas,ranking});
-  }catch(e){res.status(500).json({ok:false,msg:e.message||'Falha ao executar o Assistente.'});}
+  return res.status(409).json({ok:false,msg:'O assistente operacional será reativado após migrar métricas e histórico para os dados individuais desta conta.'});
 });
-
-app.get('/api/diagnostico', (req,res) => {
-  try {
-    const agora = new Date();
-    const sched = diagnosticoSchedulerState();
-    const historicoRecente = Array.isArray(linkHistory) ? linkHistory.slice(0, 10) : [];
-    const falhasRecentes = Array.isArray(linkFailures) ? linkFailures.slice(0, 10) : [];
-    const ultimoHistorico = historicoRecente[0] || null;
-    const ultimaFalha = falhasRecentes[0] || null;
-    const selectedGroups = Array.isArray(allowed) ? allowed.filter(isValidGroupJid) : [];
-    const loadedGroups = Array.isArray(groups) ? groups.filter(g => isValidGroupJid(g?.id)) : [];
-    const queue = orderedLinks();
-    const queueCurrent = queue.find(x => String(x.id) === String(linkQueue.currentId || '')) || null;
-    const historyOk = Array.isArray(linkHistory);
-    const schedulesOk = Array.isArray(linkSchedules);
-    const groupsOk = Array.isArray(groups);
-    const persistenceOk = [FILES.groups, FILES.groupConfig, FILES.schedules, FILES.linkHistory, FILES.linkFailures, FILES.linkQueue]
-      .every(file => {
-        try { return fs.existsSync(file); } catch { return false; }
-      });
-    const checks = [
-      { key:'whatsapp', label:'WhatsApp', ok:online === true, value:online ? 'Conectado' : (qr ? 'Aguardando QR' : (status || 'Desconectado')), level:online ? 'ok' : (qr ? 'warn' : 'error') },
-      { key:'groups', label:'Grupos', ok:groupsOk && loadedGroups.length > 0, value:`${loadedGroups.length} carregados`, level:groupsOk && loadedGroups.length > 0 ? 'ok' : 'error' },
-      { key:'selected', label:'Grupos selecionados', ok:selectedGroups.length > 0, value:`${selectedGroups.length} selecionados`, level:selectedGroups.length > 0 ? 'ok' : 'warn' },
-      { key:'scheduler', label:'Scheduler', ok:botSchedule.ativo !== false, value:botSchedule.ativo === true ? botWindowLabel() : 'Desativado', level:botSchedule.ativo === true ? 'ok' : 'warn' },
-      { key:'queue', label:'Fila', ok:queue.length === 0 || !sched.pendentes.length || online, value:queue.length ? `${queue.length} ativos` : 'Vazia', level:!online && queue.length ? 'warn' : 'ok' },
-      { key:'schedules', label:'Agendamentos', ok:schedulesOk, value:`${Array.isArray(linkSchedules) ? linkSchedules.length : 0} registrados`, level:schedulesOk ? 'ok' : 'error' },
-      { key:'history', label:'Histórico', ok:historyOk, value:`${Array.isArray(linkHistory) ? linkHistory.length : 0} registros`, level:historyOk ? 'ok' : 'error' },
-      { key:'persistence', label:'Persistência', ok:persistenceOk, value:persistenceOk ? 'Arquivos OK' : 'Verificar arquivos', level:persistenceOk ? 'ok' : 'error' }
-    ];
-    const errors = checks.filter(x => x.level === 'error');
-    const warnings = checks.filter(x => x.level === 'warn');
-    const result = errors.length ? 'erro' : (warnings.length ? 'atencao' : 'ok');
-    res.set('Cache-Control','no-store');
-    res.json({
-      ok:true,
-      resultado:result,
-      resultadoLabel:result === 'ok' ? 'RegulOS operando normalmente' : (result === 'atencao' ? 'RegulOS operando com atenção' : 'RegulOS precisa de verificação'),
-      executadoEm:agora.toISOString(),
-      whatsapp:{conectado:online, status, qr:Boolean(qr), numero:connectedNumber ? formatPhone(connectedNumber) : '', numeroBruto:connectedNumber},
-      grupos:{carregados:loadedGroups.length, selecionados:selectedGroups.length, ligados:selectedGroups.filter(id => getGroupConfig(id).ativo !== false).length},
-      scheduler:{ativo:botSchedule.ativo === true, janela:botWindowLabel(), agendamentos:linkSchedules.length, fila:queue.length, filaAtual:queueCurrent?.nome || '', cursor:Number(linkQueue.cursor || 0), pendentes:sched.pendentes.length, enviando:sched.enviando.length},
-      ultimoEnvio:ultimoHistorico ? {nome:ultimoHistorico.nome || '', em:ultimoHistorico.concluidoAt || ultimoHistorico.lastRunAt || ultimoHistorico.at || '', status:ultimoHistorico.status || ''} : null,
-      ultimoErro:ultimaFalha ? {nome:ultimaFalha.nome || '', motivo:ultimaFalha.erro || '', em:ultimaFalha.atualizadoEm || ultimaFalha.criadoEm || ''} : null,
-      persistencia:{ok:persistenceOk, arquivos:[FILES.groups,FILES.groupConfig,FILES.schedules,FILES.linkHistory,FILES.linkFailures,FILES.linkQueue].map(file => ({arquivo:path.basename(file),existe:fs.existsSync(file)}))},
-      checks
-    });
-  } catch(e) {
-    res.status(500).json({ok:false,msg:e.message || 'Falha ao executar diagnóstico.'});
-  }
+app.get('/api/diagnostico', requireAuth, (req,res) => {
+  const session=userSessions.get(req.user.id), groups=getUserSessionGroups(req);
+  const allowed=readUserArray(req,'groups'), schedules=readUserArray(req,'schedules');
+  const deliveries=readUserArray(req,'deliveries'), failures=readUserArray(req,'linkFailures');
+  res.set('Cache-Control','no-store');
+  res.json({ok:true,diagnostico:{
+    usuario:req.user.id, sessao:session?.status||'offline', gruposSessao:groups.length,
+    gruposPermitidos:allowed.length, agendamentos:schedules.length,
+    entregas:deliveries.length, falhas:failures.length,
+    isolamento:'dados consultados no espaço individual da conta'
+  }});
 });
-;
-
 app.post('/api/desconectar', requireAuth, (req,res) => {
   return res.status(409).json({ok:false,msg:'A desconexão global foi desativada para proteger as sessões individuais. Use Desconectar WhatsApp na sua própria conta.'});
 });
@@ -3332,17 +3264,17 @@ app.post('/api/programacao', requireAuth, (req,res)=>{
   res.json({ok:true,programacao,janela:ativo?'programação configurada por usuário':'programação desligada'});
 });
 
-app.get('/api/dashboard',(req,res)=>{
-  const now=new Date(), today=dateKey(now);
-  const sucesso=history.filter(x=>x.status==='sucesso');
-  const erros=history.filter(x=>x.status==='erro');
-  res.json({
-    ok:true,hoje:sucesso.filter(x=>dateKey(new Date(x.at))===today).length,
-    totalEnviadas:sucesso.length,totalErros:erros.length,
-    janela:botWindowLabel(),programacao:botSchedule, filaLinks:orderedLinks().length, filaAtual:linkQueue.currentId, filaPosicao:orderedLinks().length ? linkQueue.cursor + 1 : 0
-  });
+app.get('/api/dashboard', requireAuth, (req,res)=>{
+  const schedules=readUserArray(req,'schedules'), deliveries=readUserArray(req,'deliveries');
+  const today=new Date().toLocaleDateString('en-CA',{timeZone:REGULOS_TIMEZONE});
+  const todayDeliveries=deliveries.filter(x=>String(x?.criadoEm||'').slice(0,10)===today);
+  res.set('Cache-Control','no-store');
+  res.json({ok:true,hoje:todayDeliveries.filter(x=>String(x.status||'').toUpperCase()==='SUCESSO').length,
+    totalEnviadas:deliveries.filter(x=>String(x.status||'').toUpperCase()==='SUCESSO').length,
+    totalErros:deliveries.filter(x=>String(x.status||'').toUpperCase()==='ERRO').length,
+    janela:'motor de envio individual em migração',programacao:readUserObject(req,'botSchedule'),
+    filaLinks:schedules.filter(x=>x.ativo!==false).length,filaAtual:null,filaPosicao:0});
 });
-
 app.get('/grupos',(req,res)=>res.sendFile(path.join(PUBLIC,'grupos.html')));
 app.get('/',(req,res)=>{const user=currentUser(req);if(user?.admin)return res.redirect('/admin');return res.sendFile(path.join(PUBLIC,'index.html'));});
 app.get('/index.html',(req,res)=>{const user=currentUser(req);if(user?.admin)return res.redirect('/admin');return res.sendFile(path.join(PUBLIC,'index.html'));});
