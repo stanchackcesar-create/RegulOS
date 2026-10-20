@@ -72,6 +72,22 @@ function writeUserObject(req, logicalName, value) {
   userContext(req).data.writeJson(logicalName, value);
   return value;
 }
+
+// Provisiona automaticamente o espaço de dados de cada conta. Os defaults são
+// escritos apenas quando ausentes, portanto uma reinicialização não apaga ajustes.
+function ensureUserWorkspace(userId) {
+  const context = userContexts.createContext(userId);
+  const defaults = {
+    groups: [], groupConfig: {}, links: [], history: [], schedules: [],
+    linkHistory: [], linkFailures: [], deliveries: [], botSchedule: { ativo:false, inicio:'', fim:'' },
+    linkQueue: {}, dynamicSchedule: []
+  };
+  for (const [name, fallback] of Object.entries(defaults)) {
+    const target = context.data.filePath(name);
+    if (!fs.existsSync(target)) context.data.writeJson(name, fallback);
+  }
+  return context;
+}
 function getUserSessionGroups(req) {
   const session = userSessions.get(req.user.id);
   const runtime = userSessions.getRuntime(req.user.id);
@@ -160,8 +176,7 @@ app.use((req,res,next)=>{
 });
 
 // ========================= AUTENTICAÇÃO MULTIUSUÁRIO =========================
-// As contas controlam apenas o acesso ao painel. A sessão do WhatsApp e todos
-// os dados do RegulOS continuam compartilhados, conforme a arquitetura escolhida.
+// Cada conta autenticada possui seu próprio contexto de operação e sessão WhatsApp.
 function generateUserCode(users){
   let code;
   do { code='USR-'+String(crypto.randomInt(10000000,100000000)); }
@@ -274,7 +289,7 @@ app.post('/api/auth/setup',async(req,res)=>{
     return res.status(400).json({ok:false,msg:'Informe usuário válido, e-mail válido e senha com pelo menos 8 caracteres.'});
   const salt=crypto.randomBytes(16).toString('hex');
   const user={id:crypto.randomUUID(),codigoUsuario:generateUserCode(users),nome:usuario,usuario,email,salt,hash:hashPassword(senha,salt),admin:true,ativo:false,emailVerificado:false,criadoEm:new Date().toISOString()};
-  saveUsers([user]);
+  saveUsers([user]); ensureUserWorkspace(user.id);
   const token=String(crypto.randomInt(0,1000000)).padStart(6,'0');
   const digest=crypto.createHash('sha256').update(token).digest('hex');
   emailTokens.set(digest,{userId:user.id,email,expiresAt:Date.now()+20*60*1000,purpose:'setup-admin'});
@@ -365,7 +380,7 @@ app.post('/api/auth/register',async(req,res)=>{
   }
   const salt=crypto.randomBytes(16).toString('hex');
   const user={id:crypto.randomUUID(),codigoUsuario:generateUserCode(users),nome:usuario,usuario,email,salt,hash:hashPassword(senha,salt),admin:false,ativo:false,criadoEm:new Date().toISOString(),emailVerificado:false};
-  users.push(user); saveUsers(users);
+  users.push(user); saveUsers(users); ensureUserWorkspace(user.id);
   const token=String(crypto.randomInt(0,1000000)).padStart(6,'0');
   emailTokens.set(crypto.createHash('sha256').update(token).digest('hex'),{userId:user.id,expiresAt:Date.now()+30*60*1000,purpose:'verify'});
   try {
@@ -1107,7 +1122,7 @@ app.post('/api/usuarios',requireAdmin,(req,res)=>{
   const users=readUsers(); if(users.some(x=>x.usuario===usuario))return res.status(409).json({ok:false,msg:'Esse usuário já existe.'});
   const salt=crypto.randomBytes(16).toString('hex');
   const u={id:crypto.randomUUID(),nome:usuario,usuario,salt,hash:hashPassword(senha,salt),admin:false,criadoEm:new Date().toISOString()};
-  users.push(u);saveUsers(users);res.json({ok:true,usuario:sanitizeUser(u)});
+  users.push(u);saveUsers(users);ensureUserWorkspace(u.id);res.json({ok:true,usuario:sanitizeUser(u)});
 });
 app.delete('/api/usuarios/:id',requireAdmin,(req,res)=>{
   const users=readUsers(); const target=users.find(x=>x.id===req.params.id);
@@ -3358,12 +3373,31 @@ app.get('/',(req,res)=>{const user=currentUser(req);if(user?.admin)return res.re
 app.get('/index.html',(req,res)=>{const user=currentUser(req);if(user?.admin)return res.redirect('/admin');return res.sendFile(path.join(PUBLIC,'index.html'));});
 app.get('*',(req,res)=>{const user=currentUser(req);if(user?.admin)return res.redirect('/admin');return res.sendFile(path.join(PUBLIC,'index.html'));});
 
+async function restoreUserSessions() {
+  const users = readUsers().filter(user => user && user.ativo !== false && typeof user.id === 'string');
+  let restored = 0;
+  for (const user of users) {
+    try {
+      const context = ensureUserWorkspace(user.id);
+      // Só reabre sessões que já possuem credenciais Baileys salvas. Usuários
+      // que nunca conectaram não ganham uma sessão/QR automaticamente.
+      const credentials = path.join(context.dir, 'auth', 'creds.json');
+      if (!fs.existsSync(credentials)) continue;
+      await userSessions.start(user.id);
+      userLinkEngine.startUser(user.id);
+      restored++;
+    } catch (error) {
+      addLog(`Reconexão individual ignorada para ${user.codigoUsuario || user.id}: ${String(error?.message || error)}`);
+    }
+  }
+  addLog(`Restauração de sessões individuais concluída: ${restored} sessão(ões) solicitada(s).`);
+}
+
 const server=app.listen(PORT,HOST,()=>{
   console.log(`RegulOS online em http://${HOST}:${PORT}`);
   addLog(`Painel disponível em http://${HOST}:${PORT}`);
-  // Não iniciar conexão nem agendador global: ambos poderiam operar dados compartilhados.
-  // O worker de envios por usuário será ativado somente após a migração completa do motor.
-  addLog('Modo multiusuário: conexão e agendador globais desativados com segurança.');
+  // A restauração opera somente nos diretórios individuais e não toca na sessão global.
+  restoreUserSessions().catch(error => addLog(`Falha na restauração individual: ${String(error?.message || error)}`));
 });
 server.on('error',e=>{
   addLog(`Erro no servidor HTTP: ${e.message}`);
