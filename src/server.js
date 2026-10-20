@@ -221,7 +221,7 @@ function userHasActiveSession(userId){
 }
 
 function sanitizeUser(u){
-  return {id:u.id,codigoUsuario:u.codigoUsuario||null,nome:u.nome||u.usuario,usuario:u.usuario,email:u.email||null,emailVerificado:u.emailVerificado===true,admin:u.admin===true,ativo:u.ativo!==false,criadoEm:u.criadoEm};
+  return {id:u.id,codigoUsuario:u.codigoUsuario||null,nome:u.nome||u.usuario,usuario:u.usuario,email:u.email||null,emailVerificado:u.emailVerificado===true,admin:u.admin===true,ativo:u.ativo!==false,criadoEm:u.criadoEm,tutorialV1:u.tutorialV1&&typeof u.tutorialV1==='object'?u.tutorialV1:{completed:false,whatsappRulesAccepted:false}};
 }
 function currentUser(req){
   const token=String(req.headers.cookie||'').match(/(?:^|;\s*)regulos_session=([^;]+)/)?.[1];
@@ -574,6 +574,23 @@ app.post('/api/auth/recover',(req,res)=>{
 });
 
 app.get('/api/auth/me',(req,res)=>{const user=currentUser(req);if(!user)return res.status(401).json({ok:false,authRequired:true});res.json({ok:true,usuario:sanitizeUser(user)});});
+app.get('/api/tutorial/status',requireAuth,(req,res)=>{
+  const users=readUsers();
+  const user=users.find(x=>x.id===req.user.id);
+  if(!user)return res.status(404).json({ok:false,msg:'Usuário não encontrado.'});
+  const state=user.tutorialV1&&typeof user.tutorialV1==='object'?user.tutorialV1:{completed:false,whatsappRulesAccepted:false};
+  res.set('Cache-Control','no-store');
+  res.json({ok:true,tutorial:state});
+});
+app.post('/api/tutorial/complete',requireAuth,(req,res)=>{
+  if(req.body?.whatsappRulesAccepted!==true)return res.status(400).json({ok:false,msg:'Confirme a leitura das orientações de uso responsável para concluir.'});
+  const users=readUsers();
+  const index=users.findIndex(x=>x.id===req.user.id);
+  if(index<0)return res.status(404).json({ok:false,msg:'Usuário não encontrado.'});
+  users[index].tutorialV1={version:1,completed:true,whatsappRulesAccepted:true,completedAt:new Date().toISOString()};
+  saveUsers(users);
+  res.json({ok:true,tutorial:users[index].tutorialV1,msg:'Tutorial concluído.'});
+});
 app.post('/api/auth/presence-offline',(req,res)=>{
   const token=String(req.headers.cookie||'').match(/(?:^|;\s*)regulos_session=([^;]+)/)?.[1];
   if(token){
