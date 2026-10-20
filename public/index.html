@@ -666,37 +666,26 @@ async function status(){
  try{
   const d=await jfetch('/api/status');
   try { const own=await jfetch('/api/user-session/status'); const ss=own.session||{}; d.conectado=ss.status==='online'; d.temQR=Boolean(ss.qr); d.qr=ss.qr||null; d.status=ss.lastError||ss.status||d.status; d.numero=ss.connectedNumber||''; d.numeroBruto=ss.connectedNumber||''; d.grupos=Array.isArray(ss.groups)?ss.groups.length:0; } catch {}
-  (document.getElementById('conn')||{}).textContent=d.conectado?'🟢 Conectado':(d.temQR?'🟡 QR':'🔴 '+(d.status||'Desconectado'));
-  (document.getElementById('connStatus')||{}).textContent=d.temQR?'📱 Escaneie o QR Code':d.status;
-  (document.getElementById('number')||{}).textContent='Número: '+(d.numero||'—');
-  (document.getElementById('numberBig')||{}).textContent='Número conectado: '+(d.numero||'—');
-  document.getElementById('groupCount').textContent=d.grupos||0;
-  document.getElementById('allowed').textContent=(d.permitidos||0)+' permitidos';
-const linked=Array.isArray(d.gruposLigados)?d.gruposLigados:[];
-const linkedBox=document.getElementById('linkedGroups');
-if(linkedBox) linkedBox.textContent=linked.length?'Ligados: '+linked.map(g=>g.nome||g.id).join(', '):'Ligados: nenhum';
-  document.getElementById('linkCount').textContent=d.links||0;
-  document.getElementById('windowBadge').textContent=d.janela||'...';
-  document.getElementById('windowBadge').className='badge '+(d.janela==='dentro do horário'?'good':d.janela==='fora do horário'?'bad':'neutral');
-  // Não sobrescrever o que o usuário está digitando: status() roda em polling.
-  // Os campos só são sincronizados automaticamente antes da primeira edição ou
-  // depois que a programação foi salva.
-  if(!botScheduleDirty && !document.getElementById('botInicio').matches(':focus') && !document.getElementById('botFim').matches(':focus') && !document.getElementById('botAtivo').matches(':focus')){
-    document.getElementById('botInicio').value=d.programacao?.inicio||'';
-    document.getElementById('botFim').value=d.programacao?.fim||'';
-    document.getElementById('botAtivo').checked=d.programacao?.ativo===true;
-    botScheduleInitialized=true;
-  }
-  const qrImg=document.getElementById('qrImg');
-  const qrBox=document.getElementById('qrBox');
-  const qrModal=document.getElementById('qrModal');
-  if(d.qr && qrRequested){
-    if(qrImg) qrImg.src=d.qr;
-    if(qrBox) qrBox.classList.remove('hidden');
-    qrModal?.classList.add('open');
-  }else{
-    qrModal?.classList.remove('open');
-    if(qrBox) qrBox.classList.add('hidden');
+  // Exibir o QR antes de atualizar campos opcionais do painel.
+  const qrImg=document.getElementById('qrImg'),qrBox=document.getElementById('qrBox'),qrModal=document.getElementById('qrModal');
+  if(d.qr && qrRequested){if(qrImg)qrImg.src=d.qr;if(qrBox)qrBox.classList.remove('hidden');qrModal?.classList.add('open');}
+  else{qrModal?.classList.remove('open');if(qrBox)qrBox.classList.add('hidden');}
+  const setText=(id,value)=>{const el=document.getElementById(id);if(el)el.textContent=value;};
+  setText('conn',d.conectado?'🟢 Conectado':(d.temQR?'🟡 QR':'🔴 '+(d.status||'Desconectado')));
+  setText('connStatus',d.temQR?'📱 Escaneie o QR Code':d.status);
+  setText('number','Número: '+(d.numero||'—'));
+  setText('numberBig','Número conectado: '+(d.numero||'—'));
+  setText('groupCount',d.grupos||0);
+  setText('allowed',(d.permitidos||0)+' permitidos');
+  const linked=Array.isArray(d.gruposLigados)?d.gruposLigados:[];
+  const linkedBox=document.getElementById('linkedGroups');
+  if(linkedBox)linkedBox.textContent=linked.length?'Ligados: '+linked.map(g=>g.nome||g.id).join(', '):'Ligados: nenhum';
+  setText('linkCount',d.links||0);
+  const windowBadge=document.getElementById('windowBadge');
+  if(windowBadge){windowBadge.textContent=d.janela||'...';windowBadge.className='badge '+(d.janela==='dentro do horário'?'good':d.janela==='fora do horário'?'bad':'neutral');}
+  const botInicio=document.getElementById('botInicio'),botFim=document.getElementById('botFim'),botAtivo=document.getElementById('botAtivo');
+  if(!botScheduleDirty&&botInicio&&botFim&&botAtivo&&!botInicio.matches(':focus')&&!botFim.matches(':focus')&&!botAtivo.matches(':focus')){
+    botInicio.value=d.programacao?.inicio||'';botFim.value=d.programacao?.fim||'';botAtivo.checked=d.programacao?.ativo===true;botScheduleInitialized=true;
   }
  }catch(e){(document.getElementById('connStatus')||{}).textContent=friendlyFetchError(e)}
 }
