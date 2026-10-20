@@ -587,7 +587,7 @@ function autoOfferNumber(value){
   const comma=cleaned.lastIndexOf(',');
   const dot=cleaned.lastIndexOf('.');
   let normalized=cleaned;
-  if(comma>=0 && dot>=0) normalized=comma>dot ? cleaned.replace(/\\./g,'').replace(',','.') : cleaned.replace(/,/g,'');
+  if(comma>=0 && dot>=0) normalized=comma>dot ? cleaned.replace(/\./g,'').replace(',','.') : cleaned.replace(/,/g,'');
   else if(comma>=0) normalized=cleaned.replace(',','.');
   else if((cleaned.match(/\./g)||[]).length>1) normalized=cleaned.replace(/\./g,'');
   const n=Number(normalized);
@@ -862,8 +862,8 @@ async function extractUniversalOfferWithBrowser(url){
 }
 async function buildAutomaticOffer(url){
   try{
-    const host=new URL(url).hostname.toLowerCase().replace(/^www\\./,'');
-    if(/(?:^|\\.)(?:mercadolivre\\.com\\.br|meli\\.la)$/i.test(host)){
+    const host=new URL(url).hostname.toLowerCase().replace(/^www\./,'');
+    if(/(?:^|\.)(?:mercadolivre\.com\.br|meli\.la)$/i.test(host)){
       try{
         const mlOffer=await getMercadoLivreOfferInfo(url);
         if(mlOffer?.titulo || mlOffer?.preco || mlOffer?.precoOriginal || mlOffer?.imagemUrl){
@@ -965,7 +965,7 @@ app.post('/api/account/request-password-change',requireAuth,async(req,res)=>{
 app.post('/api/account/request-email-change',requireAuth,async(req,res)=>{
   if(!recoveryAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas. Aguarde alguns minutos.'});
   const email=String(req.body?.email||'').trim().toLowerCase();
-  if(!/^[^\s@]+@[^\s@]+\\.[^\s@]+$/.test(email)) return res.status(400).json({ok:false,msg:'Informe um e-mail válido.'});
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ok:false,msg:'Informe um e-mail válido.'});
   const users=readUsers(), user=users.find(x=>x.id===req.user.id);
   if(!user) return res.status(401).json({ok:false,msg:'Conta não encontrada.'});
   if(users.some(x=>x.id!==user.id&&String(x.email||'').toLowerCase()===email)) return res.status(409).json({ok:false,msg:'Esse e-mail já está vinculado a outra conta.'});
@@ -1984,9 +1984,9 @@ async function getMercadoLivreOfferInfo(url){
           if(!s)return;
           const comma=s.lastIndexOf(','); const dot=s.lastIndexOf('.');
           let n=s;
-          if(comma>=0&&dot>=0)n=comma>dot?s.replace(/\\./g,'').replace(',','.') : s.replace(/,/g,'');
+          if(comma>=0&&dot>=0)n=comma>dot?s.replace(/\./g,'').replace(',','.') : s.replace(/,/g,'');
           else if(comma>=0)n=s.replace(',','.');
-          else if((s.match(/\\./g)||[]).length>1)n=s.replace(/\\./g,'');
+          else if((s.match(/\./g)||[]).length>1)n=s.replace(/\./g,'');
           const x=Number(n);
           if(Number.isFinite(x)&&x>0&&x<100000000)arr.push(x);
         };
