@@ -476,6 +476,7 @@ app.post('/api/auth/heartbeat',(req,res)=>{
 app.get('/login',(req,res)=>res.sendFile(path.join(PUBLIC,'login.html')));
 app.get('/configurar',(req,res)=>res.sendFile(path.join(PUBLIC,'configurar.html')));
 app.get('/integracoes',(req,res)=>res.sendFile(path.join(PUBLIC,'integracoes.html')));
+app.get('/admin',requireAuth,requireAdmin,(req,res)=>res.sendFile(path.join(PUBLIC,'admin.html')));
 
 const shopeeIntegration = createShopeeIntegration({dataDir:DATA});
 
