@@ -25,6 +25,7 @@ const { createShopeeIntegration, isShopeeHost } = require('./shopee');
 const { chromium } = require('playwright');
 const { sendGmail } = require('./gmail-mailer');
 const { createUserSessionManager } = require('./user-session-manager');
+const { createUserContextFactory } = require('./user-context');
 const { createBaileysUserConnector } = require('./baileys-user-connector');
 
 const ROOT = path.join(__dirname, '..');
@@ -39,6 +40,38 @@ fs.mkdirSync(AUTH, { recursive: true });
 // Sessões WhatsApp independentes por conta autenticada.
 const userConnector = createBaileysUserConnector({ makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, toDataURL: qrcode.toDataURL, logger: P({ level: 'silent' }) });
 const userSessions = createUserSessionManager({ baseDir: DATA, connect: (userId, runtime, callbacks) => userConnector.connect(userId, runtime, callbacks) });
+
+// Contexto de dados separado por usuário autenticado; nunca aceita userId do body.
+const userContexts = createUserContextFactory({ baseDir: DATA });
+function userContext(req) {
+  if (!req.user || typeof req.user.id !== 'string') throw new Error('Autenticação obrigatória.');
+  return userContexts.createContext(req.user.id);
+}
+function readUserArray(req, logicalName) {
+  const value = userContext(req).data.readJson(logicalName, []);
+  return Array.isArray(value) ? value : [];
+}
+function writeUserArray(req, logicalName, value) {
+  if (!Array.isArray(value)) throw new TypeError('O valor precisa ser uma lista.');
+  userContext(req).data.writeJson(logicalName, value);
+  return value;
+}
+function readUserObject(req, logicalName) {
+  const value = userContext(req).data.readJson(logicalName, {});
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+function writeUserObject(req, logicalName, value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('O valor precisa ser um objeto.');
+  userContext(req).data.writeJson(logicalName, value);
+  return value;
+}
+function getUserSessionGroups(req) {
+  const session = userSessions.get(req.user.id);
+  const runtime = userSessions.getRuntime(req.user.id);
+  const groups = Array.isArray(session?.groups) ? session.groups : (runtime ? runtime.groups.read() : []);
+  return Array.isArray(groups) ? groups : [];
+}
+
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -3201,50 +3234,63 @@ app.post('/api/deslogar', requireAdmin, async (req,res) => {
   setTimeout(() => start(), 500);
 });
 
-app.get('/api/grupos', async (req,res) => {
-  // Consulta somente o cache. A descoberta no WhatsApp ocorre na conexão
-  // ou quando o usuário solicita explicitamente "Pesquisar grupos".
+app.get('/api/grupos', requireAuth, (req,res) => {
+  const grupos = getUserSessionGroups(req);
+  const allowed = readUserArray(req, 'groups');
+  const config = readUserObject(req, 'groupConfig');
+  res.set('Cache-Control','no-store');
   res.json({
     ok:true,
-    grupos:groups.map(g => ({...g,config:getGroupConfig(g.id),allowed:allowed.includes(g.id)})),
+    grupos:grupos.map(g => ({...g,config:{...(config[g.id]||{ativo:false})},allowed:allowed.includes(g.id)})),
     permitidos:allowed,
-    gruposCacheAt:lastGroupRefreshAt || null,
-    gruposRateLimitUntil:groupRateLimitUntil || null
+    gruposCacheAt:userSessions.get(req.user.id)?.status === 'online' ? new Date().toISOString() : null,
+    gruposRateLimitUntil:null
   });
 });
-app.post('/api/grupos/atualizar', async (req,res) => {
-  if(!online) return res.status(503).json({ok:false,msg:'WhatsApp não conectado.'});
-  const ok=await loadGroups();
-  if (ok) return res.status(200).json({ok:true,msg:groups.length+' grupo(s) carregado(s).',grupos:groups,permitidos:allowed});
-  const retryAfterMs=Math.max(0,groupRateLimitUntil-Date.now());
-  const statusCode=retryAfterMs>0?429:500;
-  return res.status(statusCode).json({
-    ok:false,
-    msg:retryAfterMs>0?'Atualização dos grupos em espera. Tente novamente em ~'+Math.ceil(retryAfterMs/1000)+'s.':'Não foi possível atualizar os grupos.',
-    retryAfterMs,grupos:groups,permitidos:allowed
-  });
+app.post('/api/grupos/atualizar', requireAuth, async (req,res) => {
+  const runtime = userSessions.getRuntime(req.user.id);
+  const session = userSessions.get(req.user.id);
+  if (!runtime || session?.status !== 'online' || !runtime.socket) {
+    return res.status(503).json({ok:false,msg:'Conecte primeiro o WhatsApp desta conta.'});
+  }
+  try {
+    const raw = await runtime.socket.groupFetchAllParticipating();
+    const grupos = Object.entries(raw || {}).filter(([id])=>id.endsWith('@g.us')).map(([id,g])=>({
+      id,name:String(g?.subject||g?.name||id),subject:String(g?.subject||g?.name||'')
+    }));
+    userSessions.updateGroups(req.user.id, grupos);
+    const allowed = readUserArray(req, 'groups');
+    const config = readUserObject(req, 'groupConfig');
+    return res.json({ok:true,msg:grupos.length+' grupo(s) carregado(s).',grupos:grupos.map(g=>({...g,config:config[g.id]||{ativo:false},allowed:allowed.includes(g.id)})),permitidos:allowed});
+  } catch (error) {
+    return res.status(502).json({ok:false,msg:'Não foi possível carregar os grupos desta conta.',detail:String(error?.message||error)});
+  }
 });
-app.post('/api/grupos/config', (req,res) => {
+app.post('/api/grupos/config', requireAuth, (req,res) => {
   const id=String(req.body?.id||'');
   if(!id) return res.status(400).json({ok:false,msg:'Grupo inválido.'});
-  const c=getGroupConfig(id);
-const grupoAtual=groups.find(g=>String(g.id)===id);
-if(grupoAtual?.name) c.nome=grupoAtual.name;
-if(typeof req.body.ativo==='boolean') {
-  c.ativo=req.body.ativo;
-  // Mantém "Permitidos" sincronizado com "Ligados" para evitar dois estados diferentes.
-  if(c.ativo) allowed=[...new Set([...allowed,id])];
-  else allowed=allowed.filter(x=>String(x)!==id);
-  writeJson(FILES.groups, allowed);
-}
-  saveGroupsConfig();
-  res.json({ok:true,config:c,permitidos:allowed,msg:c.ativo?'Envio ligado.':'Envio desligado.'});
+  const grupos=getUserSessionGroups(req);
+  if(!grupos.some(g=>String(g.id)===id)) return res.status(404).json({ok:false,msg:'Esse grupo não pertence à sessão WhatsApp desta conta.'});
+  const config=readUserObject(req,'groupConfig');
+  const item={...(config[id]||{ativo:false})};
+  const grupo=grupos.find(g=>String(g.id)===id);
+  if(grupo?.name)item.nome=grupo.name;
+  if(typeof req.body?.ativo==='boolean')item.ativo=req.body.ativo;
+  config[id]=item;
+  writeUserObject(req,'groupConfig',config);
+  let allowed=readUserArray(req,'groups');
+  allowed=item.ativo?[...new Set([...allowed,id])]:allowed.filter(x=>String(x)!==id);
+  writeUserArray(req,'groups',allowed);
+  res.json({ok:true,config:item,permitidos:allowed,msg:item.ativo?'Envio ligado para esta conta.':'Envio desligado para esta conta.'});
 });
-app.post('/api/grupos/salvar', (req,res) => {
+app.post('/api/grupos/salvar', requireAuth, (req,res) => {
   if(!Array.isArray(req.body?.ids)) return res.status(400).json({ok:false,msg:'IDs inválidos.'});
-  allowed=[...new Set(req.body.ids.map(String))];
-  writeJson(FILES.groups,allowed);
-  res.json({ok:true,msg:`${allowed.length} grupo(s) permitido(s).`});
+  const grupos=getUserSessionGroups(req);
+  const validIds=new Set(grupos.map(g=>String(g.id)));
+  const ids=[...new Set(req.body.ids.map(String))];
+  if(ids.some(id=>!validIds.has(id))) return res.status(400).json({ok:false,msg:'A lista contém grupo que não pertence à sessão desta conta.'});
+  writeUserArray(req,'groups',ids);
+  res.json({ok:true,msg:ids.length+' grupo(s) permitido(s) para esta conta.'});
 });
 
 app.get('/api/mensagem', (req,res)=>res.json({ok:true}));
@@ -3271,758 +3317,89 @@ app.post('/api/mensagem', async (req,res) => {
   res.json({ok:true,sent,errors,msg:`Enviado para ${sent} de ${targets.length} grupo(s) Ligado(s).`});
 });
 
-app.get('/api/link-agendamentos',(req,res)=>{
-  try {
-    const agendamentos=Array.isArray(linkSchedules)?linkSchedules:[];
-    res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.set('Pragma','no-cache');
-    res.set('Expires','0');
-    return res.json({ok:true,agendamentos});
-  } catch(e) {
-    addLog(`Erro na API de agendamentos: ${e.message}`);
-    return res.status(500).json({ok:false,msg:'Não foi possível carregar os agendamentos.'});
-  }
-});
-app.get('/api/links',(req,res)=>{
-  try {
-    const agendamentos=Array.isArray(linkSchedules)?linkSchedules:[];
-    res.set('Cache-Control','no-store');
-    res.json({ok:true,links:agendamentos,agendamentos});
-  } catch(e) { res.status(500).json({ok:false,msg:'Não foi possível carregar os links.'}); }
-});
-
-// REGULOS_ASSISTENTE_CHAT_V2_5
-// Contexto conversacional + consulta real de agendamentos/recorrências.
-app.post('/api/assistente/chat', requireAuth, (req,res)=>{
-  try{
-    const pergunta=String(req.body?.pergunta||'').trim();
-    if(!pergunta) return res.status(400).json({ok:false,msg:'Digite uma pergunta.'});
-
-    const q=pergunta.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    const contexto=Array.isArray(req.body?.contexto)?req.body.contexto.slice(-6):[];
-    const ultimaResposta=contexto.slice().reverse().find(x=>x&&x.role==='assistant'&&x.periodoLabel);
-    const ultimaPerguntaUsuario=contexto.slice().reverse().find(x=>x&&x.role==='user'&&x.content);
-    const perguntaAnterior=String(ultimaPerguntaUsuario?.content||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    const continuidade=/^\s*(e|tambem|eles|elas|os que|as que|esses|essas|mesmo periodo|nesse periodo|destes|destas|desses|dessas)\b/.test(q)
-      || /\b(os que|as que|esses|essas|mesmo periodo|nesse periodo|destes|destas|desses|dessas)\b/.test(q);
-    const contextoEraFalha=/\b(erro|erros|falha|falhas|falhou|falharam|falhar|problema|problemas|motivo|motivos)\b/.test(perguntaAnterior);
-    const contextoEraAgendamento=/\b(agendad|programad|agendamento|agendamentos|programacao|programacoes)\b/.test(perguntaAnterior);
-
-    const now=new Date();
-    const periodoSolicitado=Math.max(1,Math.min(90,Number(req.body?.periodoSolicitado||7)));
-    const startOfDay=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate()).getTime();
-    const addDays=(ms,n)=>ms+(n*86400000);
-    const localDateKey=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-    const todayKey=localDateKey(now);
-    const todayStart=startOfDay(now);
-    let startMs=todayStart, endMs=addDays(todayStart,1), periodo=1, periodoLabel='hoje';
-
-    const rangeMatch=q.match(/(?:de|entre)\s+(ontem|hoje)\s+(?:a|ate|para|e)\s+(ontem|hoje)/);
-    const numericRange=q.match(/(?:de|entre)\s+(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{4}))?\s+(?:a|ate|para|e)\s+(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{4}))?/);
-    if(rangeMatch){
-      const a=rangeMatch[1],b=rangeMatch[2];
-      const as=a==='ontem'?addDays(todayStart,-1):todayStart, bs=b==='ontem'?addDays(todayStart,-1):todayStart;
-      startMs=Math.min(as,bs); endMs=addDays(Math.max(as,bs),1); periodo=Math.max(1,Math.round((endMs-startMs)/86400000)); periodoLabel=a+' para '+b;
-    }else if(numericRange){
-      const y1=Number(numericRange[3]||now.getFullYear()),y2=Number(numericRange[6]||y1);
-      const d1=new Date(y1,Number(numericRange[2])-1,Number(numericRange[1])),d2=new Date(y2,Number(numericRange[5])-1,Number(numericRange[4]));
-      if(!Number.isNaN(d1.getTime())&&!Number.isNaN(d2.getTime())){
-        startMs=startOfDay(d1);endMs=addDays(startOfDay(d2),1);
-        if(endMs<startMs){const t=startMs;startMs=endMs-86400000;endMs=t+86400000;}
-        periodo=Math.max(1,Math.round((endMs-startMs)/86400000));periodoLabel=numericRange[1]+'/'+numericRange[2]+' a '+numericRange[4]+'/'+numericRange[5];
-      }
-    }else if(/\b(de ontem para hoje|de ontem ate hoje|de ontem a hoje|desde ontem|a partir de ontem)\b/.test(q)){
-      startMs=addDays(todayStart,-1);endMs=addDays(todayStart,1);periodo=2;periodoLabel='ontem e hoje';
-    }else if(/\bontem\b/.test(q)&&!/\bhoje\b/.test(q)){
-      startMs=addDays(todayStart,-1);endMs=todayStart;periodo=1;periodoLabel='ontem';
-    }else if(/\bhoje\b/.test(q)){
-      startMs=todayStart;endMs=addDays(todayStart,1);periodo=1;periodoLabel='hoje';
-    }else{
-      const pm=q.match(/(?:ultimos?|ultimas?)\s+(\d+)\s+dias?/);
-      if(pm){periodo=Math.max(1,Math.min(90,Number(pm[1])));startMs=addDays(todayStart,-(periodo-1));endMs=addDays(todayStart,1);periodoLabel='ultimos '+periodo+' dias';}
-      else if(/7 dias|semana/.test(q)){periodo=7;startMs=addDays(todayStart,-6);endMs=addDays(todayStart,1);periodoLabel='ultimos 7 dias';}
-      else if(/15 dias/.test(q)){periodo=15;startMs=addDays(todayStart,-14);endMs=addDays(todayStart,1);periodoLabel='ultimos 15 dias';}
-      else if(/30 dias|mes/.test(q)){periodo=30;startMs=addDays(todayStart,-29);endMs=addDays(todayStart,1);periodoLabel='ultimos 30 dias';}
-      else if(/90 dias/.test(q)){periodo=90;startMs=addDays(todayStart,-89);endMs=addDays(todayStart,1);periodoLabel='ultimos 90 dias';}
-      else {periodo=periodoSolicitado;startMs=addDays(todayStart,-(periodo-1));endMs=addDays(todayStart,1);periodoLabel='ultimos '+periodo+' dias';}
-    }
-
-    if(continuidade&&ultimaResposta?.intervalo?.inicio&&ultimaResposta?.intervalo?.fim&&!/\b(hoje|ontem|ultimos?|ultimas?|dias?|semana|mes|entre|de)\b/.test(q)){
-      const ci=Date.parse(ultimaResposta.intervalo.inicio), cf=Date.parse(ultimaResposta.intervalo.fim);
-      if(Number.isFinite(ci)&&Number.isFinite(cf)&&cf>ci){
-        startMs=ci;endMs=cf;periodo=Math.max(1,Math.round((cf-ci)/86400000));periodoLabel=String(ultimaResposta.periodoLabel);
-      }
-    }
-
-    const inPeriod=v=>{const t=Date.parse(v||'');return Number.isFinite(t)&&t>=startMs&&t<endMs;};
-    const deliveries=Array.isArray(linkDeliveries)?linkDeliveries.filter(x=>inPeriod(x.concluidoEm||x.criadoEm||x.at)):[];
-    const failures=Array.isArray(linkFailures)?linkFailures.filter(x=>inPeriod(x.at||x.updatedAt||x.createdAt||x.data)):[];
-    const schedules=Array.isArray(linkSchedules)?linkSchedules:[];
-    const scheduleById=new Map(schedules.map(s=>[String(s.id),s]));
-    const success=deliveries.filter(x=>String(x.status||'').toUpperCase()==='SUCESSO').length;
-    const errors=deliveries.filter(x=>String(x.status||'').toUpperCase()==='ERRO').length;
-    const sending=deliveries.filter(x=>String(x.status||'').toUpperCase()==='ENVIANDO').length;
-    const total=success+errors+sending;
-    const pct=total?Math.round(success/total*100):0;
-
-    const names=new Map();
-    deliveries.forEach(x=>{
-      const id=String(x.agendamentoId||x.linkId||'');if(!id)return;
-      const item=scheduleById.get(id);
-      const nome=String(x.nome||item?.nome||id);
-      const cur=names.get(id)||{nome,sucesso:0,erro:0,tentativas:0};
-      const st=String(x.status||'').toUpperCase();
-      cur.tentativas+=Number(x.tentativas||1);
-      if(st==='SUCESSO')cur.sucesso++;
-      if(st==='ERRO')cur.erro++;
-      names.set(id,cur);
-    });
-    const ranking=[...names.values()].sort((a,b)=>(b.erro-a.erro)||(b.tentativas-a.tentativas)).slice(0,5);
-
-    const topFailures={};
-    failures.forEach(x=>{
-      const k=String(x.erro||x.motivo||'Falha não informada').trim()||'Falha não informada';
-      topFailures[k]=(topFailures[k]||0)+1;
-    });
-    const failureList=Object.entries(topFailures).sort((a,b)=>b[1]-a[1]).slice(0,3);
-
-    const recomendacoes=[];
-    if(errors>0){
-      if(pct<70) recomendacoes.push('A taxa de sucesso está baixa; vale revisar os links que mais falharam antes de aumentar os envios.');
-      else if(pct<90) recomendacoes.push('A taxa de sucesso está razoável, mas há espaço para reduzir as falhas dos links com maior recorrência.');
-      else recomendacoes.push('A taxa de sucesso está alta; concentre a revisão nos poucos erros restantes.');
-    }
-    if(failureList.length) recomendacoes.push('A principal causa registrada é "'+failureList[0][0]+'". Recomendo verificar essa causa primeiro.');
-    if(ranking[0]?.erro>0) recomendacoes.push('O link "'+ranking[0].nome+'" concentra '+ranking[0].erro+' erro(s). Recomendo revisar esse link antes de reenviar.');
-    if(sending>0) recomendacoes.push('Há '+sending+' entrega(s) ainda em andamento; aguarde a conclusão antes de interpretar esse resultado como definitivo.');
-    if(!total&&!failures.length) recomendacoes.push('Não há dados de entrega no período selecionado; confirme se houve envio nesse intervalo.');
-
-    const intencaoAgendamentos=/\b(quais|qual|mostre|mostrar|liste|listar|tem|tenho|estao|esta|o que)\b/.test(q)
-      && /\b(link|links|agendamento|agendamentos)\b/.test(q)
-      && /\b(agendad\w*|programad\w*|programacao|programacoes|marcad\w*|previst\w*)\b/.test(q);
-    const intencaoAgendamentosHoje=intencaoAgendamentos || (continuidade&&contextoEraAgendamento);
-    const intencaoComparar=/\b(compar|compare|comparar|melhorou|piorou|evolucao|evoluiu)\b/.test(q);
-    const intencaoAnalise=/\b(como esta|como estao|analise|analisar|desempenho|resultado|resultados|situacao)\b/.test(q);
-    const intencaoRecomendacao=/\b(recomenda|recomendacao|sugestao|sugira|o que devo|que devo|o que fazer|como melhorar)\b/.test(q);
-    const agendamentoContexto=ultimaResposta?.agendamentoSelecionado||null;
-    const intencaoFalhas=/\b(erro|erros|falha|falhas|falhou|falharam|falhar|problema|problemas|por que|porque|motivo|motivos)\b/.test(q)
-      || (continuidade&&contextoEraFalha)
-      || (agendamentoContexto && /\b(problema|problemas|erro|erros|falha|falhas)\b/.test(q));
-
-    function scheduleOccursToday(item){
-      if(!item || !item.data || !item.horario) return false;
-      if(item.repeticao==='diariamente') return new Date(`${item.data}T${item.horario}:00`).getTime()<=now.getTime();
-      if(item.repeticao==='semanalmente'){
-        const base=new Date(`${item.data}T${item.horario}:00`);
-        return !Number.isNaN(base.getTime()) && now.getDay()===base.getDay() && base.getTime()<=now.getTime();
-      }
-      return String(item.data)===todayKey;
-    }
-
-    function scheduleGroupDetails(item){
-      const ids=normalizeScheduleGroupIds(item);
-      const detalhes=ids.map(id=>{
-        const key=String(id);
-        const nome=String(item?.grupoNomes?.[key]||groupNameForId(key)||'').trim();
-        const permitido=allowed.some(x=>String(x)===key);
-        const ativo=groups.find(g=>String(g?.id||'')===key)?.allowed===true || permitido;
-        return {id:key,nome:nome||key,permitido,ativo};
-      });
-      return detalhes.filter(x=>x.id);
-    }
-    function scheduleGroupLabel(item){
-      const detalhes=scheduleGroupDetails(item);
-      if(!detalhes.length) return 'grupo não informado';
-      return detalhes.map(x=>x.nome).join(', ');
-    }
-    function formatSchedule(item){
-      const grupo=scheduleGroupLabel(item);
-      const status=String(item.status|| (item.ativo===false?'pausado':'agendado')).toLowerCase();
-      const statusLabel={agendado:'AGENDADO',enviando:'ENVIANDO',concluido:'CONCLUÍDO',erro:'ERRO',aguardando_grupo:'AGUARDANDO GRUPO',pausado:'PAUSADO'}[status]||status.toUpperCase();
-      return '• '+String(item.nome||item.id)+' — '+String(item.horario||'sem horário')+' — '+grupo+' — '+statusLabel;
-    }
-
-    let resposta='';
-    const horarioPedido=(q.match(/\b([01]?\d|2[0-3])[:h]([0-5]\d)\b/)||[]).slice(1);
-    const horarioNormalizado=horarioPedido.length?String(horarioPedido[0]).padStart(2,'0')+':'+horarioPedido[1]:null;
-    const perguntaAnteriorTexto=String(ultimaPerguntaUsuario?.content||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    const ultimaRespostaTexto=String(ultimaResposta?.content||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-    let agendamentoSelecionado=agendamentoContexto||null;
-    const horarioAnteriorMatch=(perguntaAnteriorTexto.match(/\b([01]?\d|2[0-3])[:h]([0-5]\d)\b/)||ultimaRespostaTexto.match(/\b([01]?\d|2[0-3])[:h]([0-5]\d)\b/));
-    const horarioAnterior=agendamentoContexto?.horario|| (horarioAnteriorMatch?String(horarioAnteriorMatch[1]).padStart(2,'0')+':'+horarioAnteriorMatch[2]:null);
-    const intencaoAgendamentoEspecifico=Boolean(horarioNormalizado)&&/\b(link|links|agendamento|agendamentos)\b/.test(q)
-      &&/\b(qual|quais|onde|qual\s+link)\b/.test(q);
-    const referenciaAgendamento=/\b(ele|ela|dele|dela|desse|dessa|esse|essa|deste|desta|o mesmo|a mesma|isso)\b/.test(q);
-    const intencaoStatusAgendamento=Boolean(horarioAnterior)&&/\b(status|situacao|situação|estado)\b/.test(q)
-      &&(/\b(link|agendamento|agendado|programado|ele|esse|desse)\b/.test(q)||Boolean(agendamentoContexto));
-    const intencaoGrupoAgendamento=(Boolean(agendamentoContexto)||Boolean(horarioAnterior)||Boolean(horarioNormalizado))
-      &&/\b(grupo|grupos|onde sera|onde vai|para onde)\b/.test(q)
-      &&/\b(ver|mostrar|mostre|qual|quais|onde|desse|deste|agendamento|link|links)\b/.test(q);
-    const intencaoDetalhesAgendamento=(Boolean(agendamentoContexto)||Boolean(horarioAnterior)||Boolean(horarioNormalizado))
-      &&/\b(detalhes|detalhes completos|informacoes|informações|dados)\b/.test(q)
-      &&(/\b(link|agendamento|agendado|programado|ele|esse|desse|deste)\b/.test(q)||Boolean(agendamentoContexto));
-    const intencaoOutrosHorarios=/\b(outros|outras)\b/.test(q)
-      &&/\b(horarios|horários|links|agendamentos)\b/.test(q)
-      &&/\b(programados|programadas|agendados|agendadas|hoje)\b/.test(q);
-    const intencaoVoltarAgendamentos=/\b(voltar|volte|voltemos)\b/.test(q)
-      &&/\b(agendamento|agendamentos|programacao|programação|horarios|horários)\b/.test(q);
-    const intencaoProximoAgendamento=/\b(proximo|proxima|seguinte)\b/.test(q)
-      &&/\b(link|agendamento|agendamentos|envio|enviado|enviar)\b/.test(q);
-    const intencaoPausados=/\b(pausad|pausados|pausadas|pausa)\w*\b/.test(q)
-      &&/\b(link|links|agendamento|agendamentos)\b/.test(q);
-    const intencaoRecomendacaoAgendamento=(Boolean(agendamentoContexto)||Boolean(horarioAnterior)||Boolean(horarioNormalizado))&&/\b(recomenda|recomendacao|sugestao|sugira|o que devo|o que eu deveria|que devo|o que fazer|o que eu faco|como melhorar|devo fazer)\b/.test(q)
-      &&(/\b(link|agendamento|agendado|programado|ele|esse|desse)\b/.test(q)||Boolean(agendamentoContexto));
-    const intencaoDiagnosticoAgendamento=(Boolean(agendamentoContexto)||Boolean(horarioAnterior)||Boolean(horarioNormalizado))
-      &&/\b(problema|problemas|erro|erros|falha|falhou|falhando|nao foi enviado|não foi enviado|nao enviou|não enviou|por que|porque|o que esta acontecendo|o que está acontecendo|por qual motivo|motivo|travou|travado|pendente|parado|aguardando)\b/.test(q)
-      &&(/\b(link|agendamento|agendado|programado|ele|esse|desse|dele|deste)\b/.test(q)||Boolean(agendamentoContexto));
-    if(intencaoDiagnosticoAgendamento){
-      const item=agendamentoContexto || (horarioNormalizado||horarioAnterior
-        ? schedules.find(x=>String(x.horario||'').slice(0,5)===(horarioNormalizado||horarioAnterior))
-        : null);
-      if(!item){
-        resposta='🔎 Não consegui identificar qual agendamento você quer diagnosticar. Selecione um agendamento primeiro.';
-      }else{
-        agendamentoSelecionado=item;
-        const itemId=String(item.id||'');
-        const itemDeliveries=deliveries.filter(d=>String(d?.agendamentoId||'')===itemId);
-        const itemFailures=failures.filter(f=>String(f?.agendamentoId||'')===itemId);
-        const status=String(item.status||'').toLowerCase();
-        const grupos=scheduleGroupDetails(item).map(x=>x.nome+(x.permitido?' (permitido)':' (não está na lista de permitidos)'));
-        const gruposTexto=grupos.length?grupos.join(', '):'nenhum grupo registrado';
-        const tentativas=itemDeliveries.reduce((n,d)=>n+Number(d?.tentativas||0),0);
-        const errosEntrega=itemDeliveries.filter(d=>String(d?.status||'').toUpperCase()==='ERRO').length;
-        const enviando=itemDeliveries.filter(d=>String(d?.status||'').toUpperCase()==='ENVIANDO').length;
-        const pendentes=itemDeliveries.filter(d=>String(d?.status||'').toUpperCase()==='PENDENTE').length;
-
-        resposta='🔎 Diagnóstico do agendamento das '+String(item.horario||horarioNormalizado||horarioAnterior||'').slice(0,5)+':';
-        resposta+='\n• Status: '+String(item.status|| (item.ativo===false?'PAUSADO':'AGENDADO')).toUpperCase();
-        resposta+='\n• Grupo(s): '+gruposTexto;
-        resposta+='\n• Tentativas registradas: '+tentativas;
-        if(errosEntrega||Number(item.erros||0)>0) resposta+='\n• ⚠️ Falhas: '+Math.max(errosEntrega,Number(item.erros||0));
-        if(enviando) resposta+='\n• ⏳ Entregas em andamento: '+enviando;
-        if(pendentes) resposta+='\n• 🕐 Entregas pendentes: '+pendentes;
-
-        if(status==='erro'||Number(item.erros||0)>0||errosEntrega||itemFailures.length){
-          resposta+='\n\n🚨 Há indícios de problema neste agendamento.';
-          const motivos=itemFailures.map(f=>String(f?.erro||f?.motivo||'').trim()).filter(Boolean);
-          const motivoPrincipal=motivos[0]||'';
-          if(motivoPrincipal) resposta+='\n• Motivo registrado: '+motivoPrincipal;
-          if(status==='erro') resposta+='\n• O agendamento terminou com ERRO.';
-          if(!grupos.length) resposta+='\n• O agendamento não possui grupo identificado. Revise o destino antes de reenviar.';
-          else if(grupos.some(g=>g.includes('(não está na lista de permitidos)'))) resposta+='\n• O grupo identificado não está na lista de permitidos. Verifique a autorização do grupo.';
-
-          // Cadeia de causa: transforma os dados brutos do agendamento em uma explicação operacional.
-          const motivoNorm=motivoPrincipal.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-          let causa='falha na execução do envio';
-          let causaDetalhe='o RegulOS registrou uma ocorrência de erro para este agendamento';
-          let acao='revisar o histórico da entrega e o destino antes de reenviar';
-          if(!grupos.length){
-            causa='destino não identificado';
-            causaDetalhe='o agendamento não possui um grupo de destino resolvido';
-            acao='selecionar ou corrigir o grupo de destino e tentar novamente';
-          }else if(grupos.some(g=>g.includes('(não está na lista de permitidos)'))){
-            causa='grupo não autorizado';
-            causaDetalhe='o grupo existe, mas não está na lista de grupos permitidos';
-            acao='autorizar o grupo e depois reenviar o agendamento';
-          }else if(/imagem|foto|thumbnail|midia|media|download|http|https/.test(motivoNorm)){
-            causa='problema ao obter a mídia do link';
-            causaDetalhe=motivoPrincipal||'a imagem/mídia não pôde ser obtida ou validada';
-            acao='revisar o link ou a imagem automática e reenviar após corrigir';
-          }else if(/grupo|jid|group|participante|nao encontrado|not found|disponivel|conect/.test(motivoNorm)){
-            causa='problema no grupo de destino';
-            causaDetalhe=motivoPrincipal||'o grupo não estava disponível para o envio';
-            acao='confirmar se o grupo está carregado, permitido e conectado antes de reenviar';
-          }else if(/timeout|tempo|rate.?limit|429|limite/.test(motivoNorm)){
-            causa='indisponibilidade temporária';
-            causaDetalhe=motivoPrincipal||'o envio encontrou uma limitação ou demora temporária';
-            acao='aguardar a normalização e tentar novamente, evitando múltiplos reenvios simultâneos';
-          }else if(motivoPrincipal){
-            causa='erro registrado durante a entrega';
-            causaDetalhe=motivoPrincipal;
-            acao='corrigir a causa indicada e então reenviar';
-          }
-          resposta+='\n\n🧩 Causa provável: '+causa+'.';
-          resposta+='\n• Explicação: '+causaDetalhe+'.';
-          resposta+='\n• Fluxo: agendamento → grupo → tentativa → resultado ERRO.';
-          resposta+='\n\n💡 Próxima ação recomendada: '+acao+'.';
-        }else if(status==='aguardando_grupo'){
-          resposta+='\n\n⚠️ O agendamento está aguardando um grupo disponível.';
-          resposta+='\n💡 Próxima ação recomendada: confirme se o grupo está conectado, carregado e permitido.';
-        }else if(status==='pausado'||item.ativo===false){
-          resposta+='\n\n⏸️ O agendamento está pausado.';
-          resposta+='\n💡 Próxima ação recomendada: reative-o somente se esse envio ainda for necessário.';
-        }else if(status==='enviando'||enviando){
-          resposta+='\n\n⏳ O envio está em andamento.';
-          resposta+='\n💡 Próxima ação recomendada: aguarde a conclusão antes de tentar reenviar.';
-        }else if(pendentes){
-          resposta+='\n\n🕐 Há entrega pendente para esse agendamento.';
-          resposta+='\n💡 Próxima ação recomendada: aguarde a execução; se permanecer pendente, verifique o grupo e o histórico.';
-        }else{
-          resposta+='\n\n✅ Não encontrei falha registrada neste agendamento.';
-          resposta+='\n💡 Próxima ação recomendada: manter o agendamento ativo e acompanhar a execução.';
-        }
-      }
-    }else if(intencaoDetalhesAgendamento){
-      const horarioAlvo=horarioNormalizado||horarioAnterior;
-      let encontrados=agendamentoContexto?[agendamentoContexto]:(horarioAlvo?schedules.filter(item=>String(item.horario||'').slice(0,5)===horarioAlvo):[]);
-      if(!encontrados.length) resposta='🔎 Não consegui identificar o agendamento para mostrar os detalhes.';
-      else{
-        agendamentoSelecionado=encontrados.length===1?encontrados[0]:agendamentoSelecionado;
-        resposta=encontrados.map(item=>{
-          const detalhes=scheduleGroupDetails(item);
-          const gruposTexto=detalhes.length?detalhes.map(x=>x.nome+(x.permitido?' (permitido)':' (não está na lista de permitidos)')).join(', '):'nenhum grupo registrado';
-          return '🔎 Detalhes do agendamento:\n• Link: '+String(item.nome||item.id)+'\n• Horário: '+String(item.horario||'sem horário')+'\n• Grupo(s): '+gruposTexto+'\n• Status: '+String(item.status|| (item.ativo===false?'PAUSADO':'AGENDADO')).toUpperCase()+'\n• Ativo: '+(item.ativo===false?'NÃO':'SIM')+'\n• Repetição: '+String(item.repeticao||'uma vez');
-        }).join('\n\n');
-      }
-    }else if(intencaoOutrosHorarios){
-      const lista=schedules.filter(scheduleOccursToday).sort((a,b)=>String(a.horario||'99:99').localeCompare(String(b.horario||'99:99')));
-      const selecionadoId=agendamentoContexto?.id||agendamentoSelecionado?.id;
-      const outros=selecionadoId?lista.filter(item=>String(item.id)!==String(selecionadoId)):lista;
-      if(!outros.length) resposta='📅 Não encontrei outros links programados para hoje.';
-      else resposta='📅 Outros links programados para hoje:\n'+outros.map(formatSchedule).join('\n');
-    }else if(intencaoVoltarAgendamentos){
-      const lista=schedules.filter(scheduleOccursToday).sort((a,b)=>String(a.horario||'99:99').localeCompare(String(b.horario||'99:99')));
-      if(!lista.length) resposta='📅 Não encontrei links programados para hoje.';
-      else resposta='📅 Links programados para hoje:\n'+lista.map(formatSchedule).join('\n');
-    }else if(intencaoGrupoAgendamento){
-      const horarioAlvo=horarioNormalizado||horarioAnterior;
-      let encontrados=[];
-      if(agendamentoContexto){
-        encontrados=[agendamentoContexto];
-      }else if(horarioAlvo){
-        encontrados=schedules.filter(item=>String(item.horario||'').slice(0,5)===horarioAlvo);
-      }
-      if(!encontrados.length){
-        resposta='👥 Não consegui identificar o agendamento para consultar o grupo. Tente selecionar um agendamento específico primeiro.';
-      }else{
-        agendamentoSelecionado=encontrados.length===1?encontrados[0]:agendamentoSelecionado;
-        resposta=encontrados.map(item=>{
-          const detalhes=scheduleGroupDetails(item);
-          if(!detalhes.length) return '👥 Grupo(s) do agendamento:\n• '+String(item.nome||item.id)+' — nenhum grupo registrado neste agendamento.';
-          return '👥 Grupo(s) do agendamento:\n• '+String(item.nome||item.id)+' — '+detalhes.map(x=>x.nome+(x.permitido?' (permitido)':' (não está na lista de permitidos)')).join(', ');
-        }).join('\n');
-      }
-    }else if(intencaoProximoAgendamento){
-      const futuros=schedules.filter(item=>{
-        if(item.ativo===false||!item.data||!item.horario) return false;
-        const dt=new Date(String(item.data)+'T'+String(item.horario).slice(0,5)+':00');
-        if(Number.isNaN(dt.getTime())) return false;
-        if(item.repeticao==='diariamente') return true;
-        if(item.repeticao==='semanalmente') return dt.getDay()===now.getDay();
-        return dt.getTime()>=now.getTime();
-      }).map(item=>{
-        let dt=new Date(String(item.data)+'T'+String(item.horario).slice(0,5)+':00');
-        if(item.repeticao==='diariamente'&&dt.getTime()<now.getTime()) dt=new Date(now.getFullYear(),now.getMonth(),now.getDate(),Number(String(item.horario).slice(0,2)),Number(String(item.horario).slice(3,5)));
-        return {item,dt};
-      }).filter(x=>x.dt.getTime()>=now.getTime()).sort((a,b)=>a.dt-b.dt);
-      if(!futuros.length) resposta='📅 Não encontrei nenhum próximo link agendado.';
-      else {
-        const selecionadoId=agendamentoContexto?.id||agendamentoSelecionado?.id||null;
-        let indice=0;
-        if(selecionadoId){
-          const atual=futuros.findIndex(x=>String(x.item.id)===String(selecionadoId));
-          if(atual>=0) indice=atual+1;
-        }
-        if(indice>=futuros.length) resposta='📅 Não há outro agendamento depois do atual.';
-        else {
-          agendamentoSelecionado=futuros[indice].item;
-          resposta=(indice>0?'⏭️ O próximo agendamento na sequência é:\n':'⏭️ O próximo link programado é:\n')+formatSchedule(futuros[indice].item);
-        }
-      }
-    }else if(intencaoPausados){
-      const pausados=schedules.filter(item=>item.ativo===false || String(item.status||'').toLowerCase()==='pausado');
-      if(!pausados.length) resposta='✅ Não encontrei links ou agendamentos pausados.';
-      else{
-        // Quando existe apenas um pausado, ele passa a ser o agendamento selecionado.
-        // Assim, perguntas como "o que eu deveria fazer com esse link?" continuam
-        // apontando para o mesmo link, sem cair em outro horário por contexto anterior.
-        if(pausados.length===1) agendamentoSelecionado=pausados[0];
-        resposta='⏸️ Encontrei '+pausados.length+' agendamento(s) pausado(s):\n'+pausados.map(formatSchedule).join('\n');
-      }
-    }else if(intencaoRecomendacaoAgendamento){
-      const horarioAlvo=horarioNormalizado||horarioAnterior;
-      // Prioriza o agendamento que veio do contexto da conversa. Só usa o horário
-      // anterior como fallback quando não existe um agendamento selecionado.
-      const selecionado=agendamentoContexto||agendamentoSelecionado||null;
-      const encontrados=selecionado
-        ? [selecionado]
-        : schedules.filter(item=>String(item.horario||'').slice(0,5)===horarioAlvo);
-      if(!encontrados.length) resposta='📅 Não consegui identificar qual agendamento você quer avaliar. Selecione um agendamento primeiro.';
-      else {
-        agendamentoSelecionado=encontrados.length===1?encontrados[0]:agendamentoSelecionado;
-        resposta='💡 Recomendação para o agendamento das '+String(encontrados[0].horario||horarioAlvo||'').slice(0,5)+':';
-        encontrados.forEach(item=>{
-          const st=String(item.status||'').toLowerCase();
-          if(st==='erro') resposta+='\n• 🚨 O agendamento está com ERRO: revise o link, o grupo e o motivo registrado antes de reenviar.';
-          else if(st==='aguardando_grupo') resposta+='\n• ⚠️ O agendamento está aguardando o grupo: confirme se o grupo está disponível e ativo.';
-          else if(st==='pausado'||item.ativo===false) resposta+='\n• ⏸️ O agendamento está PAUSADO: verifique o motivo da pausa e só reative se esse envio ainda for necessário.';
-          else if(st==='enviando') resposta+='\n• ⏳ O envio está EM ANDAMENTO: aguarde a conclusão antes de reenviar.';
-          else resposta+='\n• ✅ Situação atual: '+String(item.status||'AGENDADO').toUpperCase()+'. Não há indicação de intervenção imediata.';
-        });
-      }
-    }else if(intencaoAgendamentoEspecifico){
-      const encontrados=schedules.filter(item=>String(item.horario||'').slice(0,5)===horarioNormalizado);
-      if(!encontrados.length) resposta='📅 Não encontrei nenhum link agendado para '+horarioNormalizado+' hoje.';
-      else { agendamentoSelecionado=encontrados.length===1?encontrados[0]:null; resposta='📅 Encontrei '+encontrados.length+' agendamento(s) para '+horarioNormalizado+' hoje:\n'+encontrados.map(formatSchedule).join('\n'); }
-    }else if(intencaoStatusAgendamento){
-      const encontrados=schedules.filter(item=>String(item.horario||'').slice(0,5)===horarioAnterior);
-      if(!encontrados.length) resposta='📅 Não encontrei o agendamento das '+horarioAnterior+' para consultar o status.';
-      else { agendamentoSelecionado=encontrados.length===1?encontrados[0]:agendamentoSelecionado; resposta='📌 Status do agendamento das '+horarioAnterior+':\n'+encontrados.map(formatSchedule).join('\n'); }
-    }else if(intencaoAgendamentosHoje){
-      const agendados=schedules.filter(scheduleOccursToday).sort((a,b)=>String(a.horario||'99:99').localeCompare(String(b.horario||'99:99')));
-      if(!agendados.length){
-        resposta='📅 Não encontrei links programados para hoje.';
-      }else{
-        resposta='📅 Encontrei '+agendados.length+' link(s) programado(s) para hoje:\n'+agendados.map(formatSchedule).join('\n');
-      }
-    }else if(intencaoFalhas){
-      if(!failures.length&&!errors){
-        resposta='Não encontrei falhas registradas em '+periodoLabel+'.';
-      }else{
-        resposta='Encontrei '+(failures.length||errors)+' ocorrência(s) relacionada(s) a falhas em '+periodoLabel+'.\n'+(failureList.map(x=>'• '+x[0]+' — '+x[1]+' ocorrência(s)').join('\n')||'• Há entregas com ERRO, mas sem motivo detalhado disponível.');
-      }
-    }else if((intencaoAnalise||intencaoRecomendacao)&&/\b(link|links)\b/.test(q)){
-      const top=ranking[0];
-      if(top?.erro>0){
-        resposta='O link que mais precisa de atenção em '+periodoLabel+' é "'+top.nome+'", com '+top.erro+' erro(s) e '+top.tentativas+' tentativa(s).';
-        if(failureList.length) resposta+='\n\n🔎 Principal causa registrada: '+failureList[0][0]+' ('+failureList[0][1]+' ocorrência(s)).';
-        if(recomendacoes.length) resposta+='\n\n💡 Recomendações:\n• '+recomendacoes.join('\n• ');
-      }else resposta='Não encontrei falhas suficientes em '+periodoLabel+' para apontar um link crítico. A taxa de sucesso foi '+pct+'%.';
-    }else if(/\b(agendamento|agendamentos|programacao|programacoes)\b/.test(q)){
-      const ativos=schedules.filter(x=>x.ativo!==false).length;
-      resposta='No momento há '+ativos+' agendamento(s) ativo(s) de '+schedules.length+' cadastrado(s).';
-    }else if(intencaoComparar||intencaoAnalise||intencaoRecomendacao){
-      resposta='Em '+periodoLabel+', foram registrados '+total+' envio(s): '+success+' sucesso(s), '+errors+' erro(s) e '+sending+' em andamento.\nTaxa de sucesso: '+pct+'%.';
-      if(failureList.length) resposta+='\n\n🔎 Principal padrão: '+failureList[0][0]+' ('+failureList[0][1]+' ocorrência(s)).';
-      if(ranking[0]?.erro>0) resposta+='\n🔎 Link que mais precisa de atenção: "'+ranking[0].nome+'" ('+ranking[0].erro+' erro(s)).';
-      if(recomendacoes.length) resposta+='\n\n💡 Recomendações:\n• '+recomendacoes.join('\n• ');
-    }else if(/\b(sucesso|sucessos|enviado|enviados|envios|entregas)\b/.test(q)){
-      resposta='Em '+periodoLabel+', encontrei '+success+' sucesso(s), '+errors+' erro(s) e '+sending+' envio(s) em andamento.\nTaxa de sucesso: '+pct+'%.';
-    }else if(/\b(tentativa|tentativas)\b/.test(q)){
-      const tent=deliveries.reduce((n,x)=>n+Number(x.tentativas||0),0);
-      resposta='Foram registradas '+tent+' tentativa(s) de entrega em '+periodoLabel+'.';
-    }else if(/\b(link|links)\b/.test(q)&&/\b(mais|maior|pior)\b/.test(q)){
-      const top=ranking[0];
-      resposta=top?'O link com maior número de falhas em '+periodoLabel+' é "'+top.nome+'", com '+top.erro+' erro(s) e '+top.tentativas+' tentativa(s).':'Não encontrei dados suficientes para apontar um link.';
-    }else{
-      resposta='Posso analisar o desempenho do RegulOS e explicar padrões de falha.\nExemplo: "Como estão meus envios nos últimos 7 dias?" ou "O que devo melhorar nos meus envios?"';
-    }
-
-    const textosContexto=contexto.filter(x=>x&&x.role==='user'&&x.content).map(x=>String(x.content).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''));
-    const acoesAgendamentoRespondidas={
-      status:textosContexto.some(t=>/\b(status|situacao|estado)\b/.test(t)&&/\b(link|agendamento|agendado|programado|ele|esse|desse)\b/.test(t)),
-      recomendacao:textosContexto.some(t=>/\b(recomenda|recomendacao|sugestao|sugira|o que devo|o que eu deveria|que devo|o que fazer|como melhorar|devo fazer)\b/.test(t)),
-      grupo:textosContexto.some(t=>/\b(grupo|grupos)\b/.test(t)&&/\b(ver|mostrar|mostre|qual|quais|onde|desse|deste|agendamento|link|links)\b/.test(t)),
-      detalhes:textosContexto.some(t=>/\b(detalhes|informacoes|dados)\b/.test(t)&&/\b(link|agendamento|agendado|programado|ele|esse|desse|deste)\b/.test(t)),
-      outros:textosContexto.some(t=>/\b(outros|outras)\b/.test(t)&&/\b(horarios|links|agendamentos)\b/.test(t))
-    };
-    let sugestoes=[];
-    const respostaFoiStatus=intencaoStatusAgendamento||/\bstatus do agendamento\b|\bstatus desse link\b/.test(q);
-    const respostaFoiGrupo=intencaoGrupoAgendamento||/\bver o grupo\b|\bgrupo do agendamento\b/.test(q);
-    const respostaFoiDetalhes=intencaoDetalhesAgendamento;
-    const respostaFoiOutros=intencaoOutrosHorarios||intencaoVoltarAgendamentos;
-
-    const candidatosAgendamento=[];
-    if(!acoesAgendamentoRespondidas.status) candidatosAgendamento.push('Qual é o status desse link?');
-    if(!acoesAgendamentoRespondidas.recomendacao) candidatosAgendamento.push('O que eu deveria fazer com esse link?');
-    if(!acoesAgendamentoRespondidas.grupo) candidatosAgendamento.push('Ver o grupo desse agendamento');
-    if(!acoesAgendamentoRespondidas.detalhes) candidatosAgendamento.push('Ver detalhes desse link');
-    if(!acoesAgendamentoRespondidas.outros) candidatosAgendamento.push('Quais outros links estão programados hoje?');
-
-    if(agendamentoSelecionado && respostaFoiStatus){
-      sugestoes=candidatosAgendamento.filter(s=>s!=='Qual é o status desse link?').slice(0,4);
-    }else if(agendamentoSelecionado && (respostaFoiGrupo||respostaFoiDetalhes)){
-      sugestoes=candidatosAgendamento.slice(0,4);
-      if(!sugestoes.includes('Voltar aos agendamentos') && sugestoes.length<4) sugestoes.push('Voltar aos agendamentos');
-    }else if(agendamentoSelecionado && respostaFoiOutros){
-      sugestoes=['Qual é o próximo link a ser enviado?','Existe algum agendamento com problema?','Quais links estão pausados?','Voltar aos agendamentos'];
-    }else if(agendamentoSelecionado){
-      sugestoes=candidatosAgendamento.slice(0,4);
-      if(!sugestoes.length) sugestoes=['Qual é o próximo link a ser enviado?','Existe algum agendamento com problema?','Quais links estão pausados?','Voltar aos agendamentos'];
-    }else if(intencaoAgendamentosHoje||intencaoAgendamentoEspecifico){
-      sugestoes=['Qual é o próximo link a ser enviado?','Existe algum agendamento com problema?','Quais links estão pausados?','O que você recomenda?'];
-    }else if(intencaoFalhas){
-      sugestoes=['Quais links falharam?','Qual teve mais erros?','Qual foi o principal motivo?','O que você recomenda fazer?'];
-    }else if(intencaoAnalise||intencaoComparar||intencaoRecomendacao){
-      sugestoes=['Quais links tiveram problemas?','Qual link precisa de mais atenção?','Compare com o período anterior','O que devo melhorar?'];
-    }else if(/\b(sucesso|envio|entrega|tentativa)\b/.test(q)){
-      sugestoes=['Quantos envios deram certo?','Quantas tentativas foram feitas?','Quais falharam?','O que você recomenda?'];
-    }else{
-      sugestoes=['Quais links estão programados hoje?','Quais links deram erro hoje?','Como estão meus envios nos últimos 7 dias?','O que você recomenda?'];
-    }
-
-    res.set('Cache-Control','no-store');
-    res.json({
-      ok:true,resposta,periodo,periodoLabel,sugestoes,agendamentoSelecionado:agendamentoSelecionado?{id:agendamentoSelecionado.id,nome:agendamentoSelecionado.nome,horario:String(agendamentoSelecionado.horario||'').slice(0,5),grupoId:agendamentoSelecionado.grupoId,grupoIds:normalizeScheduleGroupIds(agendamentoSelecionado),grupoNome:agendamentoSelecionado.grupoNome||'',grupoNomes:agendamentoSelecionado.grupoNomes||{},status:agendamentoSelecionado.status,ativo:agendamentoSelecionado.ativo}:null,
-      intervalo:{inicio:new Date(startMs).toISOString(),fim:new Date(endMs).toISOString()},
-      metricas:{sucessos:success,erros:errors,emAndamento:sending,total,taxaSucesso:pct},
-      diagnostico:{principaisFalhas:failureList,linkMaisCritico:ranking[0]||null,recomendacoes},
-      contextoResolvido:{continuidade,contextoEraFalha,contextoEraAgendamento}
-    });
-  }catch(e){res.status(500).json({ok:false,msg:'Não foi possível processar a pergunta: '+e.message});}
-});
-
-
-app.get('/api/link-historico',(req,res)=>{
+app.get('/api/link-agendamentos', requireAuth, (req,res)=>{
   res.set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate');
-  res.set('Pragma','no-cache');
-  res.set('Expires','0');
-  try {
-    if(!Array.isArray(linkHistory)) linkHistory=[];
-    const normalized=normalizeLinkHistory();
-    const beforePrune=linkHistory.length;
-    pruneLinkHistoryByLatestSentTime();
-    if(normalized || linkHistory.length!==beforePrune) writeJson(FILES.linkHistory,linkHistory);
-    res.json({ok:true,historico:linkHistory});
-  } catch(e) {
-    addLog(`Erro ao carregar histórico de links: ${e.message}`);
-    res.status(500).json({ok:false,msg:'Não foi possível carregar o histórico de links.'});
-  }
+  res.set('Pragma','no-cache'); res.set('Expires','0');
+  res.json({ok:true,agendamentos:readUserArray(req,'schedules')});
 });
-app.delete('/api/link-historico',(req,res)=>{
-  const total=linkHistory.length;
-  clearLinkHistory();
-  clearLinkFailures();
-  // Limpa somente registros de entregas finalizadas; preserva as que ainda estão em andamento.
-  const beforeDeliveries=linkDeliveries.length;
-  linkDeliveries=linkDeliveries.filter(x=>!['SUCESSO','ERRO'].includes(String(x?.status||'').toUpperCase()));
-  if(linkDeliveries.length!==beforeDeliveries) saveLinkDeliveries();
-  addLog(`Histórico de links limpo pelo painel: ${total} registro(s) e ${beforeDeliveries-linkDeliveries.length} entrega(s) finalizada(s) removidos.`);
-  res.json({ok:true,msg:`Histórico limpo. ${total} registro(s) removido(s).`});
-});
-app.delete('/api/link-historico/:id',(req,res)=>{
-  const i=linkHistory.findIndex(x=>String(x.id)===String(req.params.id));
-  if(i<0)return res.status(404).json({ok:false,msg:'Registro de histórico não encontrado.'});
-  const [removed]=linkHistory.splice(i,1);
-  cancelLinkHistoryExpiration(removed);
-  saveLinkHistory();
-  addLog(`Registro de histórico removido: ${removed.nome||removed.id}.`);
-  res.json({ok:true,msg:'Registro removido do histórico.'});
-});
-app.get('/api/link-falhas',(req,res)=>{
+app.get('/api/links', requireAuth, (req,res)=>{
+  const agendamentos=readUserArray(req,'schedules');
   res.set('Cache-Control','no-store');
-  res.json({ok:true, falhas:linkFailures});
-});
-app.post('/api/link-falhas/:id/reenviar', async (req,res)=>{
-  const failure=linkFailures.find(x=>String(x.id)===String(req.params.id));
-  if(!failure) return res.status(404).json({ok:false,msg:'Falha não encontrada.'});
-  let item=linkSchedules.find(x=>String(x.id)===String(failure.agendamentoId));
-  if(!item){
-    item={
-      id:String(failure.agendamentoId||('reenvio-'+failure.id)),
-      nome:String(failure.nome||'Reenvio de link'),
-      url:String(failure.url||'').trim(),
-      mensagem:String(failure.mensagem||''),
-      tituloProduto:String(failure.tituloProduto||''),
-      imagemUrl:String(failure.imagemUrl||'').trim(),
-      imagemAutomatica:true,
-      data:new Date().toISOString().slice(0,10),
-      horario:new Date().toTimeString().slice(0,5),
-      repeticao:'uma_vez',
-      intervaloMin:Number(failure.intervaloMin||1),
-      intervaloMax:Number(failure.intervaloMax||1),
-      grupoId:String(failure.grupoId||''),
-      reenvioGrupoId:String(failure.grupoId||''),
-      grupoIds:[String(failure.grupoId||'')],
-      grupoNome:String(failure.grupoNome||failure.grupoId||''),
-      grupoNomes:{[String(failure.grupoId||'')]:String(failure.grupoNome||failure.grupoId||'')},
-      ativo:true,
-      status:'agendado',
-      enviados:0,
-      sucessos:0,
-      erros:0
-    };
-  }
-  const target=String(failure.grupoId||'');
-  if(!target) return res.status(400).json({ok:false,msg:'A falha não possui grupo de destino registrado.'});
-  if(!online || !sock) return res.status(503).json({ok:false,msg:'WhatsApp não conectado.'});
-
-  // Reenvio reutiliza o MESMO card de entrega que terminou em ERRO.
-  // Não criamos uma segunda ocorrência/entrega visual.
-  const resendOccurrence='reenvio:'+String(failure.id||Date.now());
-  let delivery=linkDeliveries
-    .filter(x=>String(x?.agendamentoId||'')===String(item.id||'') &&
-      String(x?.grupoId||'')===target &&
-      String(x?.status||'').toUpperCase()==='ERRO')
-    .sort((a,b)=>String(b?.concluidoEm||b?.criadoEm||'').localeCompare(String(a?.concluidoEm||a?.criadoEm||'')))[0];
-
-  if(!delivery){
-    ensureLinkDeliveries(item, item.progressKey || 'once', [target]);
-    delivery=linkDeliveries
-      .filter(x=>String(x?.agendamentoId||'')===String(item.id||'') && String(x?.grupoId||'')===target)
-      .sort((a,b)=>String(b?.criadoEm||'').localeCompare(String(a?.criadoEm||'')))[0];
-  }
-  try {
-    setExistingLinkDeliveryStatus(delivery,'ENVIANDO','',resendOccurrence);
-    addLog(`Reenvio iniciado para "${item.nome}" no grupo ${target}.`);
-    const text=[chooseRandomMessage(item),item.tituloProduto?`📦 ${item.tituloProduto}`:'',String(item.mensagem||'').trim(),'👉 Garanta agora:',String(item.url||'').trim()].filter(Boolean).join('\n\n');
-    let image=null;
-    if(String(item.imagemUrl||'').trim()) image=await downloadBuffer(String(item.imagemUrl).trim(),String(item.url||'').trim());
-    else image=await findProductImage(String(item.url||'').trim());
-    if(!image) throw new Error('Não foi possível obter a imagem. Edite o link ou informe uma URL de imagem.');
-    if(image) await sock.sendMessage(target,{image:image.buffer,caption:text}); else await sock.sendMessage(target,{text});
-    setExistingLinkDeliveryStatus(delivery,'SUCESSO','',resendOccurrence);
-    addHistory({grupoId:target,link:item.url,status:'sucesso',agendamentoId:item.id,tipo:'reenvio',at:new Date().toISOString()});
-    archiveSentFailureAsHistory(item,failure,target);
-    removeLinkFailure(failure.id);
-    item.sucessos=Number(item.sucessos||0)+1; item.enviados=Number(item.enviados||0)+1; item.erros=Math.max(0,Number(item.erros||0)-1);
-    item.status='concluido'; item.lastSentAt=new Date().toISOString();
-    writeJson(FILES.schedules,linkSchedules);
-    res.json({ok:true,msg:'Link reenviado com sucesso e movido para o histórico de enviados.'});
-  } catch(e) {
-    setExistingLinkDeliveryStatus(delivery,'ERRO',e.message,resendOccurrence);
-    upsertLinkFailure(item,target,e.message);
-    addLog(`Reenvio falhou para "${item.nome}" no grupo ${target}: ${e.message}`);
-    res.status(500).json({ok:false,msg:`Reenvio falhou: ${e.message}`});
-  }
-});
-app.put('/api/link-falhas/:id',(req,res)=>{
-  const failure=linkFailures.find(x=>String(x.id)===String(req.params.id));
-  if(!failure) return res.status(404).json({ok:false,msg:'Falha não encontrada.'});
-  const b=req.body||{};
-  const item=linkSchedules.find(x=>String(x.id)===String(failure.agendamentoId));
-  if(!item) return res.status(404).json({ok:false,msg:'Link associado não encontrado no Gerenciador de Links.'});
-  if(typeof b.imagemUrl==='string') item.imagemUrl=b.imagemUrl.trim();
-  if(typeof b.imagemAutomatica==='boolean') item.imagemAutomatica=b.imagemAutomatica;
-  if(typeof b.url==='string' && b.url.trim()) item.url=b.url.trim();
-  if(typeof b.nome==='string' && b.nome.trim()) item.nome=b.nome.trim();
-  if(typeof b.mensagem==='string') item.mensagem=b.mensagem;
-  if(typeof b.data==='string' && b.data) item.data=b.data;
-  if(typeof b.horario==='string' && b.horario) item.horario=b.horario;
-  item.status='erro'; item.ativo=false;
-  writeJson(FILES.schedules,linkSchedules);
-  upsertLinkFailure(item,failure.grupoId,failure.erro);
-  res.json({ok:true,agendamento:item});
-});
-app.delete('/api/link-falhas',(req,res)=>{
-  const total=linkFailures.length;
-  clearLinkFailures();
-
-  // "Limpar falhas" também remove do Status das Entregas os registros
-  // finalizados com ERRO. Sucessos e entregas ainda em andamento são preservados.
-  const beforeDeliveries=linkDeliveries.length;
-  linkDeliveries=linkDeliveries.filter(x=>String(x?.status||'').toUpperCase()!=='ERRO');
-  const removedDeliveries=beforeDeliveries-linkDeliveries.length;
-  if(removedDeliveries>0) saveLinkDeliveries();
-
-  addLog(`Links com falha limpos pelo painel: ${total} falha(s) e ${removedDeliveries} entrega(s) com ERRO removidas.`);
-  res.json({ok:true,msg:`Links com falha limpos. ${total} falha(s) e ${removedDeliveries} registro(s) de ERRO removidos.`});
+  res.json({ok:true,links:agendamentos,agendamentos});
 });
 
-app.get('/api/link-imagem-preview', async (req,res)=>{
-  const url=String(req.query?.url||'').trim();
-  if(!url)return res.status(400).json({ok:false,msg:'Informe um link.'});
-  try{
-    const ml=await findMercadoLivreImageUrl(url);
-    if(ml)return res.json({ok:true,imagemUrl:ml,fonte:'mercado-livre'});
-    const page=await fetchText(url);
-    const candidates=extractImageCandidates(page.data,page.finalUrl);
-    if(candidates.length)return res.json({ok:true,imagemUrl:candidates[0],fonte:'metadados',finalUrl:page.finalUrl});
-    return res.status(404).json({ok:false,msg:'Nenhuma imagem foi encontrada automaticamente.',finalUrl:page.finalUrl});
-  }catch(e){return res.status(502).json({ok:false,msg:e.message||'Não foi possível obter a imagem.'});}
-});
-
-app.post('/api/link-agendamentos',(req,res)=>{
+app.post('/api/link-agendamentos', requireAuth, (req,res)=>{
   const b=req.body||{}, nome=String(b.nome||'').trim(), url=String(b.url||'').trim();
   const data=String(b.data||''), horario=String(b.horario||'');
   if(!nome||!url||!data||!horario) return res.status(400).json({ok:false,msg:'Nome, link, data e horário são obrigatórios.'});
   const min=Math.max(1,Number(b.intervaloMin||1)), max=Math.max(min,Number(b.intervaloMax||min));
   const grupoIds=normalizeScheduleGroupIds(b.grupoIds?.length ? b.grupoIds : b.grupoId ? [b.grupoId] : []);
+  const grupos=getUserSessionGroups(req);
   if(!grupoIds.length || grupoIds.some(id=>!isValidGroupJid(id))) return res.status(400).json({ok:false,msg:'Selecione pelo menos um grupo de envio válido.'});
-  const gruposEncontrados=grupoIds.map(id=>groups.find(g=>String(g.id)===id));
-  if(gruposEncontrados.some(g=>!g)) return res.status(400).json({ok:false,msg:'Um ou mais grupos selecionados não estão disponíveis no cache atual. Atualize a lista de grupos e tente novamente.'});
+  const gruposEncontrados=grupoIds.map(id=>grupos.find(g=>String(g.id)===id));
+  if(gruposEncontrados.some(g=>!g)) return res.status(400).json({ok:false,msg:'Um ou mais grupos não pertencem à sessão desta conta. Atualize os grupos e tente novamente.'});
   const grupoNomes=Object.fromEntries(gruposEncontrados.map(g=>[String(g.id),String(g.name||g.id)]));
   const item={
-    id:Date.now().toString(36)+Math.random().toString(36).slice(2,7),
-    nome,url,mensagem:String(b.mensagem||''),grupoIds,grupoNomes,grupoNome:grupoIds.length===1?grupoNomes[grupoIds[0]]:`${grupoIds.length} grupos`,tituloProduto:'',tituloUltimaTentativa:'',data,horario,
+    id:crypto.randomUUID(), userId:req.user.id, nome,url,mensagem:String(b.mensagem||''),grupoIds,grupoNomes,
+    grupoNome:grupoIds.length===1?grupoNomes[grupoIds[0]]:`${grupoIds.length} grupos`,
+    tituloProduto:'',tituloUltimaTentativa:'',data,horario,
     repeticao:['uma_vez','diariamente','semanalmente'].includes(b.repeticao)?b.repeticao:'uma_vez',
     intervaloMin:min,intervaloMax:max,ativo:b.ativo!==false,status:b.ativo===false?'pausado':'agendado',
-    imagemAutomatica:b.imagemAutomatica!==false, imagemUrl:String(b.imagemUrl||'').trim(),
+    imagemAutomatica:b.imagemAutomatica!==false,imagemUrl:String(b.imagemUrl||'').trim(),
     mensagensAleatorias:Array.isArray(b.mensagensAleatorias)?b.mensagensAleatorias.map(String).filter(Boolean):[],
-    mensagemAleatoriaAtiva:b.mensagemAleatoriaAtiva===true,
-    imagemStatus:'pendente',imagemUltimaTentativa:'',
+    mensagemAleatoriaAtiva:b.mensagemAleatoriaAtiva===true,imagemStatus:'pendente',imagemUltimaTentativa:'',
     enviados:0,sucessos:0,erros:0,lastRunKey:'',createdAt:new Date().toISOString()
   };
-  try {
-    linkSchedules.push(item);
-    writeJson(FILES.schedules,linkSchedules);
-    syncLinkQueue();
-  } catch (e) {
-    linkSchedules = linkSchedules.filter(x => x.id !== item.id);
-    addLog(`Falha persistindo agendamento: ${e.message}`);
-    return res.status(500).json({ok:false,msg:`Não foi possível salvar o agendamento no armazenamento: ${e.message}`});
-  }
-  res.set('Cache-Control','no-store');
-  res.json({ok:true,agendamento:item});
+  const items=readUserArray(req,'schedules'); items.push(item); writeUserArray(req,'schedules',items);
+  res.set('Cache-Control','no-store'); res.json({ok:true,agendamento:item});
 });
-app.put('/api/link-agendamentos/:id',(req,res)=>{
-  const item=linkSchedules.find(x=>x.id===req.params.id);
-  if(!item) return res.status(404).json({ok:false,msg:'Agendamento não encontrado.'});
+app.put('/api/link-agendamentos/:id', requireAuth, (req,res)=>{
+  const items=readUserArray(req,'schedules'), item=items.find(x=>x.id===req.params.id);
+  if(!item) return res.status(404).json({ok:false,msg:'Agendamento não encontrado nesta conta.'});
   const b=req.body||{};
   item.nome=String(b.nome||item.nome).trim();
-  const oldUrl = item.url;
-  item.url=String(b.url||item.url).trim();
-  if (item.url !== oldUrl) { item.tituloProduto=''; item.tituloUltimaTentativa=''; item.imagemStatus='pendente'; }
+  const oldUrl=item.url; item.url=String(b.url||item.url).trim();
+  if(item.url!==oldUrl){item.tituloProduto='';item.tituloUltimaTentativa='';item.imagemStatus='pendente';}
   item.mensagem=String(b.mensagem??item.mensagem);
-  if(Object.prototype.hasOwnProperty.call(b,'grupoIds') || Object.prototype.hasOwnProperty.call(b,'grupoId')){
-    const novosGrupoIds=normalizeScheduleGroupIds(Array.isArray(b.grupoIds) ? b.grupoIds : [b.grupoId]);
-    if(!novosGrupoIds.length || novosGrupoIds.some(id=>!isValidGroupJid(id))) return res.status(400).json({ok:false,msg:'Selecione pelo menos um grupo de envio válido.'});
-    const gruposEncontrados=novosGrupoIds.map(id=>groups.find(g=>String(g.id)===id));
-    if(gruposEncontrados.some(g=>!g)) return res.status(400).json({ok:false,msg:'Um ou mais grupos selecionados não estão disponíveis no cache atual. Atualize a lista de grupos e tente novamente.'});
-    const gruposAnteriores=normalizeScheduleGroupIds(item);
-    const mudou=JSON.stringify(gruposAnteriores)!==JSON.stringify(novosGrupoIds);
-    if(mudou){
-      item.progressKey='';
-      item.progressTargets=[];
-      item.progressGroupIds=[];
-      item.progressStartedAt='';
-      item.lastRunKey='';
-    }
-    item.grupoIds=novosGrupoIds;
-    item.grupoNomes=Object.fromEntries(gruposEncontrados.map(g=>[String(g.id),String(g.name||g.id)]));
-    item.grupoNome=novosGrupoIds.length===1?item.grupoNomes[novosGrupoIds[0]]:`${novosGrupoIds.length} grupos`;
-    delete item.grupoId;
+  if(Object.prototype.hasOwnProperty.call(b,'grupoIds')||Object.prototype.hasOwnProperty.call(b,'grupoId')){
+    const ids=normalizeScheduleGroupIds(Array.isArray(b.grupoIds)?b.grupoIds:[b.grupoId]);
+    const grupos=getUserSessionGroups(req);
+    if(!ids.length||ids.some(id=>!isValidGroupJid(id)))return res.status(400).json({ok:false,msg:'Selecione pelo menos um grupo válido.'});
+    const found=ids.map(id=>grupos.find(g=>String(g.id)===id));
+    if(found.some(g=>!g))return res.status(400).json({ok:false,msg:'Um grupo selecionado não pertence à sessão desta conta.'});
+    item.grupoIds=ids;item.grupoNomes=Object.fromEntries(found.map(g=>[String(g.id),String(g.name||g.id)]));
+    item.grupoNome=ids.length===1?item.grupoNomes[ids[0]]:`${ids.length} grupos`;delete item.grupoId;
   }
-  item.data=String(b.data||item.data);
-  item.horario=String(b.horario||item.horario);
+  item.data=String(b.data||item.data);item.horario=String(b.horario||item.horario);
   item.repeticao=['uma_vez','diariamente','semanalmente'].includes(b.repeticao)?b.repeticao:item.repeticao;
   item.intervaloMin=Math.max(1,Number(b.intervaloMin||item.intervaloMin||1));
   item.intervaloMax=Math.max(item.intervaloMin,Number(b.intervaloMax||item.intervaloMax||item.intervaloMin));
-  if(typeof b.ativo==='boolean') item.ativo=b.ativo;
-  if(typeof b.imagemAutomatica==='boolean') item.imagemAutomatica=b.imagemAutomatica;
-  if(typeof b.imagemUrl==='string') item.imagemUrl=b.imagemUrl.trim();
-  if(Array.isArray(b.mensagensAleatorias)) item.mensagensAleatorias=b.mensagensAleatorias.map(String).filter(Boolean);
-  if (Object.prototype.hasOwnProperty.call(b,'mensagemAleatoriaAtiva')) item.mensagemAleatoriaAtiva=b.mensagemAleatoriaAtiva===true;
-  item.status=item.ativo?'agendado':'pausado';
-  // Editar não pode reexecutar hoje por acidente.
-  if(b.rearmar===true) item.lastRunKey='';
-  writeJson(FILES.schedules,linkSchedules); syncLinkQueue();
-  res.json({ok:true,agendamento:item});
+  if(typeof b.ativo==='boolean')item.ativo=b.ativo;
+  if(typeof b.imagemAutomatica==='boolean')item.imagemAutomatica=b.imagemAutomatica;
+  if(typeof b.imagemUrl==='string')item.imagemUrl=b.imagemUrl.trim();
+  if(Array.isArray(b.mensagensAleatorias))item.mensagensAleatorias=b.mensagensAleatorias.map(String).filter(Boolean);
+  if(Object.prototype.hasOwnProperty.call(b,'mensagemAleatoriaAtiva'))item.mensagemAleatoriaAtiva=b.mensagemAleatoriaAtiva===true;
+  item.status=item.ativo?'agendado':'pausado';if(b.rearmar===true)item.lastRunKey='';
+  writeUserArray(req,'schedules',items);res.json({ok:true,agendamento:item});
 });
-app.post('/api/link-agendamentos/:id/toggle',(req,res)=>{
-  const item=linkSchedules.find(x=>x.id===req.params.id);
-  if(!item) return res.status(404).json({ok:false,msg:'Agendamento não encontrado.'});
-  item.ativo=!item.ativo;
-  item.status=item.ativo?'agendado':'pausado';
-  if(item.ativo && req.body?.rearmar===true) item.lastRunKey='';
-  writeJson(FILES.schedules,linkSchedules); syncLinkQueue();
-  res.json({ok:true,agendamento:item});
+app.post('/api/link-agendamentos/:id/toggle', requireAuth, (req,res)=>{
+  const items=readUserArray(req,'schedules'), item=items.find(x=>x.id===req.params.id);
+  if(!item)return res.status(404).json({ok:false,msg:'Agendamento não encontrado nesta conta.'});
+  item.ativo=!item.ativo;item.status=item.ativo?'agendado':'pausado';
+  if(item.ativo&&req.body?.rearmar===true)item.lastRunKey='';
+  writeUserArray(req,'schedules',items);res.json({ok:true,agendamento:item});
 });
-app.post('/api/link-agendamentos/:id/enviar-agora',async(req,res)=>{
-  const item=linkSchedules.find(x=>x.id===req.params.id);
-  if(!item) return res.status(404).json({ok:false,msg:'Agendamento não encontrado.'});
-  if(!online) return res.status(503).json({ok:false,msg:'WhatsApp não conectado.'});
-  if(!botWindowActive()) return res.status(409).json({ok:false,msg:'Fora do horário programado do bot.'});
-  await sendScheduledLink(item);
-  res.json({ok:true,msg:'Envio solicitado.'});
+app.post('/api/link-agendamentos/:id/enviar-agora', requireAuth, async(req,res)=>{
+  const item=readUserArray(req,'schedules').find(x=>x.id===req.params.id);
+  if(!item)return res.status(404).json({ok:false,msg:'Agendamento não encontrado nesta conta.'});
+  const session=userSessions.get(req.user.id), runtime=userSessions.getRuntime(req.user.id);
+  if(!runtime?.socket||session?.status!=='online')return res.status(503).json({ok:false,msg:'Conecte o WhatsApp desta conta antes de enviar.'});
+  return res.status(409).json({ok:false,msg:'O envio individual está protegido contra uso do socket global; a integração do motor de envio por usuário é a próxima etapa. Nenhuma mensagem foi enviada.'});
 });
-app.delete('/api/link-agendamentos/:id',(req,res)=>{
-  const i=linkSchedules.findIndex(x=>x.id===req.params.id);
-  if(i<0) return res.status(404).json({ok:false,msg:'Agendamento não encontrado.'});
-  const removedId = linkSchedules[i].id;
-  linkSchedules.splice(i,1); writeJson(FILES.schedules,linkSchedules); syncLinkQueue();
-  linkFailures = linkFailures.filter(x=>String(x.agendamentoId)!==String(removedId)); saveLinkFailures();
-  res.json({ok:true});
+app.delete('/api/link-agendamentos/:id', requireAuth, (req,res)=>{
+  const items=readUserArray(req,'schedules'), i=items.findIndex(x=>x.id===req.params.id);
+  if(i<0)return res.status(404).json({ok:false,msg:'Agendamento não encontrado nesta conta.'});
+  items.splice(i,1);writeUserArray(req,'schedules',items);res.json({ok:true});
 });
 
 app.get('/api/programacao',(req,res)=>res.json({ok:true,programacao:botSchedule,janela:botWindowLabel()}));
