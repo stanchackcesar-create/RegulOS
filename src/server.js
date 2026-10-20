@@ -96,14 +96,21 @@ const FILES = {
 
 const app = express();
 app.get('/api/programacao-dinamica', requireAuth, (req,res)=>{
-  res.json({ok:true,programacao:sortDynamic(readDynamicSchedule())});
+  const programacao=readUserArray(req,'dynamicSchedule').sort((a,b)=>(a.horarioEfetivo||a.horarioOriginal||'99:99').localeCompare(b.horarioEfetivo||b.horarioOriginal||'99:99'));
+  res.set('Cache-Control','no-store');
+  res.json({ok:true,programacao});
 });
 
-app.post('/api/programacao-dinamica/reorganizar', requireAuth, requireAdmin, (req,res)=>{
-  const body=req.body||{};
-  const item=readDynamicSchedule().find(x=>scheduleId(x)===(body.id||body.agendamentoId||body.linkId));
-  if(!item) return res.status(404).json({ok:false,error:'Agendamento não encontrado.'});
-  res.json({ok:true,...registrarFalhaEReorganizar(item,body.motivo||'Falha no envio')});
+app.post('/api/programacao-dinamica/reorganizar', requireAuth, (req,res)=>{
+  const body=req.body||{}, items=readUserArray(req,'dynamicSchedule');
+  const item=items.find(x=>scheduleId(x)===(body.id||body.agendamentoId||body.linkId));
+  if(!item) return res.status(404).json({ok:false,error:'Agendamento não encontrado nesta conta.'});
+  const index=items.findIndex(x=>scheduleId(x)===scheduleId(item));
+  const slot=item.horarioEfetivo||item.horarioOriginal||item.horario;
+  const shifted=items.slice(index+1).map((entry,i)=>({...entry,horarioOriginal:entry.horarioOriginal||entry.horarioEfetivo||entry.horario,horarioEfetivo:i===0?slot:(items[index+1+i-1]?.horarioEfetivo||items[index+1+i-1]?.horarioOriginal||items[index+1+i-1]?.horario),antecipadoPorFalha:true,motivoAntecipacao:String(body.motivo||'Falha no envio'),antecipadoEm:new Date().toISOString()}));
+  const result=[...items.slice(0,index),...shifted].sort((a,b)=>(a.horarioEfetivo||a.horarioOriginal||'99:99').localeCompare(b.horarioEfetivo||b.horarioOriginal||'99:99'));
+  writeUserArray(req,'dynamicSchedule',result);
+  res.json({ok:true,programacao:result});
 });
 
 app.use(express.json({ limit: '100kb' }));
@@ -3013,15 +3020,23 @@ app.post('/api/user-session/disconnect', requireAuth, async (req,res) => {
   }
 });
 
-app.get('/api/status', (req,res) => res.json({
-  ok:true, conectado:online, status, temQR:Boolean(qr), qr,
-  numero: connectedNumber ? formatPhone(connectedNumber) : '',
-  numeroBruto: connectedNumber,
-  grupos:groups.length, permitidos:allowed.length,
-gruposLigados:activeGroups().map(id=>{const g=groups.find(x=>String(x.id)===String(id));const c=getGroupConfig(id);return {id,nome:g?.name||c.nome||c.apelido||id};}),
-  links:linkSchedules.length, filaLinks: orderedLinks().length, filaCursor: linkQueue.cursor, filaAtual: linkQueue.currentId, janela:botWindowLabel(),
-  programacao:botSchedule
-}));
+app.get('/api/status', requireAuth, (req,res) => {
+  const session=userSessions.get(req.user.id);
+  const grupos=getUserSessionGroups(req), permitidos=readUserArray(req,'groups');
+  const config=readUserObject(req,'groupConfig'), agendamentos=readUserArray(req,'schedules');
+  const programacao=readUserObject(req,'botSchedule');
+  res.set('Cache-Control','no-store');
+  res.json({
+    ok:true, conectado:session?.status==='online', status:session?.status||'offline',
+    temQR:Boolean(session?.qr), qr:session?.qr||null,
+    numero:session?.connectedNumber||'', numeroBruto:session?.connectedNumber||'',
+    grupos:grupos.length, permitidos:permitidos.length,
+    gruposLigados:permitidos.filter(id=>config[id]?.ativo===true).map(id=>({id,nome:grupos.find(g=>String(g.id)===String(id))?.name||config[id]?.nome||id})),
+    links:agendamentos.length, filaLinks:agendamentos.filter(x=>x.ativo!==false).length,
+    filaCursor:0,filaAtual:null,janela:programacao.ativo?'programação configurada por usuário':'programação desligada',
+    programacao:{ativo:programacao.ativo===true,inicio:String(programacao.inicio||''),fim:String(programacao.fim||'')}
+  });
+});
 app.get('/api/qr', (req,res) => res.json({ok:true, qr, status, conectado:online}));
 app.get('/api/logs', (req,res) => res.json({ok:true, logs:[...logs].reverse()}));
 
@@ -3402,17 +3417,20 @@ app.delete('/api/link-agendamentos/:id', requireAuth, (req,res)=>{
   items.splice(i,1);writeUserArray(req,'schedules',items);res.json({ok:true});
 });
 
-app.get('/api/programacao',(req,res)=>res.json({ok:true,programacao:botSchedule,janela:botWindowLabel()}));
-app.post('/api/programacao',(req,res)=>{
+app.get('/api/programacao', requireAuth, (req,res)=>{
+  const programacao=readUserObject(req,'botSchedule');
+  const janela=!programacao.ativo?'programação desligada':'programação configurada por usuário';
+  res.set('Cache-Control','no-store');
+  res.json({ok:true,programacao:{ativo:programacao.ativo===true,inicio:String(programacao.inicio||''),fim:String(programacao.fim||'')},janela});
+});
+app.post('/api/programacao', requireAuth, (req,res)=>{
   const inicio=String(req.body?.inicio||'').match(/^\d{2}:\d{2}$/)?.[0] || '';
   const fim=String(req.body?.fim||'').match(/^\d{2}:\d{2}$/)?.[0] || '';
   const ativo=req.body?.ativo===true;
   if(ativo && (!inicio || !fim)) return res.status(400).json({ok:false,msg:'Escolha o horário de início e o horário de parada antes de ativar a programação.'});
-  botSchedule={ativo,inicio,fim};
-  saveBotSchedule();
-  addLog(`Programação do bot: ${botSchedule.ativo?'ativa':'desativada'} ${inicio}–${fim}.`);
-  if(botWindowActive()) armAutoLinkTimer(); else stopSchedulers();
-  res.json({ok:true,programacao:botSchedule,janela:botWindowLabel()});
+  const programacao={ativo,inicio,fim,atualizadoEm:new Date().toISOString()};
+  writeUserObject(req,'botSchedule',programacao);
+  res.json({ok:true,programacao,janela:ativo?'programação configurada por usuário':'programação desligada'});
 });
 
 app.get('/api/dashboard',(req,res)=>{
