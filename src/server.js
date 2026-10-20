@@ -185,18 +185,41 @@ app.get('/api/auth/status',(req,res)=>{
   const user=currentUser(req);
   res.json({ok:true,configurado:users.length>0,autenticado:Boolean(user),usuario:user?sanitizeUser(user):null});
 });
-app.post('/api/auth/setup',(req,res)=>{
-  if(readUsers().length>0)return res.status(409).json({ok:false,msg:'Já existe uma conta. Somente usuários cadastrados pelo administrador podem entrar.'});
+app.post('/api/auth/setup',async(req,res)=>{
   const users=readUsers();
-  if(users.length) return res.status(409).json({ok:false,msg:'O RegulOS já está configurado. Entre com uma conta.'});
+  if(users.length>0)return res.status(409).json({ok:false,msg:'Já existe uma conta. Entre com uma conta cadastrada.'});
   const usuario=String(req.body?.usuario||'').trim().toLowerCase();
+  const email=String(req.body?.email||'').trim().toLowerCase();
   const senha=String(req.body?.senha||'');
-  if(usuario.length<3||senha.length<6) return res.status(400).json({ok:false,msg:'Informe nome de usuário e senha (mínimo de 6 caracteres).'});
-  const nome=usuario;
+  if(!/^[a-z0-9._-]{3,32}$/.test(usuario) || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || senha.length<8)
+    return res.status(400).json({ok:false,msg:'Informe usuário válido, e-mail válido e senha com pelo menos 8 caracteres.'});
   const salt=crypto.randomBytes(16).toString('hex');
-  const user={id:crypto.randomUUID(),codigoUsuario:generateUserCode(users),nome,usuario,salt,hash:hashPassword(senha,salt),admin:true,criadoEm:new Date().toISOString()};
-  saveUsers([user]); saveSessions({}); setSession(res,user);
-  res.json({ok:true,msg:'Conta administradora criada.',usuario:sanitizeUser(user)});
+  const user={id:crypto.randomUUID(),codigoUsuario:generateUserCode(users),nome:usuario,usuario,email,salt,hash:hashPassword(senha,salt),admin:true,ativo:false,emailVerificado:false,criadoEm:new Date().toISOString()};
+  saveUsers([user]);
+  const token=String(crypto.randomInt(0,1000000)).padStart(6,'0');
+  const digest=crypto.createHash('sha256').update(token).digest('hex');
+  emailTokens.set(digest,{userId:user.id,email,expiresAt:Date.now()+20*60*1000,purpose:'setup-admin'});
+  try{
+    await sendGmail({to:email,subject:'Confirme o e-mail do administrador — RegulOS',text:'Seu código para configurar a conta administradora do RegulOS é: '+token+'\\n\\nO código expira em 20 minutos e só pode ser usado uma vez. Se você não solicitou esta configuração, ignore esta mensagem.'});
+  }catch(err){
+    emailTokens.delete(digest); saveUsers([]);
+    const msg=err.message==='GMAIL_NOT_CONFIGURED'?'O envio de e-mail ainda não foi configurado no ambiente de testes.':'Não foi possível enviar o código de confirmação. Tente novamente mais tarde.';
+    return res.status(503).json({ok:false,msg});
+  }
+  res.status(201).json({ok:true,verificationRequired:true,msg:'Enviamos um código de 6 dígitos ao e-mail informado. Confirme para ativar o administrador.'});
+});
+app.post('/api/auth/verify-first-admin',(req,res)=>{
+  const usuario=String(req.body?.usuario||'').trim().toLowerCase();
+  const token=String(req.body?.codigo||'').trim();
+  if(!/^\\d{6}$/.test(token)) return res.status(400).json({ok:false,msg:'Informe o código de 6 dígitos.'});
+  const digest=crypto.createHash('sha256').update(token).digest('hex');
+  const entry=emailTokens.get(digest);
+  if(!entry||entry.purpose!=='setup-admin'||entry.expiresAt<Date.now()) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
+  const users=readUsers(), user=users.find(u=>u.id===entry.userId&&u.usuario===usuario&&u.admin===true);
+  if(!user) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
+  user.emailVerificado=true; user.ativo=true; user.emailConfirmadoEm=new Date().toISOString();
+  saveUsers(users); emailTokens.delete(digest); setSession(res,user);
+  res.json({ok:true,msg:'E-mail confirmado. Conta administradora ativada.',usuario:sanitizeUser(user)});
 });
 const loginAttempts = new Map();
 function clientIp(req){ return String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'unknown').split(',')[0].trim(); }
