@@ -334,7 +334,28 @@ function registerLoginFailure(req){
 }
 function clearLoginFailures(req){ loginAttempts.delete(clientIp(req)); }
 
+
+// CAPTCHA interno de uso único para login e cadastro (válido por 5 minutos).
+const authCaptchaChallenges = new Map();
+app.get('/api/auth/captcha',(req,res)=>{
+  const purpose=String(req.query?.purpose||'login');
+  if(!['login','register'].includes(purpose)) return res.status(400).json({ok:false,msg:'Desafio inválido.'});
+  const now=Date.now();
+  for(const [key,value] of authCaptchaChallenges) if(value.expiresAt<now) authCaptchaChallenges.delete(key);
+  const a=crypto.randomInt(2,10), b=crypto.randomInt(1,10), id=crypto.randomBytes(24).toString('hex');
+  authCaptchaChallenges.set(id,{answer:String(a+b),purpose,ip:clientIp(req),expiresAt:now+5*60*1000});
+  res.set('Cache-Control','no-store');
+  res.json({ok:true,id,question:`Quanto é ${a} + ${b}?`});
+});
+function validateAuthCaptcha(req,purpose){
+  const id=String(req.body?.captchaId||''), answer=String(req.body?.captchaAnswer||'').trim();
+  const entry=authCaptchaChallenges.get(id);
+  if(entry) authCaptchaChallenges.delete(id);
+  return !!entry && entry.purpose===purpose && entry.ip===clientIp(req) && entry.expiresAt>=Date.now() && /^\d{1,2}$/.test(answer) && answer===entry.answer;
+}
+
 app.post('/api/auth/login',(req,res)=>{
+  if(!validateAuthCaptcha(req,'login')) return res.status(400).json({ok:false,msg:'Resolva o CAPTCHA para continuar.'});
   if(!loginAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas de login. Aguarde alguns minutos e tente novamente.'});
   const identificador=String(req.body?.usuario||'').trim().toLowerCase();
   const senha=String(req.body?.senha||'');
@@ -364,6 +385,7 @@ function registerRegistrationAttempt(req){
   else {a.count++;registrationAttempts.set(key,a);}
 }
 app.post('/api/auth/register',async(req,res)=>{
+  if(!validateAuthCaptcha(req,'register')) return res.status(400).json({ok:false,msg:'Resolva o CAPTCHA para continuar.'});
   if(!registrationAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas de cadastro. Aguarde 15 minutos.'});
   const usuario=String(req.body?.usuario||'').trim().toLowerCase();
   const email=String(req.body?.email||'').trim().toLowerCase();
