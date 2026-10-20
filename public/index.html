@@ -1864,17 +1864,19 @@ if ('serviceWorker' in navigator) {
 <script>
 (function(){
  const tips=[
-  {id:'connect',title:'Etapa 1 de 4 · Conectar WhatsApp',text:'Clique em Conectar WhatsApp ou Novo QR e leia o código com a conta correta. Quando conectar, confira se o status mudou para conectado. Nunca compartilhe o QR Code nem a sessão.',selector:'#qrModal,#qrBox',matches:e=>/Conectar WhatsApp|Novo QR|Reconectar|Desconectar/.test(e.textContent||'')},
-  {id:'groups',title:'Etapa 2 de 4 · Grupos',text:'Na área de grupos, marque apenas os grupos onde você tem autorização para publicar e onde os participantes esperam esse tipo de conteúdo. Confira os grupos marcados antes de programar envios.',selector:'#lgrupos',matches:e=>/Grupo|grupos/i.test(e.textContent||'')},
-  {id:'links',title:'Etapa 3 de 4 · Links e ofertas',text:'Antes de salvar uma oferta, confira título, URL, imagem, preço e mensagem. Verifique se o link está correto e se a oferta continua válida. Escolha os grupos com cuidado.',selector:'#links,#extratorUniversalPanel',matches:e=>/Adicionar link|Salvar|Extrator/i.test(e.textContent||'')},
-  {id:'schedules',title:'Agendamentos',text:'Revise data, horário, frequência e grupos antes de salvar. Um agendamento apenas automatiza o horário; não torna um envio automaticamente permitido pelas regras do WhatsApp.',selector:'#scheduleMainPanel,#schedulesModal',matches:e=>/Agendamentos|agendar/i.test(e.textContent||'')},
-  {id:'history',title:'Histórico, entregas e falhas',text:'Confira o histórico e o status das entregas para saber o que aconteceu. Se algo falhar, leia o motivo antes de tentar novamente para evitar duplicações.',selector:'#linkHistory,#linkFailures,#linkDeliveries',matches:e=>/Histórico|Links com falha|Status das Entregas|Reenviar/i.test(e.textContent||'')},
-  {id:'responsible',title:'Uso responsável',text:'Não faça disparos indiscriminados nem envie mensagens não solicitadas. Respeite os pedidos para parar e as regras de cada grupo. Abra Tutorial e ajuda para rever a etapa 4 sobre regras e riscos.',selector:null,matches:e=>/Disparar|Enviar agora|Programar|Agendar/.test(e.textContent||'')}
+  {id:'connect',title:'Conectar WhatsApp',text:'Neste painel você conecta a conta que será usada pelo RegulOS. Clique em “Conectar WhatsApp” ou “Novo QR” e leia o código com o celular correto. Não compartilhe o QR Code nem a sessão.',selector:null, matches:e=>/Conectar WhatsApp|Novo QR|Reconectar|Desconectar/.test(e.textContent||'')||!!e.closest('#qrModal,#qrBox')},
+  {id:'links',title:'Gerenciador de links',text:'Aqui você cadastra e edita as ofertas que deseja organizar. Clique em “Adicionar link”, confira nome, URL, imagem, preço e mensagem, selecione os grupos autorizados e salve. Depois, a programação aparece no painel Agendamentos.',selector:'.regulos-nav-source-panel',matches:e=>/Adicionar link|Gerenciador de links/.test(e.textContent||'')},
+  {id:'groups',title:'Seleção de grupos',text:'Nesta parte você escolhe em quais grupos a oferta poderá ser publicada. Marque somente grupos onde você tem autorização e onde as mensagens são esperadas. Confira a seleção antes de salvar.',selector:'#lgrupos',matches:e=>/Grupos de envio/i.test(e.textContent||'')},
+  {id:'schedules',title:'Agendamentos',text:'Aqui ficam os links que você programou para serem enviados, com seus horários e detalhes. Use este painel para revisar ou acompanhar a programação. Confira data, horário e grupos: agendar não torna uma mensagem automaticamente permitida.',selector:'#scheduleMainPanel,#schedulesModal',matches:e=>/Agendamentos|agendar/i.test(e.textContent||'')},
+  {id:'history',title:'Histórico de envios',text:'Neste painel ficam os registros dos links enviados e os resultados disponíveis. Use a pesquisa e os filtros para encontrar um registro e conferir o status antes de repetir qualquer envio.',selector:'.panel:has(#linkHistory)',matches:e=>/Histórico|Sucesso/i.test(e.textContent||'')},
+  {id:'failures',title:'Links com falha',text:'Aqui aparecem os links cujo envio falhou ou cuja imagem não pôde ser obtida. Confira o motivo; use Reenviar somente depois de revisar o problema e evite criar envios duplicados.',selector:'.panel:has(#linkFailures)',matches:e=>/Links com falha|Reenviar|Limpar falhas/i.test(e.textContent||'')},
+  {id:'extractor',title:'Extrator Universal',text:'Cole aqui o link de um produto para tentar obter título, preço, desconto e imagem antes de cadastrar a oferta. Confira os dados extraídos; eles podem precisar de correção e não são salvos automaticamente.',selector:'#extratorUniversalPanel',matches:e=>/Extrator Universal|Extrator/i.test(e.textContent||'')},
+  {id:'responsible',title:'Antes de enviar',text:'Envie somente mensagens permitidas e esperadas pelos destinatários. Evite disparos indiscriminados, respeite pedidos para parar e as regras dos grupos. O agendamento não elimina o risco de restrições do WhatsApp.',selector:null,matches:e=>/Enviar agora|Disparar|Programar|Agendar/.test(e.textContent||'')}
  ];
  let lastTip='';
  const box=()=>document.getElementById('regulosContextHelp');
- window.regulosContextHelpClose=function(){if(box())box().classList.remove('show');};
- function showTip(t){if(!t||t.id===lastTip)return;lastTip=t.id;document.getElementById('regulosContextHelpTitle').textContent=t.title;document.getElementById('regulosContextHelpText').textContent=t.text;box().classList.add('show');}
+ window.regulosContextHelpClose=function(){if(box())box().classList.remove('show');lastTip='';};
+ function showTip(t){if(!t)return;if(t.id===lastTip&&box()?.classList.contains('show'))return;lastTip=t.id;document.getElementById('regulosContextHelpTitle').textContent=t.title;document.getElementById('regulosContextHelpText').textContent=t.text;box().classList.add('show');}
  function findTip(target){
   if(!target||!target.closest)return null;
   for(const t of tips){
@@ -1944,7 +1946,7 @@ if ('serviceWorker' in navigator) {
    const res=await fetch('/api/tutorial/status',{credentials:'same-origin',cache:'no-store'});
    if(!res.ok)return;
    const data=await res.json();
-   if(data.ok&&data.tutorial?.completed!==true){window.openRegulosTutorial(false);document.getElementById('regulosTutorialLater').style.display='inline-block';}
+   if(data.ok&&data.tutorial?.completed!==true){const title=document.getElementById('regulosContextHelpTitle');const textEl=document.getElementById('regulosContextHelpText');if(title&&textEl&&box()){title.textContent='Bem-vindo ao RegulOS';textEl.textContent='Clique em um painel para receber instruções sobre como usá-lo. Para ver o tutorial completo, use “Tutorial e ajuda”.';box().classList.add('show');lastTip='welcome';}}
   }catch(e){console.debug('Tutorial indisponível:',e);}
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',checkFirstAccess,{once:true});else checkFirstAccess();
