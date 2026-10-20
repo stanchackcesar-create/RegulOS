@@ -3037,8 +3037,15 @@ app.get('/api/status', requireAuth, (req,res) => {
     programacao:{ativo:programacao.ativo===true,inicio:String(programacao.inicio||''),fim:String(programacao.fim||'')}
   });
 });
-app.get('/api/qr', (req,res) => res.json({ok:true, qr, status, conectado:online}));
-app.get('/api/logs', (req,res) => res.json({ok:true, logs:[...logs].reverse()}));
+app.get('/api/qr', requireAuth, (req,res) => {
+  const session=userSessions.get(req.user.id);
+  res.set('Cache-Control','no-store');
+  res.json({ok:true,qr:session?.qr||null,status:session?.status||'offline',conectado:session?.status==='online'});
+});
+app.get('/api/logs', requireAuth, (req,res) => {
+  res.set('Cache-Control','no-store');
+  res.json({ok:true,logs:[],msg:'Os logs globais estão ocultos durante a migração para evitar mistura entre contas.'});
+});
 
 app.post('/api/reconectar', requireAuth, (req,res) => {
   return res.status(409).json({ok:false,msg:'A conexão global foi desativada durante a migração multiusuário. Use Conectar WhatsApp na sua própria conta.'});
@@ -3140,27 +3147,8 @@ app.post('/api/grupos/salvar', requireAuth, (req,res) => {
 });
 
 app.get('/api/mensagem', (req,res)=>res.json({ok:true}));
-app.post('/api/mensagem', async (req,res) => {
-  const message=String(req.body?.message||'').trim();
-  if(!message) return res.status(400).json({ok:false,msg:'Digite uma mensagem.'});
-  if(!online || !sock) return res.status(409).json({ok:false,msg:'WhatsApp não está conectado.'});
-  if(!botWindowActive()) return res.status(409).json({ok:false,msg:'O bot está fora do horário programado.'});
-  const targets=activeGroups();
-  if(!targets.length) return res.status(409).json({ok:false,msg:'Nenhum grupo está com o envio Ligado.'});
-  let sent=0,errors=0;
-  for(const jid of targets) {
-    try {
-      await sock.sendMessage(jid,{text:message});
-      sent++;
-      addHistory({grupoId:jid,link:'mensagem manual',status:'sucesso',tipo:'manual'});
-      await new Promise(r=>setTimeout(r,700));
-    } catch(e) {
-      errors++;
-      addHistory({grupoId:jid,link:'mensagem manual',status:'erro',erro:e.message,tipo:'manual'});
-    }
-  }
-  addLog(`Mensagem manual: ${sent}/${targets.length}.`);
-  res.json({ok:true,sent,errors,msg:`Enviado para ${sent} de ${targets.length} grupo(s) Ligado(s).`});
+app.post('/api/mensagem', requireAuth, (req,res) => {
+  return res.status(409).json({ok:false,msg:'O envio manual está temporariamente bloqueado até o motor de envio usar exclusivamente o WhatsApp desta conta.'});
 });
 
 app.get('/api/link-agendamentos', requireAuth, (req,res)=>{
