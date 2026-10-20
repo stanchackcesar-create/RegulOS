@@ -370,7 +370,6 @@ app.post('/api/auth/register',async(req,res)=>{
     return res.status(400).json({ok:false,msg:'Informe usuário válido, e-mail válido e senha com pelo menos 8 caracteres.'});
   }
   const users=readUsers();
-  if(users.length >= 20){ registerRegistrationAttempt(req); return res.status(409).json({ok:false,msg:'O RegulOS permite no máximo 20 usuários no ambiente atual.'}); }
   if(users.some(u=>String(u.usuario||'').toLowerCase()===usuario)){
     registerRegistrationAttempt(req);
     return res.status(409).json({ok:false,msg:'Esse nome de usuário já está em uso.'});
@@ -1116,7 +1115,6 @@ app.get('/api/usuarios',requireAuth,requireAdmin,(req,res)=>{
 });
 app.post('/api/usuarios',requireAdmin,(req,res)=>{
   const currentUsers=readUsers();
-  if(currentUsers.length >= 20) return res.status(409).json({ok:false,msg:'O RegulOS permite no máximo 20 usuários.'});
   const usuario=String(req.body?.usuario||'').trim().toLowerCase();
   const senha=String(req.body?.senha||'');
   if(usuario.length<3||senha.length<6)return res.status(400).json({ok:false,msg:'Nome de usuário e senha são obrigatórios (senha mínima de 6 caracteres).'});
