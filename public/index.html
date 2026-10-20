@@ -1530,7 +1530,7 @@ async function loadAccount(){
         <button type="button" onclick="requestEmailChange()">📩 Enviar código para o novo e-mail</button>
       </div>
     </div>
-    <div style="margin-top:12px;border-top:1px solid var(--border,#ddd);padding-top:12px">
+    <div id="accountConfirmPanel" style="display:none;margin-top:12px;border-top:1px solid var(--border,#ddd);padding-top:12px">
       <b>🔢 Confirmar operação</b>
       <p class="muted" style="font-size:12px;margin:5px 0">O RegulOS já identificou a operação. Digite o código recebido por e-mail.</p>
       <div class="two">
@@ -1582,7 +1582,7 @@ async function requestPasswordChange(){
  const confirmarSenha=document.getElementById('accountConfirmPass')?.value||'';
  try{
   const d=await accountPost('/api/account/request-password-change',{senhaAtual,novaSenha,confirmarSenha});
-  document.getElementById('accountCodePurpose').value='change-password'; document.getElementById('accountPendingOperation').textContent='Alteração de senha';
+  document.getElementById('accountCodePurpose').value='change-password'; document.getElementById('accountPendingOperation').textContent='Alteração de senha'; document.getElementById('accountConfirmPanel').style.display='block';
   toast(d.msg);
  }catch(e){toast(e.message,true)}
 }
@@ -1590,7 +1590,7 @@ async function requestEmailChange(){
  const email=document.getElementById('accountNewEmail')?.value||'';
  try{
   const d=await accountPost('/api/account/request-email-change',{email});
-  document.getElementById('accountCodePurpose').value='change-email'; document.getElementById('accountPendingOperation').textContent='Alteração de e-mail';
+  document.getElementById('accountCodePurpose').value='change-email'; document.getElementById('accountPendingOperation').textContent='Alteração de e-mail'; document.getElementById('accountConfirmPanel').style.display='block';
   toast(d.msg);
  }catch(e){toast(e.message,true)}
 }
@@ -1598,7 +1598,7 @@ async function requestUsernameChange(){
  const usuario=document.getElementById('accountNewUsername')?.value||'';
  try{
   const d=await accountPost('/api/account/request-username-change',{usuario});
-  document.getElementById('accountCodePurpose').value='change-username'; document.getElementById('accountPendingOperation').textContent='Alteração de nome de usuário';
+  document.getElementById('accountCodePurpose').value='change-username'; document.getElementById('accountPendingOperation').textContent='Alteração de nome de usuário'; document.getElementById('accountConfirmPanel').style.display='block';
   toast(d.msg);
  }catch(e){toast(e.message,true)}
 }
@@ -1606,7 +1606,7 @@ async function requestAccountDeletion(){
  if(!confirm('Deseja solicitar a exclusão da sua conta? Um código será enviado ao e-mail confirmado. Nada será excluído até você confirmar o código.'))return;
  try{
   const d=await accountPost('/api/account/request-delete',{});
-  document.getElementById('accountCodePurpose').value='delete-account'; document.getElementById('accountPendingOperation').textContent='Exclusão da conta';
+  document.getElementById('accountCodePurpose').value='delete-account'; document.getElementById('accountPendingOperation').textContent='Exclusão da conta'; document.getElementById('accountConfirmPanel').style.display='block';
   toast(d.msg);
  }catch(e){toast(e.message,true)}
 }
