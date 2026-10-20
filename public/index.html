@@ -329,8 +329,8 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 <div class="actions">
 <button class="primary" onclick="refreshAll()">🔄 Atualizar</button>
 <button class="primary" type="button" onclick="conectarWhatsApp()">📲 Conectar WhatsApp</button>
-<button type="button" onclick="apiAction('/api/reconectar')">🔄 Reconectar</button>
-<button onclick="apiAction('/api/desconectar')">⛔ Desconectar</button>
+<button type="button" onclick="apiAction('/api/user-session/reconnect')">🔄 Reconectar</button>
+<button onclick="apiAction('/api/user-session/disconnect')">⛔ Desconectar</button>
 <div class="notice" style="max-width:430px;margin:0">🗓️ <b>Agendamentos automáticos</b><br>Os links serão enviados nos horários definidos. Mantenha o WhatsApp conectado.</div>
 <div class="header-bot-schedule hidden" aria-hidden="true" title="Compatibilidade interna">
   <span class="badge neutral" id="windowBadge">...</span>
