@@ -635,7 +635,7 @@ let qrRequested=false;
 async function conectarWhatsApp(){
  qrRequested=true;
  try{
-  const d=await jfetch('/api/reconectar',{method:'POST'});
+  const d=await jfetch('/api/user-session/connect',{method:'POST'});
   toast(d.msg||'Solicitação de conexão enviada. Aguardando QR Code, se necessário.');
   await status();
   startPolling(true);
@@ -644,13 +644,14 @@ async function conectarWhatsApp(){
 async function novoQR(){
  if(!confirm('Isso remove a sessão atual e gera um QR Code para outro número. Continuar?'))return;
  qrRequested=true;
- try{await jfetch('/api/novo-qr',{method:'POST'});toast('Sessão limpa. Aguardando novo QR...');startPolling(true)}catch(e){qrRequested=false;toast(e.message,true)}
+ try{await jfetch('/api/user-session/new-qr',{method:'POST'});toast('Sua sessão foi reiniciada. Aguardando novo QR...');startPolling(true)}catch(e){qrRequested=false;toast(e.message,true)}
 }
 let botScheduleDirty=false;
 let botScheduleInitialized=false;
 async function status(){
  try{
   const d=await jfetch('/api/status');
+  try { const own=await jfetch('/api/user-session/status'); const ss=own.session||{}; d.conectado=ss.status==='online'; d.temQR=Boolean(ss.qr); d.qr=ss.qr||null; d.status=ss.lastError||ss.status||d.status; d.numero=ss.connectedNumber||''; d.numeroBruto=ss.connectedNumber||''; d.grupos=Array.isArray(ss.groups)?ss.groups.length:0; } catch {}
   (document.getElementById('conn')||{}).textContent=d.conectado?'🟢 Conectado':(d.temQR?'🟡 QR':'🔴 '+(d.status||'Desconectado'));
   (document.getElementById('connStatus')||{}).textContent=d.temQR?'📱 Escaneie o QR Code':d.status;
   (document.getElementById('number')||{}).textContent='Número: '+(d.numero||'—');
