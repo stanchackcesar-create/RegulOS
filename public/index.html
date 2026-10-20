@@ -1864,25 +1864,41 @@ if ('serviceWorker' in navigator) {
 <script>
 (function(){
  const tips=[
-  {id:'connect',title:'Conectar o WhatsApp',text:'Use Conectar WhatsApp ou Novo QR e leia o código com a conta correta. Nunca compartilhe o QR Code nem a sessão.',test:e=>/Conectar WhatsApp|Novo QR|Reconectar|Conectar/.test(e.textContent||'')||!!e.closest('#qrModal,#qrBox')},
-  {id:'groups',title:'Revise os grupos',text:'Confira os grupos selecionados e envie somente onde você tem autorização e onde as mensagens são esperadas.',test:e=>!!e.closest('#lgrupos')||/Grupo|grupos/i.test(e.textContent||'')&&!!e.closest('button,label')},
-  {id:'links',title:'Gerenciador de links',text:'Confira o título, destino do link, imagem e mensagem antes de salvar. Selecione apenas os grupos corretos.',test:e=>!!e.closest('#linkForm,#links')||/Adicionar link|Salvar/.test(e.textContent||'')},
-  {id:'schedules',title:'Agendamentos',text:'Revise a data, o horário e os grupos de cada programação. Um agendamento não torna um envio automaticamente permitido.',test:e=>!!e.closest('#scheduleMainPanel,#schedulesModal')||/Agendamentos|agendar/i.test(e.textContent||'')},
-  {id:'history',title:'Histórico e entregas',text:'Use o histórico e Status das Entregas para verificar resultados. Antes de reenviar algo que falhou, confira o motivo para evitar duplicações.',test:e=>!!e.closest('#linkHistory,#linkFailures,#linkDeliveries')||/Histórico|Links com falha|Status das Entregas/.test(e.textContent||'')}
+  {id:'connect',title:'Etapa 1 de 4 · Conectar WhatsApp',text:'Clique em Conectar WhatsApp ou Novo QR e leia o código com a conta correta. Quando conectar, confira se o status mudou para conectado. Nunca compartilhe o QR Code nem a sessão.',selector:'#qrModal,#qrBox',matches:e=>/Conectar WhatsApp|Novo QR|Reconectar|Desconectar/.test(e.textContent||'')},
+  {id:'groups',title:'Etapa 2 de 4 · Grupos',text:'Na área de grupos, marque apenas os grupos onde você tem autorização para publicar e onde os participantes esperam esse tipo de conteúdo. Confira os grupos marcados antes de programar envios.',selector:'#lgrupos',matches:e=>/Grupo|grupos/i.test(e.textContent||'')},
+  {id:'links',title:'Etapa 3 de 4 · Links e ofertas',text:'Antes de salvar uma oferta, confira título, URL, imagem, preço e mensagem. Verifique se o link está correto e se a oferta continua válida. Escolha os grupos com cuidado.',selector:'#links,#extratorUniversalPanel',matches:e=>/Adicionar link|Salvar|Extrator/i.test(e.textContent||'')},
+  {id:'schedules',title:'Agendamentos',text:'Revise data, horário, frequência e grupos antes de salvar. Um agendamento apenas automatiza o horário; não torna um envio automaticamente permitido pelas regras do WhatsApp.',selector:'#scheduleMainPanel,#schedulesModal',matches:e=>/Agendamentos|agendar/i.test(e.textContent||'')},
+  {id:'history',title:'Histórico, entregas e falhas',text:'Confira o histórico e o status das entregas para saber o que aconteceu. Se algo falhar, leia o motivo antes de tentar novamente para evitar duplicações.',selector:'#linkHistory,#linkFailures,#linkDeliveries',matches:e=>/Histórico|Links com falha|Status das Entregas|Reenviar/i.test(e.textContent||'')},
+  {id:'responsible',title:'Uso responsável',text:'Não faça disparos indiscriminados nem envie mensagens não solicitadas. Respeite os pedidos para parar e as regras de cada grupo. Abra Tutorial e ajuda para rever a etapa 4 sobre regras e riscos.',selector:null,matches:e=>/Disparar|Enviar agora|Programar|Agendar/.test(e.textContent||'')}
  ];
  let lastTip='';
  const box=()=>document.getElementById('regulosContextHelp');
  window.regulosContextHelpClose=function(){if(box())box().classList.remove('show');};
  function showTip(t){if(!t||t.id===lastTip)return;lastTip=t.id;document.getElementById('regulosContextHelpTitle').textContent=t.title;document.getElementById('regulosContextHelpText').textContent=t.text;box().classList.add('show');}
  function findTip(target){
-  let el=target;
-  for(let i=0;el&&i<5;i++,el=el.parentElement){
-   const t=tips.find(x=>x.test(el));if(t)return t;
+  if(!target||!target.closest)return null;
+  for(const t of tips){
+   if(t.selector&&target.closest(t.selector))return t;
+   if(t.matches&&t.matches(target))return t;
   }
   return null;
  }
- document.addEventListener('click',function(e){if(e.target.closest('#regulosContextHelp,#regulosTutorialModal'))return;showTip(findTip(e.target));},true);
- document.addEventListener('focusin',function(e){if(e.target.matches('input,textarea,select'))showTip(findTip(e.target));},true);
+ // Interage com o painel inteiro, não só com palavras em botões. Exibe uma dica
+ // na primeira interação com cada área e mantém a ajuda acessível pelo painel.
+ document.addEventListener('click',function(e){
+  if(e.target.closest('#regulosContextHelp,#regulosTutorialModal'))return;
+  const t=findTip(e.target);
+  if(t)showTip(t);
+ },true);
+ document.addEventListener('focusin',function(e){
+  if(!e.target.matches('input,textarea,select'))return;
+  const t=findTip(e.target);
+  if(t)showTip(t);
+ },true);
+ document.addEventListener('change',function(e){
+  const t=findTip(e.target);
+  if(t)showTip(t);
+ },true);
 })();
 </script>
 <script>
