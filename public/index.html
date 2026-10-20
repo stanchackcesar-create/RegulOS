@@ -1846,15 +1846,14 @@ if ('serviceWorker' in navigator) {
  </div>
 </div>
 <style>
-#regulosContextHelp{position:fixed;right:18px;bottom:18px;z-index:19990;width:min(360px,calc(100vw - 28px));background:#203653;color:#f4f8ff;border:2px solid #79a9ef;border-radius:14px;padding:15px 16px;box-shadow:0 12px 40px #000b;display:none}
-#regulosContextHelp.show{display:block;animation:regulosTipIn .18s ease-out}
-#regulosContextHelp strong{display:block;font-size:15px;margin-bottom:5px;color:#fff}
-#regulosContextHelp p{font-size:14px;line-height:1.5;margin:0 0 12px;color:#e2ecff}
-#regulosContextHelp .tip-actions{display:flex;gap:8px;justify-content:flex-end}
-#regulosContextHelp button{border:1px solid #7697c4;border-radius:8px;padding:7px 10px;background:#14263d;color:white;font-weight:700;cursor:pointer}
-#regulosContextHelp button.tip-close{background:#2766b6;border-color:#8bb9ff}
-@keyframes regulosTipIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
-@media(max-width:600px){#regulosContextHelp{right:10px;bottom:10px;width:calc(100vw - 20px)}}
+#regulosContextHelp{position:static;z-index:2;width:auto;max-width:100%;margin:12px 0 0;background:#14243a;color:#f4f8ff;border:1px solid #5479a8;border-left:4px solid #79a9ef;border-radius:10px;padding:12px 14px;box-shadow:none;display:none}
+#regulosContextHelp.show{display:block;animation:regulosTipIn .16s ease-out}
+#regulosContextHelp strong{display:block;font-size:14px;margin-bottom:5px;color:#fff}
+#regulosContextHelp p{font-size:13px;line-height:1.5;margin:0 0 10px;color:#dbe8fa}
+#regulosContextHelp .tip-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+#regulosContextHelp button{border:1px solid #526d91;border-radius:7px;padding:6px 9px;background:#0d1b2d;color:white;font-weight:700;cursor:pointer}
+#regulosContextHelp button.tip-close{background:#245b9c;border-color:#6e9edc}
+@keyframes regulosTipIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
 </style>
 <aside id="regulosContextHelp" role="status" aria-live="polite">
  <strong id="regulosContextHelpTitle">Dica do RegulOS</strong>
@@ -1869,6 +1868,7 @@ if ('serviceWorker' in navigator) {
   {id:'groups',title:'Seleção de grupos',text:'Nesta parte você escolhe em quais grupos a oferta poderá ser publicada. Marque somente grupos onde você tem autorização e onde as mensagens são esperadas. Confira a seleção antes de salvar.',selector:'#lgrupos',matches:e=>/Grupos de envio/i.test(e.textContent||'')},
   {id:'schedules',title:'Agendamentos',text:'Aqui ficam os links que você programou para serem enviados, com seus horários e detalhes. Use este painel para revisar ou acompanhar a programação. Confira data, horário e grupos: agendar não torna uma mensagem automaticamente permitida.',selector:'#scheduleMainPanel,#schedulesModal',matches:e=>/Agendamentos|agendar/i.test(e.textContent||'')},
   {id:'history',title:'Histórico de envios',text:'Neste painel ficam os registros dos links enviados e os resultados disponíveis. Use a pesquisa e os filtros para encontrar um registro e conferir o status antes de repetir qualquer envio.',selector:'.panel:has(#linkHistory)',matches:e=>/Histórico|Sucesso/i.test(e.textContent||'')},
+  {id:'deliveries',title:'Status das Entregas',text:'Aqui você acompanha o estado individual de cada grupo nos envios recentes. Clique em Atualizar para consultar os registros disponíveis e confira o resultado antes de tentar outro envio.',selector:'.panel:has(#linkDeliveries)',matches:e=>/Status das Entregas|Atualizar/i.test(e.textContent||'')},
   {id:'failures',title:'Links com falha',text:'Aqui aparecem os links cujo envio falhou ou cuja imagem não pôde ser obtida. Confira o motivo; use Reenviar somente depois de revisar o problema e evite criar envios duplicados.',selector:'.panel:has(#linkFailures)',matches:e=>/Links com falha|Reenviar|Limpar falhas/i.test(e.textContent||'')},
   {id:'extractor',title:'Extrator Universal',text:'Cole aqui o link de um produto para tentar obter título, preço, desconto e imagem antes de cadastrar a oferta. Confira os dados extraídos; eles podem precisar de correção e não são salvos automaticamente.',selector:'#extratorUniversalPanel',matches:e=>/Extrator Universal|Extrator/i.test(e.textContent||'')},
   {id:'responsible',title:'Antes de enviar',text:'Envie somente mensagens permitidas e esperadas pelos destinatários. Evite disparos indiscriminados, respeite pedidos para parar e as regras dos grupos. O agendamento não elimina o risco de restrições do WhatsApp.',selector:null,matches:e=>/Enviar agora|Disparar|Programar|Agendar/.test(e.textContent||'')}
@@ -1876,31 +1876,57 @@ if ('serviceWorker' in navigator) {
  let lastTip='';
  const box=()=>document.getElementById('regulosContextHelp');
  window.regulosContextHelpClose=function(){if(box())box().classList.remove('show');lastTip='';};
- function showTip(t){if(!t)return;if(t.id===lastTip&&box()?.classList.contains('show'))return;lastTip=t.id;document.getElementById('regulosContextHelpTitle').textContent=t.title;document.getElementById('regulosContextHelpText').textContent=t.text;box().classList.add('show');}
+ function showTip(t,target){
+  if(!t)return;
+  const tipBox=box();
+  const title=document.getElementById('regulosContextHelpTitle');
+  const textEl=document.getElementById('regulosContextHelpText');
+  if(!tipBox||!title||!textEl)return;
+  title.textContent=t.title;textEl.textContent=t.text;
+  // Coloca a explicação dentro do painel relacionado, em vez de flutuando
+  // sobre a tela ou cobrindo outro painel.
+  const modal=target&&target.closest?target.closest('.schedules-modal-card,.diagnostic-modal-card,.account-modal-card,.logs-modal-card,[role="dialog"]'):null;
+  const panel=modal|| (target&&target.closest?target.closest('.panel'):null);
+  if(panel&&tipBox.parentElement!==panel){
+   const heading=panel.querySelector('h2,h3');
+   if(heading&&heading.parentElement)heading.parentElement.insertAdjacentElement('afterend',tipBox);
+   else panel.insertAdjacentElement('afterbegin',tipBox);
+  }
+  tipBox.classList.add('show');lastTip=t.id;
+ }
  function findTip(target){
   if(!target||!target.closest)return null;
-  for(const t of tips){
-   if(t.selector&&target.closest(t.selector))return t;
-   if(t.matches&&t.matches(target))return t;
+  // Prioriza o painel real em que o usuário está interagindo.
+  const modal=target.closest('.schedules-modal-card,.diagnostic-modal-card,.account-modal-card,.logs-modal-card,[role="dialog"]');
+  const panel=modal||target.closest('.panel');
+  if(panel){
+   const heading=(panel.querySelector('h2,h3')?.textContent||'').toLowerCase();
+   if(/gerenciador de links|links e ofertas|links/.test(heading))return tips.find(t=>t.id==='links');
+   if(/agendamento|programa/.test(heading))return tips.find(t=>t.id==='schedules');
+   if(/histórico/.test(heading))return tips.find(t=>t.id==='history');
+   if(/links com falha|falhas/.test(heading))return tips.find(t=>t.id==='failures');
+   if(/status das entregas|entregas/.test(heading))return tips.find(t=>t.id==='deliveries');
+   if(/extrator universal/.test(heading))return tips.find(t=>t.id==='extractor');
+   if(/grupo/.test(heading))return tips.find(t=>t.id==='groups');
+   if(/whatsapp|conexão/.test(heading))return tips.find(t=>t.id==='connect');
   }
+  for(const t of tips){if(t.matches&&t.matches(target))return t;}
   return null;
  }
- // Interage com o painel inteiro, não só com palavras em botões. Exibe uma dica
- // na primeira interação com cada área e mantém a ajuda acessível pelo painel.
  document.addEventListener('click',function(e){
   if(e.target.closest('#regulosContextHelp,#regulosTutorialModal'))return;
   const t=findTip(e.target);
-  if(t)showTip(t);
- },true);
+  if(t)showTip(t,e.target);
+ },false);
  document.addEventListener('focusin',function(e){
   if(!e.target.matches('input,textarea,select'))return;
   const t=findTip(e.target);
-  if(t)showTip(t);
- },true);
+  if(t)showTip(t,e.target);
+ },false);
  document.addEventListener('change',function(e){
   const t=findTip(e.target);
-  if(t)showTip(t);
- },true);
+  if(t)showTip(t,e.target);
+ },false);
 })();
 </script>
 <script>
