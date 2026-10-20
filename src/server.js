@@ -3092,6 +3092,11 @@ app.get('/api/link-historico', requireAuth, (req,res)=>{
   res.set('Cache-Control','no-store');
   res.json({ok:true,historico:historico.slice(0,1000)});
 });
+app.delete('/api/link-historico', requireAuth, (req,res)=>{
+  const current=readUserArray(req,'linkHistory');
+  writeUserArray(req,'linkHistory',[]);
+  res.json({ok:true,msg:'Histórico desta conta apagado.',removidos:current.length});
+});
 app.delete('/api/link-historico/:id', requireAuth, (req,res)=>{
   const historico=readUserArray(req,'linkHistory');
   const next=historico.filter(x=>String(x.id)!==String(req.params.id));
@@ -3102,6 +3107,25 @@ app.get('/api/link-falhas', requireAuth, (req,res)=>{
   const falhas=readUserArray(req,'linkFailures');
   res.set('Cache-Control','no-store');
   res.json({ok:true,falhas});
+});
+app.delete('/api/link-falhas', requireAuth, (req,res)=>{
+  const current=readUserArray(req,'linkFailures');
+  writeUserArray(req,'linkFailures',[]);
+  res.json({ok:true,msg:'Falhas desta conta apagadas.',removidos:current.length});
+});
+app.post('/api/link-falhas/:id/reenviar', requireAuth, async(req,res)=>{
+  const failures=readUserArray(req,'linkFailures');
+  const failure=failures.find(x=>String(x.id)===String(req.params.id));
+  if(!failure)return res.status(404).json({ok:false,msg:'Falha não encontrada nesta conta.'});
+  const schedules=readUserArray(req,'schedules');
+  const item=schedules.find(x=>String(x.id)===String(failure.agendamentoId));
+  if(!item)return res.status(409).json({ok:false,msg:'Este agendamento não está mais na lista. Use Editar na falha e salve a oferta novamente.'});
+  item.ativo=true;item.status='agendado';item.lastRunKey='';
+  item.progressKey='';item.progressTargets=[];item.progressGroupIds=[];item.progressStartedAt='';
+  writeUserArray(req,'schedules',schedules);
+  const result=await userLinkEngine.sendOne(req.user.id,item.id,{force:true});
+  if(result.ok)return res.json({ok:true,msg:'Reenvio individual concluído.',result});
+  return res.status(result.reason==='offline'?503:409).json({ok:false,msg:result.reason==='offline'?'Conecte o WhatsApp desta conta antes de reenviar.':result.error||'Não foi possível reenviar a oferta.',result});
 });
 app.delete('/api/link-falhas/:id', requireAuth, (req,res)=>{
   const falhas=readUserArray(req,'linkFailures');
