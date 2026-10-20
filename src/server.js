@@ -191,7 +191,7 @@ app.post('/api/auth/setup',async(req,res)=>{
   const usuario=String(req.body?.usuario||'').trim().toLowerCase();
   const email=String(req.body?.email||'').trim().toLowerCase();
   const senha=String(req.body?.senha||'');
-  if(!/^[a-z0-9._-]{3,32}$/.test(usuario) || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || senha.length<8)
+  if(!/^[a-z0-9._-]{3,32}$/.test(usuario) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || senha.length<8)
     return res.status(400).json({ok:false,msg:'Informe usuário válido, e-mail válido e senha com pelo menos 8 caracteres.'});
   const salt=crypto.randomBytes(16).toString('hex');
   const user={id:crypto.randomUUID(),codigoUsuario:generateUserCode(users),nome:usuario,usuario,email,salt,hash:hashPassword(senha,salt),admin:true,ativo:false,emailVerificado:false,criadoEm:new Date().toISOString()};
