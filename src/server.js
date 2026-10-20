@@ -338,7 +338,7 @@ app.post('/api/auth/verify-email',(req,res)=>{
   }
   if(entry.purpose!=='verify') return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
   user.emailVerificado=true; user.ativo=true; saveUsers(users); emailTokens.delete(digest);
-  res.json({ok:true,msg:'E-mail confirmado. Sua conta aguarda liberação do administrador.'});
+  res.json({ok:true,msg:'E-mail confirmado. Sua conta está ativa; agora você pode entrar no RegulOS.'});
 });
 app.post('/api/auth/resend-verification',async(req,res)=>{
   if(!recoveryAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas solicitações. Aguarde alguns minutos antes de pedir outro código.'});
