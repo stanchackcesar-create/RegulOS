@@ -3116,6 +3116,8 @@ async function start() {
 }
 
 app.get('/api/user-session/status', requireAuth, (req,res) => {
+  // Evita que navegador/proxy devolva estado antigo e esconda um QR recém-gerado.
+  res.set('Cache-Control','no-store');
   const session = userSessions.get(req.user.id);
   res.json({ ok:true, session: session || { userId:req.user.id, status:'offline', qr:null, connectedNumber:'', groups:[], lastError:'' } });
 });
@@ -3123,6 +3125,7 @@ app.post('/api/user-session/connect', requireAuth, async (req,res) => {
   try {
     const session = await userSessions.start(req.user.id);
     userLinkEngine.startUser(req.user.id);
+    res.set('Cache-Control','no-store');
     res.json({ ok:true, msg:'Conexão individual iniciada.', session });
   } catch (error) {
     res.status(500).json({ ok:false, msg:'Não foi possível iniciar sua sessão: ' + String(error?.message || error) });
@@ -3132,8 +3135,10 @@ app.post('/api/user-session/reconnect', requireAuth, async (req,res) => {
   try {
     userLinkEngine.stopUser(req.user.id);
     await userSessions.stop(req.user.id);
+    // Reconectar preserva a autenticação individual para voltar ao mesmo número.
     const session = await userSessions.start(req.user.id);
     userLinkEngine.startUser(req.user.id);
+    res.set('Cache-Control','no-store');
     res.json({ ok:true, msg:'Reconexão individual solicitada. Aguarde a confirmação do WhatsApp.', session });
   } catch (error) {
     res.status(500).json({ ok:false, msg:'Não foi possível reconectar sua sessão: ' + String(error?.message || error) });
@@ -3141,11 +3146,23 @@ app.post('/api/user-session/reconnect', requireAuth, async (req,res) => {
 });
 app.post('/api/user-session/new-qr', requireAuth, async (req,res) => {
   try {
-    userLinkEngine.stopUser(req.user.id);
-    await userSessions.stop(req.user.id);
-    const session = await userSessions.start(req.user.id);
-    userLinkEngine.startUser(req.user.id);
-    res.json({ ok:true, msg:'Nova sessão individual iniciada.', session });
+    const userId = req.user.id;
+    userLinkEngine.stopUser(userId);
+    // Encerrar a conexão anterior antes de mexer nas credenciais desta conta.
+    await userSessions.stop(userId);
+
+    // "Novo QR" significa trocar de conta: remove SOMENTE a autenticação WhatsApp
+    // deste usuário. Dados, grupos, ofertas, histórico e agendamentos são preservados.
+    // Diferente de Desconectar/Reconectar, que precisam manter as credenciais.
+    const context = userContexts.createContext(userId);
+    const authDir = path.join(context.dir, 'auth');
+    fs.rmSync(authDir, { recursive:true, force:true });
+    fs.mkdirSync(authDir, { recursive:true, mode:0o700 });
+
+    const session = await userSessions.start(userId);
+    userLinkEngine.startUser(userId);
+    res.set('Cache-Control','no-store');
+    res.json({ ok:true, msg:'Autenticação anterior removida. Aguardando o QR Code para conectar outra conta.', session });
   } catch (error) {
     res.status(500).json({ ok:false, msg:'Não foi possível gerar uma nova sessão: ' + String(error?.message || error) });
   }
