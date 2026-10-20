@@ -342,6 +342,7 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 <button type="button" class="desktop-logs-button" onclick="openLogsPanel()">📜 Logs</button>
 <button type="button" onclick="document.getElementById('extratorUniversalPanel')?.scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>document.getElementById('extratorUniversalUrl')?.focus(),350)">🧪 Extrator</button>
 <button type="button" onclick="window.open('/guia-uso-responsavel.html','_blank','noopener')">📘 Guia e riscos</button>
+<button type="button" id="tutorialHelpButton" onclick="openRegulosTutorial(true)">🧭 Tutorial e ajuda</button>
 </div>
 </div></header>
 <div role="note" aria-label="Aviso sobre uso responsável do WhatsApp" style="max-width:1240px;margin:12px auto;padding:12px 16px;border:1px solid #8b5b19;border-left:5px solid #f59e0b;border-radius:12px;background:#2a2112;color:#fff2d4;font-size:14px;line-height:1.5">
@@ -1810,6 +1811,87 @@ if ('serviceWorker' in navigator) {
       .catch(err => console.warn('RegulOS PWA: falha ao registrar service worker', err));
   });
 }
+</script>
+
+<style>
+#regulosTutorialModal{position:fixed;inset:0;z-index:20000;background:rgba(2,6,16,.82);display:none;align-items:center;justify-content:center;padding:16px}
+#regulosTutorialModal.open{display:flex}
+.regulos-tutorial-card{width:min(680px,100%);max-height:min(88vh,850px);overflow:auto;background:#101b2d;border:1px solid #365174;border-radius:18px;padding:22px;box-shadow:0 24px 80px #000a}
+.regulos-tutorial-card h2{font-size:23px;margin:0 0 8px}.regulos-tutorial-card p,.regulos-tutorial-card li{line-height:1.6}
+.regulos-tutorial-progress{color:#9eb0ca;font-size:13px;margin-bottom:10px}
+.regulos-tutorial-actions{display:flex;gap:8px;justify-content:space-between;flex-wrap:wrap;margin-top:18px}
+.regulos-tutorial-actions .right{display:flex;gap:8px;flex-wrap:wrap}
+.regulos-tutorial-ack{display:flex;gap:10px;align-items:flex-start;background:#2a2112;border:1px solid #8b5b19;border-radius:10px;padding:12px;margin-top:14px}
+.regulos-tutorial-ack input{width:auto;margin-top:5px}
+@media(max-width:600px){.regulos-tutorial-card{padding:16px}.regulos-tutorial-actions button{flex:1}}
+</style>
+<div id="regulosTutorialModal" role="dialog" aria-modal="true" aria-labelledby="regulosTutorialTitle">
+ <div class="regulos-tutorial-card">
+  <div class="regulos-tutorial-progress" id="regulosTutorialProgress">Tutorial de boas-vindas</div>
+  <h2 id="regulosTutorialTitle">Bem-vindo ao RegulOS!</h2>
+  <div id="regulosTutorialContent"></div>
+  <label class="regulos-tutorial-ack" id="regulosTutorialAck" style="display:none">
+   <input type="checkbox" id="regulosTutorialRulesCheck">
+   <span>Li e compreendi as orientações de uso responsável e entendo que o agendamento não torna automaticamente permitido o envio. Vou respeitar as regras do WhatsApp, as autorizações necessárias e os pedidos para interromper mensagens.</span>
+  </label>
+  <div class="regulos-tutorial-actions">
+   <button type="button" id="regulosTutorialLater" onclick="closeRegulosTutorial()">Fechar por enquanto</button>
+   <div class="right">
+    <button type="button" id="regulosTutorialBack" onclick="regulosTutorialStep(-1)">← Voltar</button>
+    <button type="button" class="primary" id="regulosTutorialNext" onclick="regulosTutorialStep(1)">Próximo →</button>
+    <button type="button" class="green" id="regulosTutorialFinish" onclick="finishRegulosTutorial()" style="display:none">Concluir tutorial</button>
+   </div>
+  </div>
+ </div>
+</div>
+<script>
+(function(){
+ const steps=[
+  {title:'Bem-vindo ao RegulOS!',body:'<p>Este guia mostra o fluxo básico para começar a usar o painel. Você pode fechar e voltar depois pelo botão <b>🧭 Tutorial e ajuda</b>.</p><ul><li>Confira as opções disponíveis na sua conta.</li><li>Use os botões de ajuda sempre que precisar.</li></ul>'},
+  {title:'1. Conecte o WhatsApp e revise os grupos',body:'<p>Use <b>Conectar WhatsApp</b> e escaneie o QR Code com a conta correta. Não compartilhe o QR Code nem a sessão.</p><p>Depois, confira os grupos selecionados e certifique-se de que você tem autorização para publicar ali e que os destinatários esperam esse tipo de mensagem.</p>'},
+  {title:'2. Confira ofertas e agendamentos',body:'<p>Antes de salvar, revise o título, o link, a imagem, o preço, o desconto, os grupos e o horário. Confirme que a oferta está correta e continua válida.</p><p>Consulte o histórico e a área de falhas para acompanhar os resultados. Uma falha deve ser analisada antes de tentar novamente.</p>'},
+  {title:'3. Regras e riscos do WhatsApp',body:'<p>O WhatsApp pode restringir ou banir contas por spam, mensagens automáticas ou em massa não autorizadas. Não existe um número universal de envios que garanta segurança.</p><ul><li>Não faça disparos indiscriminados nem envie mensagens não solicitadas.</li><li>Respeite pedidos para parar e as regras dos grupos.</li><li>Não tente contornar bloqueios ou sistemas de detecção.</li></ul><p><a href="/guia-uso-responsavel.html" target="_blank" rel="noopener">Abrir o guia completo e as políticas oficiais ↗</a></p>'}
+ ];
+ let current=0,forced=false;
+ const modal=()=>document.getElementById('regulosTutorialModal');
+ function render(){
+  const s=steps[current];
+  document.getElementById('regulosTutorialTitle').textContent=s.title;
+  document.getElementById('regulosTutorialContent').innerHTML=s.body;
+  document.getElementById('regulosTutorialProgress').textContent='Etapa '+(current+1)+' de '+steps.length;
+  document.getElementById('regulosTutorialBack').style.display=current===0?'none':'inline-block';
+  document.getElementById('regulosTutorialNext').style.display=current===steps.length-1?'none':'inline-block';
+  document.getElementById('regulosTutorialFinish').style.display=current===steps.length-1?'inline-block':'none';
+  document.getElementById('regulosTutorialAck').style.display=current===steps.length-1?'flex':'none';
+  document.getElementById('regulosTutorialRulesCheck').checked=false;
+ }
+ window.openRegulosTutorial=function(force){
+  forced=!!force;current=0;render();modal().classList.add('open');
+  document.getElementById('regulosTutorialLater').style.display=forced?'inline-block':'none';
+ };
+ window.closeRegulosTutorial=function(){modal().classList.remove('open');};
+ window.regulosTutorialStep=function(delta){current=Math.max(0,Math.min(steps.length-1,current+delta));render();};
+ window.finishRegulosTutorial=async function(){
+  if(!document.getElementById('regulosTutorialRulesCheck').checked){alert('Marque a confirmação após ler as orientações para concluir.');return;}
+  const btn=document.getElementById('regulosTutorialFinish');btn.disabled=true;
+  try{
+   const res=await fetch('/api/tutorial/complete',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({whatsappRulesAccepted:true})});
+   const data=await res.json();
+   if(!res.ok||!data.ok)throw new Error(data.msg||'Não foi possível registrar a conclusão.');
+   modal().classList.remove('open');
+  }catch(e){alert(e.message||'Erro ao salvar o tutorial. Tente novamente.');}
+  finally{btn.disabled=false;}
+ };
+ async function checkFirstAccess(){
+  try{
+   const res=await fetch('/api/tutorial/status',{credentials:'same-origin',cache:'no-store'});
+   if(!res.ok)return;
+   const data=await res.json();
+   if(data.ok&&data.tutorial?.completed!==true){window.openRegulosTutorial(false);document.getElementById('regulosTutorialLater').style.display='inline-block';}
+  }catch(e){console.debug('Tutorial indisponível:',e);}
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',checkFirstAccess,{once:true});else checkFirstAccess();
+})();
 </script>
 </body>
 </html>
