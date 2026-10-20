@@ -345,6 +345,11 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 <button type="button" id="tutorialHelpButton" onclick="openRegulosTutorial(true)">🧭 Tutorial e ajuda</button>
 </div>
 </div></header>
+<div id="regulosTutorialLauncherRow" style="max-width:1240px;margin:12px auto;display:flex;justify-content:flex-end;padding:0 4px">
+ <button type="button" id="regulosTutorialLauncher" onclick="if(typeof window.openRegulosTutorial==='function'){window.openRegulosTutorial(true)}else{alert('O tutorial ainda está carregando. Atualize a página e tente novamente.')}" style="display:inline-flex;align-items:center;gap:8px;background:#245b9c;border:2px solid #79a9ef;color:#fff;border-radius:10px;padding:11px 16px;font-weight:800;font-size:14px;cursor:pointer;box-shadow:0 4px 14px #0005">
+ 🧭 Abrir tutorial do RegulOS
+ </button>
+</div>
 <div role="note" aria-label="Aviso sobre uso responsável do WhatsApp" style="max-width:1240px;margin:12px auto;padding:12px 16px;border:1px solid #8b5b19;border-left:5px solid #f59e0b;border-radius:12px;background:#2a2112;color:#fff2d4;font-size:14px;line-height:1.5">
 <strong>⚠️ Uso responsável:</strong> o WhatsApp pode restringir contas por spam ou mensagens automáticas/em massa não autorizadas. Envie somente conteúdo permitido e esperado pelos destinatários; não use para disparos indiscriminados. <a href="/guia-uso-responsavel.html" style="color:#9dc6ff;font-weight:700">Leia o guia e as políticas oficiais</a>.
 </div>
