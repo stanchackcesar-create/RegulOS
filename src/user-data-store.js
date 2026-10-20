@@ -16,7 +16,8 @@ const USER_DATA_FILES = Object.freeze({
   linkFailures: 'links_com_falha.json',
   deliveries: 'entregas_links.json',
   botSchedule: 'programacao_bot.json',
-  linkQueue: 'fila_links.json'
+  linkQueue: 'fila_links.json',
+  dynamicSchedule: 'dynamic_schedule.json'
 });
 
 function validateUserId(userId) {
