@@ -340,6 +340,31 @@ app.post('/api/auth/verify-email',(req,res)=>{
   user.emailVerificado=true; user.ativo=true; saveUsers(users); emailTokens.delete(digest);
   res.json({ok:true,msg:'E-mail confirmado. Sua conta aguarda liberação do administrador.'});
 });
+app.post('/api/auth/resend-verification',async(req,res)=>{
+  if(!recoveryAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas solicitações. Aguarde alguns minutos antes de pedir outro código.'});
+  const usuario=String(req.body?.usuario||'').trim().toLowerCase();
+  if(!/^[a-z0-9._-]{3,32}$/.test(usuario)) return res.status(400).json({ok:false,msg:'Informe o nome de usuário usado no cadastro.'});
+  const users=readUsers();
+  const user=users.find(u=>String(u.usuario||'').toLowerCase()===usuario);
+  if(!user || !user.email || user.emailVerificado===true || user.ativo===true) {
+    registerRecoveryFailure(req);
+    return res.status(400).json({ok:false,msg:'Não encontramos uma conta pendente de confirmação para esse usuário. Confira o nome ou tente entrar.'});
+  }
+  const purpose=user.admin===true?'setup-admin':'verify';
+  const token=String(crypto.randomInt(0,1000000)).padStart(6,'0');
+  const digest=crypto.createHash('sha256').update(token).digest('hex');
+  for(const [key,value] of emailTokens) if(value.userId===user.id && ['verify','setup-admin'].includes(value.purpose)) emailTokens.delete(key);
+  const ttl=purpose==='setup-admin'?20:30;
+  emailTokens.set(digest,{userId:user.id,email:user.email,expiresAt:Date.now()+ttl*60*1000,purpose});
+  try {
+    await sendGmail({to:user.email,subject:purpose==='setup-admin'?'Novo código de confirmação do administrador — RegulOS':'Novo código de confirmação — RegulOS',text:'Seu novo código de confirmação do RegulOS é: '+token+'\n\nEle expira em '+ttl+' minutos. O código anterior foi invalidado. Se você não solicitou este código, ignore esta mensagem.'});
+  } catch(err) {
+    emailTokens.delete(digest);
+    const msg=err.message==='GMAIL_NOT_CONFIGURED'?'O envio de e-mail ainda não foi configurado no ambiente de testes.':'Não foi possível enviar o código agora. Confira a configuração de e-mail e tente novamente.';
+    return res.status(503).json({ok:false,msg});
+  }
+  res.json({ok:true,msg:'Enviamos um novo código para o e-mail cadastrado. O código anterior não é mais válido.'});
+});
 app.post('/api/auth/forgot-password',async(req,res)=>{
   if(!recoveryAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas. Aguarde alguns minutos.'});
   const email=String(req.body?.email||'').trim().toLowerCase();
