@@ -3088,6 +3088,29 @@ app.get('/api/logs', requireAuth, (req,res) => {
 app.post('/api/reconectar', requireAuth, (req,res) => {
   return res.status(409).json({ok:false,msg:'A conexão global foi desativada durante a migração multiusuário. Use Conectar WhatsApp na sua própria conta.'});
 });
+app.get('/api/link-historico', requireAuth, (req,res)=>{
+  const historico=readUserArray(req,'linkHistory');
+  res.set('Cache-Control','no-store');
+  res.json({ok:true,historico:historico.slice(0,1000)});
+});
+app.delete('/api/link-historico/:id', requireAuth, (req,res)=>{
+  const historico=readUserArray(req,'linkHistory');
+  const next=historico.filter(x=>String(x.id)!==String(req.params.id));
+  writeUserArray(req,'linkHistory',next);
+  res.json({ok:true,removidos:historico.length-next.length});
+});
+app.get('/api/link-falhas', requireAuth, (req,res)=>{
+  const falhas=readUserArray(req,'linkFailures');
+  res.set('Cache-Control','no-store');
+  res.json({ok:true,falhas});
+});
+app.delete('/api/link-falhas/:id', requireAuth, (req,res)=>{
+  const falhas=readUserArray(req,'linkFailures');
+  const next=falhas.filter(x=>String(x.id)!==String(req.params.id));
+  writeUserArray(req,'linkFailures',next);
+  res.json({ok:true,removidos:falhas.length-next.length});
+});
+
 app.get('/api/entregas', requireAuth, (req,res) => {
   try {
     const agendamentoId=String(req.query?.agendamentoId||'').trim();
