@@ -3140,7 +3140,7 @@ app.delete('/api/link-falhas/:id', requireAuth, (req,res)=>{
 app.get('/api/entregas', requireAuth, (req,res) => {
   try {
     const agendamentoId=String(req.query?.agendamentoId||'').trim();
-    const ocorrencia=String(req.query?.ocorrencia||'').trim();
+    const ocorrencia=String(req.query?.ocorrencia||req.query?.o||'').trim();
     const status=String(req.query?.status||'').trim().toUpperCase();
     let entregas=readUserArray(req,'deliveries');
     if(agendamentoId)entregas=entregas.filter(x=>String(x?.agendamentoId||'')===agendamentoId);
