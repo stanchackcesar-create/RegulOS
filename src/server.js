@@ -945,33 +945,74 @@ app.use(requireAuth);
 // fazendo o navegador bloquear os scripts por MIME type text/html.
 app.use(express.static(PUBLIC, { index: false }));
 
-app.post('/api/auth/change-password',requireAuth,requireAdmin,(req,res)=>{
+// Alteração de senha para qualquer conta autenticada, com confirmação por e-mail.
+app.post('/api/account/request-password-change',requireAuth,async(req,res)=>{
+  if(!recoveryAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas. Aguarde alguns minutos.'});
   const senhaAtual=String(req.body?.senhaAtual||'');
   const novaSenha=String(req.body?.novaSenha||'');
   const confirmarSenha=String(req.body?.confirmarSenha||'');
-  if(!senhaAtual || !novaSenha || !confirmarSenha)
-    return res.status(400).json({ok:false,msg:'Preencha a senha atual, a nova senha e a confirmação.'});
-  if(novaSenha.length<6)
-    return res.status(400).json({ok:false,msg:'A nova senha deve ter pelo menos 6 caracteres.'});
-  if(novaSenha!==confirmarSenha)
-    return res.status(400).json({ok:false,msg:'A confirmação da nova senha não confere.'});
-  const users=readUsers();
-  const user=users.find(x=>x.id===req.user.id);
-  if(!user || !verifyPassword(senhaAtual,user))
-    return res.status(401).json({ok:false,msg:'A senha atual está incorreta.'});
+  if(!senhaAtual||novaSenha.length<8||novaSenha!==confirmarSenha) return res.status(400).json({ok:false,msg:'Confira a senha atual e informe uma nova senha com pelo menos 8 caracteres, repetida corretamente.'});
+  const users=readUsers(), user=users.find(x=>x.id===req.user.id);
+  if(!user||!verifyPassword(senhaAtual,user)) {registerRecoveryFailure(req);return res.status(401).json({ok:false,msg:'A senha atual está incorreta.'});}
+  if(!user.email||user.emailVerificado!==true) return res.status(400).json({ok:false,msg:'Confirme um e-mail na conta antes de alterar a senha.'});
+  const token=String(crypto.randomInt(0,1000000)).padStart(6,'0'), digest=crypto.createHash('sha256').update(token).digest('hex');
   const salt=crypto.randomBytes(16).toString('hex');
-  user.salt=salt;
-  user.hash=hashPassword(novaSenha,salt);
-  users.splice(users.findIndex(x=>x.id===user.id),1,user);
-  saveUsers(users);
-  const sessions=readSessions();
-  for(const [token,session] of Object.entries(sessions)){
-    if(session?.userId===user.id) delete sessions[token];
+  emailTokens.set(digest,{userId:user.id,purpose:'change-password',salt,hash:hashPassword(novaSenha,salt),expiresAt:Date.now()+20*60*1000});
+  try{await sendGmail({to:user.email,subject:'Confirme a alteração de senha — RegulOS',text:'Foi solicitada uma alteração de senha na sua conta RegulOS.\n\nCódigo: '+token+'\n\nO código expira em 20 minutos. Se não foi você, ignore esta mensagem.'});}
+  catch(err){emailTokens.delete(digest);return res.status(503).json({ok:false,msg:err.message==='GMAIL_NOT_CONFIGURED'?'O envio de e-mail não está configurado.':'Não foi possível enviar o código agora.'});}
+  res.json({ok:true,msg:'Enviamos um código de confirmação para o e-mail cadastrado.'});
+});
+app.post('/api/account/request-email-change',requireAuth,async(req,res)=>{
+  if(!recoveryAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas. Aguarde alguns minutos.'});
+  const email=String(req.body?.email||'').trim().toLowerCase();
+  if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return res.status(400).json({ok:false,msg:'Informe um e-mail válido.'});
+  const users=readUsers(), user=users.find(x=>x.id===req.user.id);
+  if(!user) return res.status(401).json({ok:false,msg:'Conta não encontrada.'});
+  if(users.some(x=>x.id!==user.id&&String(x.email||'').toLowerCase()===email)) return res.status(409).json({ok:false,msg:'Esse e-mail já está vinculado a outra conta.'});
+  if(String(user.email||'').toLowerCase()===email&&user.emailVerificado===true) return res.status(400).json({ok:false,msg:'Esse já é o e-mail confirmado da conta.'});
+  const token=String(crypto.randomInt(0,1000000)).padStart(6,'0'), digest=crypto.createHash('sha256').update(token).digest('hex');
+  emailTokens.set(digest,{userId:user.id,purpose:'change-email',email,expiresAt:Date.now()+20*60*1000});
+  try{await sendGmail({to:email,subject:'Confirme seu novo e-mail — RegulOS',text:'Você solicitou alterar o e-mail da sua conta RegulOS.\n\nCódigo: '+token+'\n\nO código expira em 20 minutos. O endereço só será alterado após a confirmação.'});}
+  catch(err){emailTokens.delete(digest);return res.status(503).json({ok:false,msg:err.message==='GMAIL_NOT_CONFIGURED'?'O envio de e-mail não está configurado.':'Não foi possível enviar o código agora.'});}
+  res.json({ok:true,msg:'Enviamos um código para o novo e-mail. A alteração só ocorrerá após a confirmação.'});
+});
+app.post('/api/account/request-delete',requireAuth,async(req,res)=>{
+  if(req.user.admin===true) return res.status(403).json({ok:false,msg:'A conta administrativa não pode ser excluída por este recurso.'});
+  const users=readUsers(), user=users.find(x=>x.id===req.user.id);
+  if(!user) return res.status(401).json({ok:false,msg:'Conta não encontrada.'});
+  if(!user.email||user.emailVerificado!==true) return res.status(400).json({ok:false,msg:'É necessário ter um e-mail confirmado para excluir a conta.'});
+  const token=String(crypto.randomInt(0,1000000)).padStart(6,'0'), digest=crypto.createHash('sha256').update(token).digest('hex');
+  emailTokens.set(digest,{userId:user.id,purpose:'delete-account',expiresAt:Date.now()+20*60*1000});
+  try{await sendGmail({to:user.email,subject:'Confirme a exclusão da conta — RegulOS',text:'Você solicitou excluir sua conta RegulOS.\n\nCódigo: '+token+'\n\nO código expira em 20 minutos. Se não foi você, ignore esta mensagem.'});}
+  catch(err){emailTokens.delete(digest);return res.status(503).json({ok:false,msg:err.message==='GMAIL_NOT_CONFIGURED'?'O envio de e-mail não está configurado.':'Não foi possível enviar o código agora.'});}
+  res.json({ok:true,msg:'Enviamos um código para o e-mail cadastrado. A conta não será excluída até você confirmar.'});
+});
+app.post('/api/account/confirm-change',requireAuth,(req,res)=>{
+  const codigo=String(req.body?.codigo||'').trim(), purpose=String(req.body?.purpose||'');
+  if(!/^\\d{6}$/.test(codigo)||!['change-password','change-email','delete-account'].includes(purpose)) return res.status(400).json({ok:false,msg:'Código ou operação inválida.'});
+  const digest=crypto.createHash('sha256').update(codigo).digest('hex'), entry=emailTokens.get(digest);
+  if(!entry||entry.userId!==req.user.id||entry.purpose!==purpose||entry.expiresAt<Date.now()) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
+  const users=readUsers(), index=users.findIndex(x=>x.id===req.user.id);
+  if(index<0) return res.status(401).json({ok:false,msg:'Conta não encontrada.'});
+  const user=users[index];
+  if(purpose==='change-password'){
+    user.salt=entry.salt;user.hash=entry.hash;saveUsers(users);emailTokens.delete(digest);
+    const sessions=readSessions();for(const [k,v] of Object.entries(sessions))if(v?.userId===user.id)delete sessions[k];saveSessions(sessions);
+    const secure=process.env.NODE_ENV==='production'?'; Secure':'';
+    res.setHeader('Set-Cookie',`regulos_session=; Path=/; HttpOnly; SameSite=Lax${secure}; Max-Age=0`);
+    return res.json({ok:true,msg:'Senha alterada. Entre novamente com a nova senha.',reauth:true});
   }
-  saveSessions(sessions);
-  const secure = process.env.NODE_ENV === 'production' ? '; Secure' : '';
+  if(purpose==='change-email'){
+    if(users.some(x=>x.id!==user.id&&String(x.email||'').toLowerCase()===String(entry.email||'').toLowerCase())) return res.status(409).json({ok:false,msg:'Esse e-mail já está vinculado a outra conta.'});
+    user.email=entry.email;user.emailVerificado=true;user.emailConfirmadoEm=new Date().toISOString();saveUsers(users);emailTokens.delete(digest);
+    return res.json({ok:true,msg:'Novo e-mail confirmado e salvo.'});
+  }
+  if(user.admin===true) return res.status(403).json({ok:false,msg:'A conta administrativa não pode ser excluída por este recurso.'});
+  saveUsers(users.filter(x=>x.id!==user.id));
+  const sessions=readSessions();for(const [k,v] of Object.entries(sessions))if(v?.userId===user.id)delete sessions[k];saveSessions(sessions);emailTokens.delete(digest);
+  const secure=process.env.NODE_ENV==='production'?'; Secure':'';
   res.setHeader('Set-Cookie',`regulos_session=; Path=/; HttpOnly; SameSite=Lax${secure}; Max-Age=0`);
-  res.json({ok:true,msg:'Senha do administrador alterada. Faça login novamente com a nova senha.'});
+  res.json({ok:true,msg:'Sua conta foi excluída. Os dados compartilhados do RegulOS foram preservados.',deleted:true});
 });
 
 app.get('/api/usuarios',requireAuth,requireAdmin,(req,res)=>{
