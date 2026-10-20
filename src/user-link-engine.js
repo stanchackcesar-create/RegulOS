@@ -145,7 +145,13 @@ function createUserLinkEngine(options = {}) {
       const queue=object(userId,'linkQueue'); queue.lastItemId=item.id;queue.lastRunAt=new Date().toISOString();queue.updatedAt=new Date().toISOString();write(userId,'linkQueue',queue);
       return {ok:completed,sent,errors,status:item.status};
     } catch(error) {
-      item.status='erro'; item.lastError=String(error?.message||error); write(userId,'schedules',items);
+      item.status='erro'; item.lastError=String(error?.message||error);
+      for(const id of targets) {
+        addDelivery(userId,item,id,'ERRO',{erro:item.lastError});
+        addHistory(userId,item,id,'erro',item.lastError);
+        setFailure(userId,item,id,item.lastError);
+      }
+      write(userId,'schedules',items);
       return {ok:false,reason:'error',error:item.lastError};
     } finally { busy.delete(lock); }
   }
