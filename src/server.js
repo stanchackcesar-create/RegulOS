@@ -965,7 +965,7 @@ app.post('/api/account/request-password-change',requireAuth,async(req,res)=>{
 app.post('/api/account/request-email-change',requireAuth,async(req,res)=>{
   if(!recoveryAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas. Aguarde alguns minutos.'});
   const email=String(req.body?.email||'').trim().toLowerCase();
-  if(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) return res.status(400).json({ok:false,msg:'Informe um e-mail válido.'});
+  if(!/^[^\s@]+@[^\s@]+\\.[^\s@]+$/.test(email)) return res.status(400).json({ok:false,msg:'Informe um e-mail válido.'});
   const users=readUsers(), user=users.find(x=>x.id===req.user.id);
   if(!user) return res.status(401).json({ok:false,msg:'Conta não encontrada.'});
   if(users.some(x=>x.id!==user.id&&String(x.email||'').toLowerCase()===email)) return res.status(409).json({ok:false,msg:'Esse e-mail já está vinculado a outra conta.'});
@@ -989,7 +989,7 @@ app.post('/api/account/request-delete',requireAuth,async(req,res)=>{
 });
 app.post('/api/account/confirm-change',requireAuth,(req,res)=>{
   const codigo=String(req.body?.codigo||'').trim(), purpose=String(req.body?.purpose||'');
-  if(!/^\\d{6}$/.test(codigo)||!['change-password','change-email','delete-account'].includes(purpose)) return res.status(400).json({ok:false,msg:'Código ou operação inválida.'});
+  if(!/^\d{6}$/.test(codigo)||!['change-password','change-email','delete-account'].includes(purpose)) return res.status(400).json({ok:false,msg:'Código ou operação inválida.'});
   const digest=crypto.createHash('sha256').update(codigo).digest('hex'), entry=emailTokens.get(digest);
   if(!entry||entry.userId!==req.user.id||entry.purpose!==purpose||entry.expiresAt<Date.now()) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
   const users=readUsers(), index=users.findIndex(x=>x.id===req.user.id);
@@ -1783,7 +1783,7 @@ function extractImageCandidates(html, baseUrl) {
     } catch {
       // Alguns sites usam JSON-LD com entidades HTML; tente localizar URLs de imagem mesmo assim.
       const rough=decodeHtmlEntities(m[1]);
-      const urls=rough.match(/https?:[^"'\\s<>]+/gi)||[];
+      const urls=rough.match(/https?:[^"'\s<>]+/gi)||[];
       urls.forEach(u=>add(u,4));
     }
   }
@@ -1797,7 +1797,7 @@ function extractImageCandidates(html, baseUrl) {
       'data-zoom-image','data-large_image','data-fsrc','data-url','data-srcset','srcset'
     ];
     for(const attr of attrs){
-      const re=new RegExp(attr + "\\s*=\\s*[\"\']([^\"\']+)[\"\']", "i");
+      const re=new RegExp(attr + "\s*=\s*[\"\']([^\"\']+)[\"\']", "i");
       const mm=re.exec(tag); if(!mm) continue;
       const values=attr.toLowerCase().includes('srcset')?extractSrcset(mm[1]):[mm[1]];
       values.forEach(v=>add(v, attr==='src'?30:10));
@@ -1991,12 +1991,12 @@ async function getMercadoLivreOfferInfo(url){
           if(Number.isFinite(x)&&x>0&&x<100000000)arr.push(x);
         };
         const collect=(regex,arr)=>{for(const m of html.matchAll(regex))addNumber(arr,m[1]);};
-        collect(/["'](?:price|current_price|sale_price|final_price|selling_price)["']\\s*[:=]\\s*["']?([0-9]+(?:[.,][0-9]+)?)/gi,currentValues);
-        collect(/["'](?:original_price|old_price|list_price|regular_price|base_price|price_before_discount)["']\\s*[:=]\\s*["']?([0-9]+(?:[.,][0-9]+)?)/gi,originalValues);
-        collect(/(?:product:price:amount|og:price:amount)["']?\\s*content=["']([0-9]+(?:[.,][0-9]+)?)/gi,currentValues);
-        collect(/(?:product:original_price:amount|product:list_price:amount|original_price)["']?\\s*content=["']([0-9]+(?:[.,][0-9]+)?)/gi,originalValues);
+        collect(/["'](?:price|current_price|sale_price|final_price|selling_price)["']\s*[:=]\s*["']?([0-9]+(?:[.,][0-9]+)?)/gi,currentValues);
+        collect(/["'](?:original_price|old_price|list_price|regular_price|base_price|price_before_discount)["']\s*[:=]\s*["']?([0-9]+(?:[.,][0-9]+)?)/gi,originalValues);
+        collect(/(?:product:price:amount|og:price:amount)["']?\s*content=["']([0-9]+(?:[.,][0-9]+)?)/gi,currentValues);
+        collect(/(?:product:original_price:amount|product:list_price:amount|original_price)["']?\s*content=["']([0-9]+(?:[.,][0-9]+)?)/gi,originalValues);
 
-        const visible=html.match(/R\\$\\s*[0-9.]+(?:,[0-9]{2})?/g)||[];
+        const visible=html.match(/R\\$\s*[0-9.]+(?:,[0-9]{2})?/g)||[];
         for(const value of visible.slice(0,80))addNumber(currentValues,value);
 
         const discountPct=Number(String(best.desconto||'').replace(/[^0-9]/g,''));
