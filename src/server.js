@@ -3094,14 +3094,17 @@ app.get('/api/link-historico', requireAuth, (req,res)=>{
 });
 app.delete('/api/link-historico', requireAuth, (req,res)=>{
   const current=readUserArray(req,'linkHistory');
+  const deliveries=readUserArray(req,'deliveries');
   writeUserArray(req,'linkHistory',[]);
-  res.json({ok:true,msg:'Histórico desta conta apagado.',removidos:current.length});
+  const kept=deliveries.filter(x=>['ENVIANDO','PENDENTE'].includes(String(x?.status||'').toUpperCase()));
+  writeUserArray(req,'deliveries',kept);
+  res.json({ok:true,msg:'Histórico e entregas finalizadas desta conta apagados; entregas em andamento preservadas.',removidos:current.length,entregasRemovidas:deliveries.length-kept.length});
 });
 app.delete('/api/link-historico/:id', requireAuth, (req,res)=>{
   const historico=readUserArray(req,'linkHistory');
   const next=historico.filter(x=>String(x.id)!==String(req.params.id));
   writeUserArray(req,'linkHistory',next);
-  res.json({ok:true,removidos:historico.length-next.length});
+  res.json({ok:true,msg:'Registro removido do histórico desta conta.',removidos:historico.length-next.length});
 });
 app.get('/api/link-falhas', requireAuth, (req,res)=>{
   const falhas=readUserArray(req,'linkFailures');
@@ -3131,7 +3134,7 @@ app.delete('/api/link-falhas/:id', requireAuth, (req,res)=>{
   const falhas=readUserArray(req,'linkFailures');
   const next=falhas.filter(x=>String(x.id)!==String(req.params.id));
   writeUserArray(req,'linkFailures',next);
-  res.json({ok:true,removidos:falhas.length-next.length});
+  res.json({ok:true,msg:'Registro de falha removido desta conta.',removidos:falhas.length-next.length});
 });
 
 app.get('/api/entregas', requireAuth, (req,res) => {
