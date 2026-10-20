@@ -3040,22 +3040,9 @@ app.get('/api/status', requireAuth, (req,res) => {
 app.get('/api/qr', (req,res) => res.json({ok:true, qr, status, conectado:online}));
 app.get('/api/logs', (req,res) => res.json({ok:true, logs:[...logs].reverse()}));
 
-app.post('/api/reconectar', requireAdmin, async (req,res) => {
-  clearReconnect(); stopSchedulers(); manualDisconnected=false;
-  const old=sock; sock=null; online=false; qr=null; connectedNumber='';
-  status='Reconectando...'; addLog('Reconexão manual solicitada.');
-  try { old?.end(); } catch {}
-  setTimeout(() => start(), 300);
-  res.json({ok:true,msg:'Reconexão iniciada. Aguarde.'});
-})
-function diagnosticoSchedulerState() {
-  const ativos = Array.isArray(linkSchedules) ? linkSchedules.filter(x => x && x.ativo !== false) : [];
-  const pendentes = ativos.filter(x => hasPendingProgress(x));
-  const enviando = ativos.filter(x => String(x?.status || '') === 'enviando');
-  return { ativos, pendentes, enviando };
-}
-
-
+app.post('/api/reconectar', requireAuth, (req,res) => {
+  return res.status(409).json({ok:false,msg:'A conexão global foi desativada durante a migração multiusuário. Use Conectar WhatsApp na sua própria conta.'});
+});
 app.get('/api/entregas', requireAuth, (req,res) => {
   try {
     const agendamentoId = String(req.query?.agendamentoId || '').trim();
@@ -3152,103 +3139,15 @@ app.get('/api/diagnostico', (req,res) => {
 });
 ;
 
-app.post('/api/desconectar', requireAdmin, async (req,res) => {
-  // Desconectar pelo painel agora significa ENCERRAR a sessão atual e
-  // preparar imediatamente um novo QR para outro número.
-  // Também limpamos o cache de grupos/seleções para nunca deixar grupos
-  // do número anterior aparecendo depois da troca de conta.
-  clearReconnect();
-  stopSchedulers();
-  clearLinkHistory();
-  clearLinkFailures();
-  manualDisconnected=true;
-
-  const old=sock;
-  sock=null;
-  online=false;
-  qr=null;
-  connectedNumber='';
-  groups=[];
-  lastGroupRefreshAt=0;
-  allowed=[];
-
-  try {
-    if (old) await old.logout();
-  } catch(e) {
-    addLog(`Logout no desconectar: ${e.message}`);
-  }
-  try { old?.end(); } catch {}
-
-  // Não reutilizar permissões dos grupos da conta anterior.
-  try { writeJson(FILES.groups, []); } catch(e) {
-    addLog(`Erro limpando grupos permitidos: ${e.message}`);
-  }
-
-  try { fs.rmSync(AUTH,{recursive:true,force:true}); } catch(e) {
-    addLog(`Erro limpando sessão: ${e.message}`);
-  }
-
-  status='Gerando novo QR Code...';
-  addLog('Conta desconectada pelo painel. Grupos antigos removidos; iniciando novo QR.');
-
-  // O fechamento provocado pelo logout não deve disparar reconexão automática.
-  // Reativamos o ciclo normal somente antes de iniciar a nova sessão.
-  res.json({ok:true,msg:'WhatsApp desconectado. Os grupos antigos foram removidos. Gerando novo QR Code...'});
-
-  setTimeout(() => {
-    manualDisconnected=false;
-    start();
-  }, 700);
+app.post('/api/desconectar', requireAuth, (req,res) => {
+  return res.status(409).json({ok:false,msg:'A desconexão global foi desativada para proteger as sessões individuais. Use Desconectar WhatsApp na sua própria conta.'});
 });
-
-app.post('/api/novo-qr', requireAdmin, async (req,res) => {
-  // Somente o botão "Novo QR Code" inicia uma sessão limpa.
-  // Mantém usuários e demais dados do RegulOS; remove credenciais WhatsApp,
-  // cache/lista de grupos e permissões da sessão anterior para evitar acúmulo.
-  clearReconnect();
-  stopSchedulers();
-  clearLinkHistory();
-  clearLinkFailures();
-  manualDisconnected=false;
-  try { linkSchedules=[]; writeJson(FILES.schedules, linkSchedules); } catch(e) { addLog(`Erro limpando agendamentos: ${e.message}`); }
-  try {
-    groups=[];
-    allowed=[];
-    lastGroupRefreshAt=0;
-    writeJson(FILES.groups, []);
-    writeJson(FILES.groupConfig, {});
-  } catch(e) { addLog(`Erro limpando grupos/configurações: ${e.message}`); }
-  try {
-    linkQueue={cursor:0,currentId:'',updatedAt:new Date().toISOString()};
-    saveLinkQueue();
-  } catch(e) { addLog(`Erro limpando fila de links: ${e.message}`); }
-  const old=sock;
-  sock=null; online=false; qr=null; connectedNumber='';
-  status='Gerando novo QR Code...';
-  addLog('Novo QR solicitado: credenciais WhatsApp, grupos, permissões, configurações de grupo, agendamentos e históricos da sessão anterior limpos. Usuários e demais dados do sistema preservados.');
-  try { old?.end(); } catch {}
-  try { fs.rmSync(AUTH,{recursive:true,force:true}); } catch(e) { addLog(`Erro limpando sessão: ${e.message}`); }
-  // Responde antes de iniciar o socket para evitar corrida com o navegador.
-  res.json({ok:true,msg:'Sessão anterior limpa; usuários e demais dados do sistema preservados. O novo QR será exibido automaticamente.'});
-  setTimeout(() => start(), 350);
+app.post('/api/novo-qr', requireAuth, (req,res) => {
+  return res.status(409).json({ok:false,msg:'O QR global foi desativado para proteger as sessões individuais. Solicite um novo QR na sua própria conta.'});
 });
-
-app.post('/api/deslogar', requireAdmin, async (req,res) => {
-  clearReconnect(); stopSchedulers(); clearLinkHistory();
-  clearLinkFailures(); manualDisconnected=false;
-  try { linkSchedules=[]; writeJson(FILES.schedules, linkSchedules); } catch(e) { addLog(`Erro limpando agendamentos: ${e.message}`); }
-  try { groups=[]; allowed=[]; writeJson(FILES.groups, []); } catch(e) { addLog(`Erro limpando grupos: ${e.message}`); }
-  const old=sock; sock=null; online=false; qr=null; connectedNumber='';
-  status='Removendo sessão...';
-  try { await old?.logout(); } catch(e) { addLog(`Logout: ${e.message}`); }
-  try { old?.end(); } catch {}
-  try { fs.rmSync(AUTH,{recursive:true,force:true}); } catch(e) { addLog(`Erro limpando sessão: ${e.message}`); }
-  status='Gerando novo QR Code...';
-  addLog('Sessão removida; iniciando nova autenticação.');
-  res.json({ok:true,msg:'Sessão removida. O novo QR será exibido automaticamente.'});
-  setTimeout(() => start(), 500);
+app.post('/api/deslogar', requireAuth, (req,res) => {
+  return res.status(409).json({ok:false,msg:'A remoção da sessão global foi desativada. Gerencie somente a sessão da sua conta.'});
 });
-
 app.get('/api/grupos', requireAuth, (req,res) => {
   const grupos = getUserSessionGroups(req);
   const allowed = readUserArray(req, 'groups');
@@ -3452,8 +3351,9 @@ app.get('*',(req,res)=>{const user=currentUser(req);if(user?.admin)return res.re
 const server=app.listen(PORT,HOST,()=>{
   console.log(`RegulOS online em http://${HOST}:${PORT}`);
   addLog(`Painel disponível em http://${HOST}:${PORT}`);
-  startLinkScheduler();
-  start();
+  // Não iniciar conexão nem agendador global: ambos poderiam operar dados compartilhados.
+  // O worker de envios por usuário será ativado somente após a migração completa do motor.
+  addLog('Modo multiusuário: conexão e agendador globais desativados com segurança.');
 });
 server.on('error',e=>{
   addLog(`Erro no servidor HTTP: ${e.message}`);
