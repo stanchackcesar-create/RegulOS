@@ -129,6 +129,7 @@ const FILES = {
 };
 
 const app = express();
+app.use(express.json({ limit: '100kb' }));
 app.get('/api/programacao-dinamica', requireAuth, (req,res)=>{
   const programacao=readUserArray(req,'dynamicSchedule').sort((a,b)=>(a.horarioEfetivo||a.horarioOriginal||'99:99').localeCompare(b.horarioEfetivo||b.horarioOriginal||'99:99'));
   res.set('Cache-Control','no-store');
@@ -146,8 +147,6 @@ app.post('/api/programacao-dinamica/reorganizar', requireAuth, (req,res)=>{
   writeUserArray(req,'dynamicSchedule',result);
   res.json({ok:true,programacao:result});
 });
-
-app.use(express.json({ limit: '100kb' }));
 
 const logger = P({ level: 'silent' });
 
