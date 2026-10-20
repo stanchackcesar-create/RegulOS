@@ -84,8 +84,6 @@ function createUserLinkEngine(options = {}) {
     const items=array(userId,'schedules');
     const item=items.find(x=>String(x.id)===String(itemId));
     if(!item) return {ok:false,reason:'not-found'};
-    const bot=object(userId,'botSchedule');
-    if(!force && (!bot.ativo || !windowActive(bot,new Date()))) return {ok:false,reason:'window-closed'};
     if(!force && !due(item,new Date())) return {ok:false,reason:'not-due'};
     const groups=options.sessions.get(userId)?.groups || runtime.groups.read();
     const config=object(userId,'groupConfig');
@@ -170,8 +168,6 @@ function createUserLinkEngine(options = {}) {
   async function tickUser(userId) {
     const runtime=options.sessions.getRuntime(userId), session=options.sessions.get(userId);
     if(!runtime?.socket||session?.status!=='online') return;
-    const bot=object(userId,'botSchedule');
-    if(!windowActive(bot,new Date())) return;
     const items=array(userId,'schedules').filter(x=>x.ativo!==false);
     for(const item of items) {
       if(due(item,new Date())) { await sendOne(userId,item.id); break; }
