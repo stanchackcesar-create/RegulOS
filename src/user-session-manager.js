@@ -19,6 +19,7 @@ function createUserSessionManager(options = {}) {
   });
   const states = new Map();
   const connectors = new Map();
+  const reconnectTimers = new Map();
 
   function stateFor(userId) {
     const runtime = registry.get(userId);
@@ -77,6 +78,23 @@ function createUserSessionManager(options = {}) {
         state.qr = null;
         state.connectedNumber = '';
         if (error) state.lastError = String(error.message || error);
+
+        // Baileys pode encerrar o socket com restartRequired (comum após
+        // escanear o QR). A sessão precisa ser recriada usando as credenciais
+        // recém-salvas; não tentar novamente se o usuário foi desconectado.
+        const statusCode = Number(error?.output?.statusCode || error?.statusCode || error?.data?.statusCode || 0);
+        const loggedOut = statusCode === 401;
+        if (loggedOut || reconnectTimers.has(runtime.userId)) return;
+        const timer = setTimeout(async () => {
+          reconnectTimers.delete(runtime.userId);
+          if (registry.get(runtime.userId) !== runtime || states.get(runtime.userId) !== state || state.status !== 'offline') return;
+          try {
+            await start(runtime.userId);
+          } catch (retryError) {
+            state.lastError = String(retryError?.message || retryError);
+          }
+        }, statusCode === 515 ? 500 : 2000);
+        reconnectTimers.set(runtime.userId, timer);
       }
     });
 
@@ -100,6 +118,9 @@ function createUserSessionManager(options = {}) {
     const runtime = registry.get(userId);
     if (!runtime) return false;
     const id = runtime.userId;
+    const reconnectTimer = reconnectTimers.get(id);
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    reconnectTimers.delete(id);
     const connector = connectors.get(id);
     connectors.delete(id);
     states.delete(id);
