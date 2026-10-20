@@ -1476,22 +1476,49 @@ async function loadAccount(){
         <input id="newUserPass" type="password" autocomplete="new-password" placeholder="Senha (mín. 6)">
         <button class="green" onclick="createUser()">➕ Criar usuário</button>
       </div>
-      <div class="panel" style="margin-top:12px;padding:12px">
-        <b>🔐 Alterar senha do administrador</b>
-        <form id="adminPasswordForm" autocomplete="off" onsubmit="event.preventDefault();changeAdminPassword()">
-          <div class="two" style="margin-top:8px">
-            <input id="adminCurrentPass" name="regulos-current-password" type="password" autocomplete="off" placeholder="Senha atual">
-            <input id="adminNewPass" name="regulos-new-password" type="password" autocomplete="new-password" placeholder="Nova senha (mín. 6)">
-            <input id="adminConfirmPass" name="regulos-confirm-password" type="password" autocomplete="new-password" placeholder="Confirmar nova senha">
-            <button class="primary" type="submit">🔄 Alterar senha</button>
-          </div>
-        </form>
-      </div>`;
+`;
   }
+  html+=`<div class="panel" style="margin-top:14px;padding:12px">
+    <b>⚙️ Minha Conta</b>
+    <p class="muted" style="font-size:12px;margin:6px 0 10px">As alterações sensíveis são confirmadas por código enviado por e-mail. Os códigos expiram em 20 minutos.</p>
+    <form autocomplete="off" onsubmit="event.preventDefault();requestPasswordChange()">
+      <div class="two">
+        <input id="accountCurrentPass" type="password" autocomplete="current-password" placeholder="Senha atual" required>
+        <input id="accountNewPass" type="password" autocomplete="new-password" placeholder="Nova senha (mín. 8 caracteres)" minlength="8" required>
+        <input id="accountConfirmPass" type="password" autocomplete="new-password" placeholder="Confirmar nova senha" minlength="8" required>
+        <button class="primary" type="submit">📩 Solicitar alteração de senha</button>
+      </div>
+    </form>
+    <div style="margin-top:12px;border-top:1px solid var(--border,#ddd);padding-top:12px">
+      <b>✉️ Alterar e-mail</b>
+      <div class="two" style="margin-top:8px">
+        <input id="accountNewEmail" type="email" autocomplete="email" placeholder="Novo endereço de e-mail" required>
+        <button type="button" onclick="requestEmailChange()">📩 Enviar código para o novo e-mail</button>
+      </div>
+    </div>
+    <div style="margin-top:12px;border-top:1px solid var(--border,#ddd);padding-top:12px">
+      <b>🔢 Confirmar operação</b>
+      <p class="muted" style="font-size:12px;margin:5px 0">Digite o código recebido por e-mail e escolha a operação solicitada.</p>
+      <div class="two">
+        <input id="accountEmailCode" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" placeholder="Código de 6 dígitos" autocomplete="one-time-code">
+        <select id="accountCodePurpose">
+          <option value="change-password">Confirmar alteração de senha</option>
+          <option value="change-email">Confirmar alteração de e-mail</option>
+          <option value="delete-account">Confirmar exclusão da conta</option>
+        </select>
+        <button class="green" type="button" onclick="confirmAccountChange()">✅ Confirmar código</button>
+      </div>
+    </div>
+    ${!u.admin?`<div style="margin-top:14px;border-top:1px solid var(--border,#ddd);padding-top:12px">
+      <b>⚠️ Excluir minha conta</b>
+      <p class="muted" style="font-size:12px;margin:5px 0">Exclui apenas seu acesso e seus dados de conta. Não apaga o WhatsApp nem dados compartilhados.</p>
+      <button class="red" type="button" onclick="requestAccountDeletion()">Solicitar exclusão da minha conta</button>
+    </div>`:''}
+  </div>`;
   document.getElementById('accountPanel').innerHTML=html;
   // Nunca manter senhas preenchidas após atualizar/recarregar a página.
   requestAnimationFrame(()=>{
-    ['adminCurrentPass','adminNewPass','adminConfirmPass','newUserPass'].forEach(id=>{
+    ['adminCurrentPass','adminNewPass','adminConfirmPass','newUserPass','accountCurrentPass','accountNewPass','accountConfirmPass'].forEach(id=>{
       const el=document.getElementById(id);
       if(el) el.value='';
     });
@@ -1515,14 +1542,48 @@ async function refreshAccountPresence(){
     });
   }catch(e){console.debug('Falha ao atualizar presença:',e);}
 }
-async function changeAdminPassword(){
- const senhaAtual=document.getElementById('adminCurrentPass')?.value||'';
- const novaSenha=document.getElementById('adminNewPass')?.value||'';
- const confirmarSenha=document.getElementById('adminConfirmPass')?.value||'';
+async function accountPost(url,data){
+ return jfetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+}
+async function requestPasswordChange(){
+ const senhaAtual=document.getElementById('accountCurrentPass')?.value||'';
+ const novaSenha=document.getElementById('accountNewPass')?.value||'';
+ const confirmarSenha=document.getElementById('accountConfirmPass')?.value||'';
  try{
-  await jfetch('/api/auth/change-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({senhaAtual,novaSenha,confirmarSenha})});
-  toast('Senha alterada. Faça login novamente com a nova senha.');
-  setTimeout(()=>{location.href='/login'},700);
+  const d=await accountPost('/api/account/request-password-change',{senhaAtual,novaSenha,confirmarSenha});
+  document.getElementById('accountCodePurpose').value='change-password';
+  toast(d.msg);
+ }catch(e){toast(e.message,true)}
+}
+async function requestEmailChange(){
+ const email=document.getElementById('accountNewEmail')?.value||'';
+ try{
+  const d=await accountPost('/api/account/request-email-change',{email});
+  document.getElementById('accountCodePurpose').value='change-email';
+  toast(d.msg);
+ }catch(e){toast(e.message,true)}
+}
+async function requestAccountDeletion(){
+ if(!confirm('Deseja solicitar a exclusão da sua conta? Um código será enviado ao e-mail confirmado. Nada será excluído até você confirmar o código.'))return;
+ try{
+  const d=await accountPost('/api/account/request-delete',{});
+  document.getElementById('accountCodePurpose').value='delete-account';
+  toast(d.msg);
+ }catch(e){toast(e.message,true)}
+}
+async function confirmAccountChange(){
+ const codigo=document.getElementById('accountEmailCode')?.value||'';
+ const purpose=document.getElementById('accountCodePurpose')?.value||'';
+ if(!confirm(purpose==='delete-account'?'Confirmar a exclusão permanente da sua conta?':'Confirmar esta alteração?'))return;
+ try{
+  const d=await accountPost('/api/account/confirm-change',{codigo,purpose});
+  toast(d.msg);
+  if(d.reauth||d.deleted){setTimeout(()=>location.href='/login',900);return;}
+  document.getElementById('accountEmailCode').value='';
+  if(purpose==='change-password'){
+   ['accountCurrentPass','accountNewPass','accountConfirmPass'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  }
+  loadAccount();
  }catch(e){toast(e.message,true)}
 }
 async function createUser(){
