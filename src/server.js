@@ -2810,16 +2810,11 @@ app.get('/api/diagnostico', (req,res) => {
 ;
 
 app.post('/api/desconectar', requireAdmin, async (req,res) => {
-  // Desconectar pelo painel agora significa ENCERRAR a sessão atual e
-  // preparar imediatamente um novo QR para outro número.
-  // Também limpamos o cache de grupos/seleções para nunca deixar grupos
-  // do número anterior aparecendo depois da troca de conta.
+  // Desconectar encerra apenas o socket. Preserva as credenciais para
+  // que "Reconectar" possa recuperar o mesmo número sem novo QR.
   clearReconnect();
   stopSchedulers();
-  clearLinkHistory();
-  clearLinkFailures();
   manualDisconnected=true;
-
   const old=sock;
   sock=null;
   online=false;
@@ -2827,55 +2822,60 @@ app.post('/api/desconectar', requireAdmin, async (req,res) => {
   connectedNumber='';
   groups=[];
   lastGroupRefreshAt=0;
-  allowed=[];
-
-  try {
-    if (old) await old.logout();
-  } catch(e) {
-    addLog(`Logout no desconectar: ${e.message}`);
-  }
-  try { old?.end(); } catch {}
-
-  // Não reutilizar permissões dos grupos da conta anterior.
-  try { writeJson(FILES.groups, []); } catch(e) {
-    addLog(`Erro limpando grupos permitidos: ${e.message}`);
-  }
-
-  try { fs.rmSync(AUTH,{recursive:true,force:true}); } catch(e) {
-    addLog(`Erro limpando sessão: ${e.message}`);
-  }
-
-  status='Gerando novo QR Code...';
-  addLog('Conta desconectada pelo painel. Grupos antigos removidos; iniciando novo QR.');
-
-  // O fechamento provocado pelo logout não deve disparar reconexão automática.
-  // Reativamos o ciclo normal somente antes de iniciar a nova sessão.
-  res.json({ok:true,msg:'WhatsApp desconectado. Os grupos antigos foram removidos. Gerando novo QR Code...'});
-
-  setTimeout(() => {
-    manualDisconnected=false;
-    start();
-  }, 700);
+  status='Desconectado';
+  try { writeJson(FILES.groups, []); }
+  catch(e) { addLog(`Erro limpando cache de grupos: ${e.message}`); }
+  try { old?.end(new Error('Desconexão solicitada pelo usuário.')); }
+  catch(e) { addLog(`Erro encerrando socket ao desconectar: ${e.message}`); }
+  addLog('Desconexão manual concluída. Credenciais preservadas; reconexão automática desativada.');
+  return res.json({ok:true,msg:'WhatsApp desconectado. As credenciais foram preservadas; use Reconectar para voltar ao mesmo número ou Novo QR Code para trocar de número.'});
 });
 
 app.post('/api/novo-qr', requireAdmin, async (req,res) => {
-  // Novo QR = nova sessão. Limpa todos os dados da sessão anterior.
+  // Novo QR é uma troca explícita de número: impedir qualquer reconexão
+  // do socket anterior antes de apagar somente as credenciais WhatsApp.
   clearReconnect();
   stopSchedulers();
-  clearLinkHistory();
-  clearLinkFailures();
-  manualDisconnected=false;
-  try { linkSchedules=[]; writeJson(FILES.schedules, linkSchedules); } catch(e) { addLog(`Erro limpando agendamentos: ${e.message}`); }
-  try { groups=[]; allowed=[]; writeJson(FILES.groups, []); } catch(e) { addLog(`Erro limpando grupos: ${e.message}`); }
+  manualDisconnected=true;
   const old=sock;
-  sock=null; online=false; qr=null; connectedNumber='';
-  status='Gerando novo QR Code...';
-  addLog('Novo QR solicitado pelo painel. Sessão anterior e dados associados foram limpos.');
-  try { old?.end(); } catch {}
-  try { fs.rmSync(AUTH,{recursive:true,force:true}); } catch(e) { addLog(`Erro limpando sessão: ${e.message}`); }
-  // Responde antes de iniciar o socket para evitar corrida com o navegador.
-  res.json({ok:true,msg:'Sessão limpa. O novo QR será exibido automaticamente.'});
-  setTimeout(() => start(), 350);
+  sock=null;
+  online=false;
+  qr=null;
+  connectedNumber='';
+  groups=[];
+  lastGroupRefreshAt=0;
+  status='Encerrando sessão anterior para gerar novo QR Code...';
+  addLog('Novo QR solicitado: bloqueando reconexão automática e encerrando a sessão anterior.');
+  try {
+    if (old) await old.logout();
+  } catch(e) {
+    addLog(`Logout da sessão anterior ao gerar novo QR: ${e.message}`);
+  }
+  try { old?.end(); }
+  catch(e) { addLog(`Erro encerrando socket antigo: ${e.message}`); }
+  try { fs.rmSync(AUTH,{recursive:true,force:true}); }
+  catch(e) {
+    status=`Erro ao remover credenciais antigas: ${e.message}`;
+    addLog(status);
+    return res.status(500).json({ok:false,msg:status});
+  }
+  try { writeJson(FILES.groups, []); }
+  catch(e) { addLog(`Erro limpando cache de grupos: ${e.message}`); }
+  // Não apaga agendamentos, histórico de envios ou falhas: são dados do RegulOS,
+  // não credenciais de autenticação do WhatsApp.
+  status='Preparando novo QR Code...';
+  addLog('Credenciais antigas removidas. Agendamentos e históricos preservados.');
+  res.json({ok:true,msg:'Sessão antiga encerrada. Preparando QR Code para vincular outro número.'});
+  const waitUntilStopped = () => {
+    if (starting || stopping) {
+      setTimeout(waitUntilStopped, 250);
+      return;
+    }
+    manualDisconnected=false;
+    addLog('Iniciando nova sessão WhatsApp para gerar QR Code.');
+    start();
+  };
+  setTimeout(waitUntilStopped, 350);
 });
 
 app.post('/api/deslogar', requireAdmin, async (req,res) => {
