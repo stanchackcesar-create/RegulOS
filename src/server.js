@@ -370,6 +370,7 @@ app.post('/api/auth/register',async(req,res)=>{
     return res.status(400).json({ok:false,msg:'Informe usuário válido, e-mail válido e senha com pelo menos 8 caracteres.'});
   }
   const users=readUsers();
+  if(users.length >= 20){ registerRegistrationAttempt(req); return res.status(409).json({ok:false,msg:'O RegulOS permite no máximo 20 usuários no ambiente atual.'}); }
   if(users.some(u=>String(u.usuario||'').toLowerCase()===usuario)){
     registerRegistrationAttempt(req);
     return res.status(409).json({ok:false,msg:'Esse nome de usuário já está em uso.'});
@@ -3374,7 +3375,12 @@ app.get('/index.html',(req,res)=>{const user=currentUser(req);if(user?.admin)ret
 app.get('*',(req,res)=>{const user=currentUser(req);if(user?.admin)return res.redirect('/admin');return res.sendFile(path.join(PUBLIC,'index.html'));});
 
 async function restoreUserSessions() {
-  const users = readUsers().filter(user => user && user.ativo !== false && typeof user.id === 'string');
+  const allUsers = readUsers().filter(user => user && typeof user.id === 'string');
+  for (const user of allUsers) {
+    try { ensureUserWorkspace(user.id); }
+    catch (error) { addLog(`Falha ao preparar dados individuais para ${user.codigoUsuario || user.id}: ${String(error?.message || error)}`); }
+  }
+  const users = allUsers.filter(user => user.ativo !== false);
   let restored = 0;
   for (const user of users) {
     try {
