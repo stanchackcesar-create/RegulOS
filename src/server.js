@@ -335,27 +335,36 @@ function registerLoginFailure(req){
 function clearLoginFailures(req){ loginAttempts.delete(clientIp(req)); }
 
 
-// CAPTCHA interno de uso único para login e cadastro (válido por 5 minutos).
-const authCaptchaChallenges = new Map();
-app.get('/api/auth/captcha',(req,res)=>{
-  const purpose=String(req.query?.purpose||'login');
-  if(!['login','register'].includes(purpose)) return res.status(400).json({ok:false,msg:'Desafio inválido.'});
-  const now=Date.now();
-  for(const [key,value] of authCaptchaChallenges) if(value.expiresAt<now) authCaptchaChallenges.delete(key);
-  const a=crypto.randomInt(2,10), b=crypto.randomInt(1,10), id=crypto.randomBytes(24).toString('hex');
-  authCaptchaChallenges.set(id,{answer:String(a+b),purpose,ip:clientIp(req),expiresAt:now+5*60*1000});
+// Cloudflare Turnstile: o servidor valida cada token no Siteverify e falha fechado
+// quando as chaves não estão configuradas ou a validação externa falha.
+app.get('/api/auth/turnstile-config',(req,res)=>{
   res.set('Cache-Control','no-store');
-  res.json({ok:true,id,question:`Quanto é ${a} + ${b}?`});
+  const siteKey=String(process.env.TURNSTILE_SITE_KEY||'').trim();
+  if(!siteKey) return res.status(503).json({ok:false,msg:'A proteção anti-bot ainda não foi configurada no ambiente de testes.'});
+  res.json({ok:true,siteKey});
 });
-function validateAuthCaptcha(req,purpose){
-  const id=String(req.body?.captchaId||''), answer=String(req.body?.captchaAnswer||'').trim();
-  const entry=authCaptchaChallenges.get(id);
-  if(entry) authCaptchaChallenges.delete(id);
-  return !!entry && entry.purpose===purpose && entry.ip===clientIp(req) && entry.expiresAt>=Date.now() && /^\d{1,2}$/.test(answer) && answer===entry.answer;
+async function validateTurnstile(req, expectedAction){
+  const secret=String(process.env.TURNSTILE_SECRET_KEY||'').trim();
+  const token=String(req.body?.turnstileToken||req.body?.['cf-turnstile-response']||'').trim();
+  if(!secret || !token || token.length>2048) return false;
+  try{
+    const response=await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify',{
+      method:'POST',
+      headers:{'content-type':'application/json'},
+      body:JSON.stringify({secret,response:token,remoteip:clientIp(req)}),
+      signal:AbortSignal.timeout(8000)
+    });
+    if(!response.ok) return false;
+    const result=await response.json();
+    return result.success===true && (!result.action || result.action===expectedAction);
+  }catch(err){
+    console.error('[turnstile] Siteverify indisponível:',String(err?.name||'ERROR'));
+    return false;
+  }
 }
 
-app.post('/api/auth/login',(req,res)=>{
-  if(!validateAuthCaptcha(req,'login')) return res.status(400).json({ok:false,msg:'Resolva o CAPTCHA para continuar.'});
+app.post('/api/auth/login',async(req,res)=>{
+  if(!await validateTurnstile(req,'login')) return res.status(400).json({ok:false,msg:'A verificação anti-bot falhou ou expirou. Tente novamente.'});
   if(!loginAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas de login. Aguarde alguns minutos e tente novamente.'});
   const identificador=String(req.body?.usuario||'').trim().toLowerCase();
   const senha=String(req.body?.senha||'');
@@ -385,7 +394,7 @@ function registerRegistrationAttempt(req){
   else {a.count++;registrationAttempts.set(key,a);}
 }
 app.post('/api/auth/register',async(req,res)=>{
-  if(!validateAuthCaptcha(req,'register')) return res.status(400).json({ok:false,msg:'Resolva o CAPTCHA para continuar.'});
+  if(!await validateTurnstile(req,'register')) return res.status(400).json({ok:false,msg:'A verificação anti-bot falhou ou expirou. Tente novamente.'});
   if(!registrationAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas de cadastro. Aguarde 15 minutos.'});
   const usuario=String(req.body?.usuario||'').trim().toLowerCase();
   const email=String(req.body?.email||'').trim().toLowerCase();
@@ -488,6 +497,7 @@ app.post('/api/auth/resend-verification',async(req,res)=>{
   res.json({ok:true,msg:'Enviamos um novo código para o e-mail cadastrado. O código anterior não é mais válido.'});
 });
 app.post('/api/auth/forgot-password',async(req,res)=>{
+  if(!await validateTurnstile(req,'recovery')) return res.status(400).json({ok:false,msg:'A verificação anti-bot falhou ou expirou. Tente novamente.'});
   if(!recoveryAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas. Aguarde alguns minutos.'});
   const email=String(req.body?.email||'').trim().toLowerCase();
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){registerRecoveryFailure(req);return res.status(400).json({ok:false,msg:'Informe um e-mail válido.'});}
@@ -499,7 +509,8 @@ app.post('/api/auth/forgot-password',async(req,res)=>{
   catch(err){emailTokens.delete(digest);return res.status(503).json({ok:false,msg:err.message==='GMAIL_NOT_CONFIGURED'?'O Gmail ainda não foi configurado na Railway.':'Não foi possível enviar o e-mail agora.'});}
   res.json({ok:true,msg:'Se o e-mail estiver cadastrado e confirmado, enviaremos as instruções de recuperação.'});
 });
-app.post('/api/auth/reset-password',(req,res)=>{
+app.post('/api/auth/reset-password',async(req,res)=>{
+  if(!await validateTurnstile(req,'recovery')) return res.status(400).json({ok:false,msg:'A verificação anti-bot falhou ou expirou. Tente novamente.'});
   const email=String(req.body?.email||'').trim().toLowerCase(), token=String(req.body?.codigo||'').trim(), novaSenha=String(req.body?.novaSenha||'');
   if(novaSenha.length<8) return res.status(400).json({ok:false,msg:'A nova senha deve ter pelo menos 8 caracteres.'});
   const digest=crypto.createHash('sha256').update(token).digest('hex'), entry=emailTokens.get(digest);
