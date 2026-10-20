@@ -3128,6 +3128,17 @@ app.post('/api/user-session/connect', requireAuth, async (req,res) => {
     res.status(500).json({ ok:false, msg:'Não foi possível iniciar sua sessão: ' + String(error?.message || error) });
   }
 });
+app.post('/api/user-session/reconnect', requireAuth, async (req,res) => {
+  try {
+    userLinkEngine.stopUser(req.user.id);
+    await userSessions.stop(req.user.id);
+    const session = await userSessions.start(req.user.id);
+    userLinkEngine.startUser(req.user.id);
+    res.json({ ok:true, msg:'Reconexão individual solicitada. Aguarde a confirmação do WhatsApp.', session });
+  } catch (error) {
+    res.status(500).json({ ok:false, msg:'Não foi possível reconectar sua sessão: ' + String(error?.message || error) });
+  }
+});
 app.post('/api/user-session/new-qr', requireAuth, async (req,res) => {
   try {
     userLinkEngine.stopUser(req.user.id);
