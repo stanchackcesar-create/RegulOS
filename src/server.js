@@ -26,6 +26,7 @@ const { chromium } = require('playwright');
 const { sendGmail } = require('./gmail-mailer');
 const { createUserSessionManager } = require('./user-session-manager');
 const { createUserContextFactory } = require('./user-context');
+const { createUserLinkEngine } = require('./user-link-engine');
 const { createBaileysUserConnector } = require('./baileys-user-connector');
 
 const ROOT = path.join(__dirname, '..');
@@ -43,6 +44,12 @@ const userSessions = createUserSessionManager({ baseDir: DATA, connect: (userId,
 
 // Contexto de dados separado por usuário autenticado; nunca aceita userId do body.
 const userContexts = createUserContextFactory({ baseDir: DATA });
+const userLinkEngine = createUserLinkEngine({
+  baseDir: DATA,
+  sessions: userSessions,
+  prepareMessage: prepareUserMessage
+});
+
 function userContext(req) {
   if (!req.user || typeof req.user.id !== 'string') throw new Error('Autenticação obrigatória.');
   return userContexts.createContext(req.user.id);
@@ -72,6 +79,33 @@ function getUserSessionGroups(req) {
   return Array.isArray(groups) ? groups : [];
 }
 
+
+
+async function prepareUserMessage(item) {
+  const url=String(item?.url||'').trim();
+  if(!url) throw new Error('O link da oferta está vazio.');
+  let title=String(item.tituloProduto||'').trim();
+  if(!title) {
+    const result=await findProductTitle(url);
+    title=String(result?.title||'').trim();
+    if(title) item.tituloProduto=title;
+  }
+  let imageBuffer=null;
+  if(String(item.imagemUrl||'').trim()) {
+    const parsed=await assertSafeExternalUrl(String(item.imagemUrl).trim());
+    const downloaded=await downloadBuffer(parsed.url,url);
+    imageBuffer=downloaded?.buffer||null;
+  } else {
+    const image=await findProductImage(url);
+    imageBuffer=image?.buffer||null;
+  }
+  if(!imageBuffer) throw new Error('Não foi possível encontrar ou baixar a imagem da oferta.');
+  const intro=chooseRandomMessage(item);
+  const titleLine=title?`📦 ${title}`:'';
+  const custom=String(item.mensagem||'').trim();
+  const text=[intro,titleLine,custom,'👉 Garanta agora:',url].filter(Boolean).join('\\n\\n');
+  return {text,imageBuffer};
+}
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -2997,6 +3031,7 @@ app.get('/api/user-session/status', requireAuth, (req,res) => {
 app.post('/api/user-session/connect', requireAuth, async (req,res) => {
   try {
     const session = await userSessions.start(req.user.id);
+    userLinkEngine.startUser(req.user.id);
     res.json({ ok:true, msg:'Conexão individual iniciada.', session });
   } catch (error) {
     res.status(500).json({ ok:false, msg:'Não foi possível iniciar sua sessão: ' + String(error?.message || error) });
@@ -3004,8 +3039,10 @@ app.post('/api/user-session/connect', requireAuth, async (req,res) => {
 });
 app.post('/api/user-session/new-qr', requireAuth, async (req,res) => {
   try {
+    userLinkEngine.stopUser(req.user.id);
     await userSessions.stop(req.user.id);
     const session = await userSessions.start(req.user.id);
+    userLinkEngine.startUser(req.user.id);
     res.json({ ok:true, msg:'Nova sessão individual iniciada.', session });
   } catch (error) {
     res.status(500).json({ ok:false, msg:'Não foi possível gerar uma nova sessão: ' + String(error?.message || error) });
@@ -3013,6 +3050,7 @@ app.post('/api/user-session/new-qr', requireAuth, async (req,res) => {
 });
 app.post('/api/user-session/disconnect', requireAuth, async (req,res) => {
   try {
+    userLinkEngine.stopUser(req.user.id);
     const stopped = await userSessions.stop(req.user.id);
     res.json({ ok:true, stopped });
   } catch (error) {
@@ -3228,7 +3266,10 @@ app.post('/api/link-agendamentos/:id/enviar-agora', requireAuth, async(req,res)=
   if(!item)return res.status(404).json({ok:false,msg:'Agendamento não encontrado nesta conta.'});
   const session=userSessions.get(req.user.id), runtime=userSessions.getRuntime(req.user.id);
   if(!runtime?.socket||session?.status!=='online')return res.status(503).json({ok:false,msg:'Conecte o WhatsApp desta conta antes de enviar.'});
-  return res.status(409).json({ok:false,msg:'O envio individual está protegido contra uso do socket global; a integração do motor de envio por usuário é a próxima etapa. Nenhuma mensagem foi enviada.'});
+  const result=await userLinkEngine.sendOne(req.user.id,item.id,{force:true});
+  if(result.ok) return res.json({ok:true,msg:'Processamento individual concluído.',result});
+  const messages={offline:'Conecte o WhatsApp desta conta antes de enviar.',busy:'Este agendamento já está sendo processado.','not-found':'Agendamento não encontrado nesta conta.','invalid-groups':'Os grupos selecionados são inválidos.','groups-not-refreshed':'Atualize os grupos da sessão antes de enviar.','no-enabled-groups':'Ligue pelo menos um dos grupos selecionados.','window-closed':'A programação está fora do horário configurado.'};
+  return res.status(result.reason==='offline'?503:result.reason==='not-found'?404:409).json({ok:false,msg:messages[result.reason]||result.error||'Não foi possível processar este agendamento.',result});
 });
 app.delete('/api/link-agendamentos/:id', requireAuth, (req,res)=>{
   const items=readUserArray(req,'schedules'), i=items.findIndex(x=>x.id===req.params.id);
