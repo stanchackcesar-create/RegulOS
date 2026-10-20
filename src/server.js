@@ -24,6 +24,8 @@ const crypto = require('crypto');
 const { createShopeeIntegration, isShopeeHost } = require('./shopee');
 const { chromium } = require('playwright');
 const { sendGmail } = require('./gmail-mailer');
+const { createUserSessionManager } = require('./user-session-manager');
+const { createBaileysUserConnector } = require('./baileys-user-connector');
 
 const ROOT = path.join(__dirname, '..');
 const PUBLIC = path.join(ROOT, 'public');
@@ -33,6 +35,10 @@ const USERS_FILE = path.join(DATA, 'usuarios.json');
 const SESSIONS_FILE = path.join(DATA, 'sessoes.json');
 fs.mkdirSync(DATA, { recursive: true });
 fs.mkdirSync(AUTH, { recursive: true });
+
+// Sessões WhatsApp independentes por conta autenticada.
+const userConnector = createBaileysUserConnector({ makeWASocket, useMultiFileAuthState, fetchLatestBaileysVersion, toDataURL: qrcode.toDataURL, logger: P({ level: 'silent' }) });
+const userSessions = createUserSessionManager({ baseDir: DATA, connect: (userId, runtime, callbacks) => userConnector.connect(userId, runtime, callbacks) });
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -2943,6 +2949,36 @@ async function start() {
     starting = false;
   }
 }
+
+app.get('/api/user-session/status', requireAuth, (req,res) => {
+  const session = userSessions.get(req.user.id);
+  res.json({ ok:true, session: session || { userId:req.user.id, status:'offline', qr:null, connectedNumber:'', groups:[], lastError:'' } });
+});
+app.post('/api/user-session/connect', requireAuth, async (req,res) => {
+  try {
+    const session = await userSessions.start(req.user.id);
+    res.json({ ok:true, msg:'Conexão individual iniciada.', session });
+  } catch (error) {
+    res.status(500).json({ ok:false, msg:'Não foi possível iniciar sua sessão: ' + String(error?.message || error) });
+  }
+});
+app.post('/api/user-session/new-qr', requireAuth, async (req,res) => {
+  try {
+    await userSessions.stop(req.user.id);
+    const session = await userSessions.start(req.user.id);
+    res.json({ ok:true, msg:'Nova sessão individual iniciada.', session });
+  } catch (error) {
+    res.status(500).json({ ok:false, msg:'Não foi possível gerar uma nova sessão: ' + String(error?.message || error) });
+  }
+});
+app.post('/api/user-session/disconnect', requireAuth, async (req,res) => {
+  try {
+    const stopped = await userSessions.stop(req.user.id);
+    res.json({ ok:true, stopped });
+  } catch (error) {
+    res.status(500).json({ ok:false, msg:'Não foi possível encerrar sua sessão: ' + String(error?.message || error) });
+  }
+});
 
 app.get('/api/status', (req,res) => res.json({
   ok:true, conectado:online, status, temQR:Boolean(qr), qr,
