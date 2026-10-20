@@ -1112,6 +1112,21 @@ app.post('/api/account/request-password-change',requireAuth,async(req,res)=>{
   catch(err){emailTokens.delete(digest);return res.status(503).json({ok:false,msg:err.message==='GMAIL_NOT_CONFIGURED'?'O envio de e-mail não está configurado.':'Não foi possível enviar o código agora.'});}
   res.json({ok:true,msg:'Enviamos um código de confirmação para o e-mail cadastrado.'});
 });
+app.post('/api/account/request-username-change',requireAuth,async(req,res)=>{
+  if(!recoveryAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas. Aguarde alguns minutos.'});
+  const usuario=String(req.body?.usuario||'').trim().toLowerCase();
+  if(!/^[a-z0-9._-]{3,30}$/.test(usuario)) return res.status(400).json({ok:false,msg:'O nome de usuário deve ter de 3 a 30 caracteres: letras, números, ponto, hífen ou sublinhado.'});
+  const users=readUsers(), user=users.find(x=>x.id===req.user.id);
+  if(!user) return res.status(401).json({ok:false,msg:'Conta não encontrada.'});
+  if(!user.email||user.emailVerificado!==true) return res.status(400).json({ok:false,msg:'Confirme o e-mail da conta antes de alterar o nome de usuário.'});
+  if(users.some(x=>x.id!==user.id&&String(x.usuario||'').toLowerCase()===usuario)) return res.status(409).json({ok:false,msg:'Esse nome de usuário já está em uso.'});
+  if(String(user.usuario||'').toLowerCase()===usuario) return res.status(400).json({ok:false,msg:'Esse já é o nome de usuário da conta.'});
+  const token=String(crypto.randomInt(0,1000000)).padStart(6,'0'), digest=crypto.createHash('sha256').update(token).digest('hex');
+  emailTokens.set(digest,{userId:user.id,purpose:'change-username',usuario,expiresAt:Date.now()+20*60*1000});
+  try{await sendGmail({to:user.email,subject:'Confirme a alteração do nome de usuário — RegulOS',text:'Você solicitou alterar o nome de usuário da sua conta RegulOS para: '+usuario+'\n\nCódigo de confirmação: '+token+'\n\nO código expira em 20 minutos. O nome só será alterado após a confirmação. Se não foi você, ignore esta mensagem.'});}
+  catch(err){emailTokens.delete(digest);return res.status(503).json({ok:false,msg:err.message==='GMAIL_NOT_CONFIGURED'?'O envio de e-mail não está configurado.':'Não foi possível enviar o código agora.'});}
+  res.json({ok:true,msg:'Enviamos um código ao e-mail confirmado da conta. O nome só será alterado após a confirmação.'});
+});
 app.post('/api/account/request-email-change',requireAuth,async(req,res)=>{
   if(!recoveryAllowed(req)) return res.status(429).json({ok:false,msg:'Muitas tentativas. Aguarde alguns minutos.'});
   const email=String(req.body?.email||'').trim().toLowerCase();
@@ -1139,7 +1154,7 @@ app.post('/api/account/request-delete',requireAuth,async(req,res)=>{
 });
 app.post('/api/account/confirm-change',requireAuth,(req,res)=>{
   const codigo=String(req.body?.codigo||'').trim(), purpose=String(req.body?.purpose||'');
-  if(!/^\d{6}$/.test(codigo)||!['change-password','change-email','delete-account'].includes(purpose)) return res.status(400).json({ok:false,msg:'Código ou operação inválida.'});
+  if(!/^\d{6}$/.test(codigo)||!['change-password','change-email','change-username','delete-account'].includes(purpose)) return res.status(400).json({ok:false,msg:'Código ou operação inválida.'});
   const digest=crypto.createHash('sha256').update(codigo).digest('hex'), entry=emailTokens.get(digest);
   if(!entry||entry.userId!==req.user.id||entry.purpose!==purpose||entry.expiresAt<Date.now()) return res.status(400).json({ok:false,msg:'Código inválido ou expirado.'});
   const users=readUsers(), index=users.findIndex(x=>x.id===req.user.id);
@@ -1156,6 +1171,13 @@ app.post('/api/account/confirm-change',requireAuth,(req,res)=>{
     if(users.some(x=>x.id!==user.id&&String(x.email||'').toLowerCase()===String(entry.email||'').toLowerCase())) return res.status(409).json({ok:false,msg:'Esse e-mail já está vinculado a outra conta.'});
     user.email=entry.email;user.emailVerificado=true;user.emailConfirmadoEm=new Date().toISOString();saveUsers(users);emailTokens.delete(digest);
     return res.json({ok:true,msg:'Novo e-mail confirmado e salvo.'});
+  }
+  if(purpose==='change-username'){
+    const usuario=String(entry.usuario||'').trim().toLowerCase();
+    if(!/^[a-z0-9._-]{3,30}$/.test(usuario)) {emailTokens.delete(digest);return res.status(400).json({ok:false,msg:'Nome de usuário inválido. Solicite novamente.'});}
+    if(users.some(x=>x.id!==user.id&&String(x.usuario||'').toLowerCase()===usuario)) {emailTokens.delete(digest);return res.status(409).json({ok:false,msg:'Esse nome de usuário já está em uso. Solicite novamente.'});}
+    user.usuario=usuario;user.nome=usuario;saveUsers(users);emailTokens.delete(digest);
+    return res.json({ok:true,msg:'Nome de usuário alterado com sucesso.'});
   }
   if(user.admin===true) return res.status(403).json({ok:false,msg:'A conta administrativa não pode ser excluída por este recurso.'});
   saveUsers(users.filter(x=>x.id!==user.id));
