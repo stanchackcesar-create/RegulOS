@@ -54,7 +54,7 @@ function createUserLinkEngine(options = {}) {
   function addDelivery(userId, item, groupId, status, extra={}) {
     const list=array(userId,'deliveries');
     const key=[item.id,item.progressKey||occurrence(item),groupId].join(':');
-    const row={key,agendamentoId:item.id,grupoId:groupId,linkId:item.id,url:item.url||'',nome:item.nome||'',status,atualizadoEm:new Date().toISOString(),...extra};
+    const row={key,agendamentoId:item.id,grupoId:groupId,linkId:item.id,ocorrencia:item.progressKey||'',url:item.url||'',nome:item.nome||'',status,atualizadoEm:new Date().toISOString(),...extra};
     const index=list.findIndex(x=>x.key===key);
     if(index>=0) list[index]={...list[index],...row}; else list.push(row);
     write(userId,'deliveries',list.slice(-5000));
