@@ -2956,7 +2956,7 @@ gruposLigados:activeGroups().map(id=>{const g=groups.find(x=>String(x.id)===Stri
 app.get('/api/qr', (req,res) => res.json({ok:true, qr, status, conectado:online}));
 app.get('/api/logs', (req,res) => res.json({ok:true, logs:[...logs].reverse()}));
 
-app.post('/api/reconectar', requireAdmin, async (req,res) => {
+app.post('/api/reconectar', requireAuth, async (req,res) => {
   clearReconnect(); stopSchedulers(); manualDisconnected=false;
   const old=sock; sock=null; online=false; qr=null; connectedNumber='';
   status='Reconectando...'; addLog('Reconexão manual solicitada.');
@@ -3117,7 +3117,7 @@ app.post('/api/desconectar', requireAdmin, async (req,res) => {
   }, 700);
 });
 
-app.post('/api/novo-qr', requireAdmin, async (req,res) => {
+app.post('/api/novo-qr', requireAuth, async (req,res) => {
   // Somente o botão "Novo QR Code" inicia uma sessão limpa.
   // Mantém usuários e demais dados do RegulOS; remove credenciais WhatsApp,
   // cache/lista de grupos e permissões da sessão anterior para evitar acúmulo.
