@@ -1516,6 +1516,14 @@ async function loadAccount(){
       </div>
     </form>
     <div style="margin-top:12px;border-top:1px solid var(--border,#ddd);padding-top:12px">
+      <b>👤 Alterar nome de usuário</b>
+      <p class="muted" style="font-size:12px;margin:5px 0">O nome será alterado somente depois de confirmar o código enviado ao e-mail verificado. Use de 3 a 30 caracteres: letras, números, ponto, hífen ou sublinhado.</p>
+      <div class="two" style="margin-top:8px">
+        <input id="accountNewUsername" autocomplete="username" minlength="3" maxlength="30" pattern="[A-Za-z0-9._-]{3,30}" placeholder="Novo nome de usuário" required>
+        <button type="button" onclick="requestUsernameChange()">📩 Enviar código para o e-mail</button>
+      </div>
+    </div>
+    <div style="margin-top:12px;border-top:1px solid var(--border,#ddd);padding-top:12px">
       <b>✉️ Alterar e-mail</b>
       <div class="two" style="margin-top:8px">
         <input id="accountNewEmail" type="email" autocomplete="email" placeholder="Novo endereço de e-mail" required>
@@ -1530,6 +1538,7 @@ async function loadAccount(){
         <select id="accountCodePurpose">
           <option value="change-password">Confirmar alteração de senha</option>
           <option value="change-email">Confirmar alteração de e-mail</option>
+          <option value="change-username">Confirmar alteração de nome de usuário</option>
           <option value="delete-account">Confirmar exclusão da conta</option>
         </select>
         <button class="green" type="button" onclick="confirmAccountChange()">✅ Confirmar código</button>
@@ -1586,6 +1595,14 @@ async function requestEmailChange(){
  try{
   const d=await accountPost('/api/account/request-email-change',{email});
   document.getElementById('accountCodePurpose').value='change-email';
+  toast(d.msg);
+ }catch(e){toast(e.message,true)}
+}
+async function requestUsernameChange(){
+ const usuario=document.getElementById('accountNewUsername')?.value||'';
+ try{
+  const d=await accountPost('/api/account/request-username-change',{usuario});
+  document.getElementById('accountCodePurpose').value='change-username';
   toast(d.msg);
  }catch(e){toast(e.message,true)}
 }
