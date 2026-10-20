@@ -719,7 +719,7 @@ async function refreshAll(){
   try{toast(failed?`Atualização concluída; ${failed} item(ns) não responderam.`:'Atualizado com sucesso.',failed>0);}catch{}
 }
 let poll=null;let lastLinksUiRefresh=0;function startPolling(fast=false){if(poll)clearInterval(poll);poll=setInterval(async()=>{await status();const now=Date.now();if(now-lastGroupUiRefresh>5000)await loadGroups();if(now-lastLinksUiRefresh>3500 && document.getElementById('linkForm')?.classList.contains('hidden')){lastLinksUiRefresh=now;await loadLinks();await loadSchedules();await loadLinkDeliveries();await loadLinkHistory();}},fast?1200:3000);status()}
-async function loadGroups(){try{const d=await jfetch('/api/grupos');groups=d.grupos||[];lastGroupUiRefresh=Date.now();renderGroups();populateScheduleGroupSelect();}catch(e){const box=document.getElementById('groups');if(!groups.length)box.innerHTML='<div class="muted errorText">'+esc(friendlyFetchError(e))+'</div>'}}
+async function loadGroups(){try{const d=await jfetch('/api/grupos');groups=d.grupos||[];lastGroupUiRefresh=Date.now();renderGroups();populateScheduleGroupSelect();}catch(e){const box=document.getElementById('groups');if(box&&!groups.length)box.innerHTML='<div class="muted errorText">'+esc(friendlyFetchError(e))+'</div>';console.error('[RegulOS] Falha ao carregar grupos:',e)}}
 function populateScheduleGroupSelect(selectedIds=[]){
   const box=document.getElementById('lgrupos');
   if(!box)return;
