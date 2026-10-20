@@ -328,7 +328,8 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 <div class="row" style="justify-content:space-between"><div class="row"><span id="accountInfo" class="badge neutral">...</span><button onclick="logoutRegulos()">🚪 Sair</button></div></div>
 <div class="actions">
 <button class="primary" onclick="refreshAll()">🔄 Atualizar</button>
-<button onclick="apiAction('/api/reconectar')">🔌 Reconectar</button>
+<button class="primary" type="button" onclick="conectarWhatsApp()">📲 Conectar WhatsApp</button>
+<button type="button" onclick="apiAction('/api/reconectar')">🔄 Reconectar</button>
 <button onclick="apiAction('/api/desconectar')">⛔ Desconectar</button>
 <div class="header-bot-schedule" title="Programação do bot">
   <span class="badge neutral" id="windowBadge">...</span>
@@ -630,9 +631,20 @@ async function apiAction(url){
  try{const d=await jfetch(url,{method:url.includes('novo')?'POST':'POST'});toast(d.msg);setTimeout(refreshAll,400)}catch(e){toast(e.message,true)}
 }
 function toast(msg,err=false){console.log(msg);const el=document.createElement('div');el.className='notice '+(err?'error':'success');el.textContent=msg;document.body.prepend(el);setTimeout(()=>el.remove(),3500)}
+let qrRequested=false;
+async function conectarWhatsApp(){
+ qrRequested=true;
+ try{
+  const d=await jfetch('/api/reconectar',{method:'POST'});
+  toast(d.msg||'Solicitação de conexão enviada. Aguardando QR Code, se necessário.');
+  await status();
+  startPolling(true);
+ }catch(e){qrRequested=false;toast(e.message,true)}
+}
 async function novoQR(){
  if(!confirm('Isso remove a sessão atual e gera um QR Code para outro número. Continuar?'))return;
- try{await jfetch('/api/novo-qr',{method:'POST'});toast('Sessão limpa. Aguardando novo QR...');startPolling(true)}catch(e){toast(e.message,true)}
+ qrRequested=true;
+ try{await jfetch('/api/novo-qr',{method:'POST'});toast('Sessão limpa. Aguardando novo QR...');startPolling(true)}catch(e){qrRequested=false;toast(e.message,true)}
 }
 let botScheduleDirty=false;
 let botScheduleInitialized=false;
@@ -663,7 +675,7 @@ if(linkedBox) linkedBox.textContent=linked.length?'Ligados: '+linked.map(g=>g.no
   const qrImg=document.getElementById('qrImg');
   const qrBox=document.getElementById('qrBox');
   const qrModal=document.getElementById('qrModal');
-  if(d.qr){
+  if(d.qr && qrRequested){
     if(qrImg) qrImg.src=d.qr;
     if(qrBox) qrBox.classList.remove('hidden');
     qrModal?.classList.add('open');
@@ -1732,7 +1744,7 @@ setTimeout(()=>{refreshAccountPresence();},1500);
 
 
 
-document.getElementById('qrModalClose')?.addEventListener('click',()=>document.getElementById('qrModal')?.classList.remove('open'));
+document.getElementById('qrModalClose')?.addEventListener('click',()=>{qrRequested=false;document.getElementById('qrModal')?.classList.remove('open');});
 document.getElementById('qrModal')?.addEventListener('click',e=>{if(e.target.id==='qrModal')e.currentTarget.classList.remove('open')});
 </script>
 <style>
