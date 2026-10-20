@@ -172,7 +172,6 @@ button:hover{filter:brightness(1.08);box-shadow:0 0 26px rgba(34,211,238,.28),0 
     <button type="button" id="resendVerification" style="margin-top:10px;background:transparent;border:1px solid #35506f;box-shadow:none;color:#9fefff">Reenviar código</button>
   </form>
   <div id="e"></div>
-  <div class="small">A sessão do WhatsApp e os dados continuam compartilhados entre os usuários autorizados.</div>
 </div>
 <script>
 async function init(){try{const r=await fetch('/api/auth/status');const d=await r.json();if(d.autenticado)location.href=d.usuario?.admin?'/admin':'/';if(!d.configurado)location.href='/configurar';}catch(e){document.getElementById('e').textContent='Servidor indisponível.'}}
