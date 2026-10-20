@@ -373,10 +373,11 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
     <button id="messageFloatClose" class="message-float-close" type="button" aria-label="Fechar">✕</button>
   </div>
   <form id="messageFloatForm" class="message-float-form" autocomplete="off">
-    <textarea id="messageFloatInput" rows="4" placeholder="Digite sua mensagem..." autocomplete="off"></textarea>
+    <textarea id="messageFloatInput" rows="4" placeholder="Digite sua mensagem..." autocomplete="off" disabled></textarea>
+    <div class="notice" role="status" style="margin:8px 0 0">O envio manual está temporariamente indisponível. Estamos validando o envio pela sessão WhatsApp desta conta para evitar mensagens pela conta errada. Os agendamentos existentes não são alterados por este aviso.</div>
     <div class="message-float-actions">
       <span id="messageFloatResult" class="muted"></span>
-      <button class="green" type="submit">📤 Enviar</button>
+      <button class="green" type="submit" disabled title="Envio manual temporariamente indisponível">Envio indisponível</button>
     </div>
   </form>
 </section>
