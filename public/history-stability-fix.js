@@ -99,7 +99,7 @@
 
       try {
         if (navigator.onLine === false) throw new Error('O celular está sem conexão com a internet.');
-        const response = await fetch('/api/reconectar', {
+        const response = await fetch('/api/user-session/reconnect', {
           method: 'POST',
           credentials: 'same-origin',
           cache: 'no-store',
