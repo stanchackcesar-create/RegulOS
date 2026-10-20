@@ -285,6 +285,9 @@ app.post('/api/auth/setup',async(req,res)=>{
   const usuario=String(req.body?.usuario||'').trim().toLowerCase();
   const email=String(req.body?.email||'').trim().toLowerCase();
   const senha=String(req.body?.senha||'');
+  const acceptedRegulosPolicy=req.body?.acceptedRegulosPolicy===true;
+  const policyVersion=String(req.body?.policyVersion||'');
+  if(!acceptedRegulosPolicy || policyVersion!=='1.0') return res.status(400).json({ok:false,msg:'Para criar a conta, leia e aceite a Política de Uso e Regras do RegulOS.'});
   if(!/^[a-z0-9._-]{3,32}$/.test(usuario) || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || senha.length<8)
     return res.status(400).json({ok:false,msg:'Informe usuário válido, e-mail válido e senha com pelo menos 8 caracteres.'});
   const salt=crypto.randomBytes(16).toString('hex');
@@ -379,7 +382,7 @@ app.post('/api/auth/register',async(req,res)=>{
     return res.status(409).json({ok:false,msg:'Esse e-mail já está cadastrado.'});
   }
   const salt=crypto.randomBytes(16).toString('hex');
-  const user={id:crypto.randomUUID(),codigoUsuario:generateUserCode(users),nome:usuario,usuario,email,salt,hash:hashPassword(senha,salt),admin:false,ativo:false,criadoEm:new Date().toISOString(),emailVerificado:false};
+  const user={id:crypto.randomUUID(),codigoUsuario:generateUserCode(users),nome:usuario,usuario,email,salt,hash:hashPassword(senha,salt),admin:false,ativo:false,criadoEm:new Date().toISOString(),emailVerificado:false,regulosPolicyAcceptance:{version:'1.0',accepted:true,acceptedAt:new Date().toISOString(),whatsappRiskAcknowledged:true}};
   users.push(user); saveUsers(users); ensureUserWorkspace(user.id);
   const token=String(crypto.randomInt(0,1000000)).padStart(6,'0');
   emailTokens.set(crypto.createHash('sha256').update(token).digest('hex'),{userId:user.id,expiresAt:Date.now()+30*60*1000,purpose:'verify'});
