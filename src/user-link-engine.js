@@ -1,7 +1,7 @@
 'use strict';
 
 const { createUserContextFactory } = require('./user-context');
-const { isValidGroupJid } = require('./group-utils');
+function isValidGroupJid(value) { return typeof value === 'string' && /^[0-9]+-[0-9]+@g\\.us$/.test(value) || typeof value === 'string' && /^[0-9]+@g\\.us$/.test(value); }
 
 function createUserLinkEngine(options = {}) {
   if (!options.baseDir || !options.sessions || typeof options.prepareMessage !== 'function') {
