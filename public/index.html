@@ -332,7 +332,7 @@ body{font-size:15px;padding-bottom:env(safe-area-inset-bottom)}header{position:s
 <button type="button" onclick="apiAction('/api/user-session/reconnect')">🔄 Reconectar</button>
 <button onclick="apiAction('/api/user-session/disconnect')">⛔ Desconectar</button>
 <div class="notice" style="max-width:430px;margin:0">🗓️ <b>Agendamentos automáticos</b><br>Os links serão enviados nos horários definidos. Mantenha o WhatsApp conectado.</div>
-<div class="header-bot-schedule hidden" aria-hidden="true" title="Compatibilidade interna">
+<div class="header-bot-schedule hidden" aria-hidden="true" inert style="display:none!important;visibility:hidden!important" title="Compatibilidade interna">
   <span class="badge neutral" id="windowBadge">...</span>
   <label>⏰ Liga <input id="botInicio" type="time"></label>
   <label>Desliga <input id="botFim" type="time"></label>
