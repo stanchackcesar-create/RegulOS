@@ -3274,16 +3274,48 @@ app.post('/api/assistente', requireAuth, (req,res)=>{
   return res.status(409).json({ok:false,msg:'O assistente operacional será reativado após migrar métricas e histórico para os dados individuais desta conta.'});
 });
 app.get('/api/diagnostico', requireAuth, (req,res) => {
-  const session=userSessions.get(req.user.id), groups=getUserSessionGroups(req);
-  const allowed=readUserArray(req,'groups'), schedules=readUserArray(req,'schedules');
-  const deliveries=readUserArray(req,'deliveries'), failures=readUserArray(req,'linkFailures');
+  // O painel espera os campos no nível principal da resposta. Todos os dados
+  // abaixo são lidos exclusivamente do contexto do usuário autenticado.
+  const userId=req.user.id;
+  const session=userSessions.get(userId);
+  const groups=getUserSessionGroups(req);
+  const allowed=readUserArray(req,'groups');
+  const groupConfig=readUserObject(req,'groupConfig');
+  const schedules=readUserArray(req,'schedules');
+  const programacao=readUserObject(req,'botSchedule');
+  const deliveries=readUserArray(req,'deliveries');
+  const failures=readUserArray(req,'linkFailures');
+  const online=session?.status==='online';
+  const linked=allowed.filter(id=>groupConfig[String(id)]?.ativo===true).length;
+  const pending=deliveries.filter(x=>['PENDENTE','ENVIANDO'].includes(String(x?.status||'').toUpperCase())).length;
+  const lastSend=deliveries
+    .filter(x=>['ENVIADO','ENVIADA','SUCESSO','SENT','SUCCESS'].includes(String(x?.status||'').toUpperCase()))
+    .sort((a,b)=>String(b?.criadoEm||b?.em||'').localeCompare(String(a?.criadoEm||a?.em||'')))[0];
+  const lastFailure=failures
+    .sort((a,b)=>String(b?.em||b?.criadoEm||'').localeCompare(String(a?.em||a?.criadoEm||'')))[0];
+  const whatsappLevel=online?'ok':'error';
+  const historyLevel=failures.length?'warn':'ok';
+  const checks=[
+    {key:'whatsapp',label:'Conexão WhatsApp',level:whatsappLevel,value:online?'Sessão individual conectada':String(session?.status||'offline')},
+    {key:'groups',label:'Grupos',level:groups.length?'ok':online?'warn':'error',value:groups.length+' carregado(s), '+allowed.length+' selecionado(s), '+linked+' ligado(s)'},
+    {key:'scheduler',label:'Agendamentos',level:programacao.ativo===true?'ok':'warn',value:(programacao.ativo===true?'Programação ativa':'Programação desativada')+'; '+schedules.length+' agendamento(s)'},
+    {key:'history',label:'Histórico e falhas',level:historyLevel,value:deliveries.length+' registro(s), '+pending+' pendente(s), '+failures.length+' falha(s)'}
+  ];
+  const resultado=checks.some(x=>x.level==='error')?'erro':checks.some(x=>x.level==='warn')?'atencao':'ok';
   res.set('Cache-Control','no-store');
-  res.json({ok:true,diagnostico:{
-    usuario:req.user.id, sessao:session?.status||'offline', gruposSessao:groups.length,
-    gruposPermitidos:allowed.length, agendamentos:schedules.length,
-    entregas:deliveries.length, falhas:failures.length,
-    isolamento:'dados consultados no espaço individual da conta'
-  }});
+  res.json({
+    ok:true,
+    resultado,
+    resultadoLabel:resultado==='ok'?'Verificação concluída':resultado==='atencao'?'Atenção: há itens para verificar':'Problemas encontrados',
+    whatsapp:{conectado:online,status:online?'Conectado':String(session?.status||'Desconectado'),numero:session?.connectedNumber||''},
+    grupos:{carregados:groups.length,selecionados:allowed.length,ligados:linked},
+    scheduler:{ativo:programacao.ativo===true,agendamentos:schedules.length,fila:pending,pendentes:pending},
+    ultimoEnvio:lastSend?{nome:String(lastSend.nome||lastSend.titulo||lastSend.linkTitulo||'Envio registrado'),em:lastSend.criadoEm||lastSend.em||''}:null,
+    ultimoErro:lastFailure?{nome:String(lastFailure.nome||lastFailure.titulo||'Falha registrada'),motivo:String(lastFailure.motivo||lastFailure.erro||lastFailure.message||'Falha registrada'),em:lastFailure.em||lastFailure.criadoEm||''}:null,
+    checks,
+    executadoEm:new Date().toISOString(),
+    diagnostico:{usuario:userId,sessao:session?.status||'offline',isolamento:'dados consultados no espaço individual da conta'}
+  });
 });
 app.post('/api/desconectar', requireAuth, (req,res) => {
   return res.status(409).json({ok:false,msg:'A desconexão global foi desativada para proteger as sessões individuais. Use Desconectar WhatsApp na sua própria conta.'});
